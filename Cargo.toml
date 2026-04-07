@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
 description = "A Rust library for NovelAI image generation APIs and related helpers."
+documentation = "https://docs.rs/novelai-bridge"
+readme = "README.md"
+keywords = ["novelai", "image-gen", "api-client", "png", "metadata"]
+categories = ["api-bindings", "multimedia::images"]
+exclude = ["/agents/**", "/AGENTS.md"]
 
 [dependencies]
 async-stream = "0.3.6"
