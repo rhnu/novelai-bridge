@@ -1,10 +1,12 @@
 [package]
 name = "novelai-bridge"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "GPL-3.0-only"
 description = "A Rust library for NovelAI image generation APIs and related helpers."
 documentation = "https://docs.rs/novelai-bridge"
+homepage = "https://github.com/RhNu/novelai-bridge"
+repository = "https://github.com/RhNu/novelai-bridge"
 readme = "README.md"
 keywords = ["novelai", "image-gen", "api-client", "png", "metadata"]
 categories = ["api-bindings", "multimedia::images"]
