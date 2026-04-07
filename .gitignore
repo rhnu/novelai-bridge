@@ -1,0 +1,12 @@
+# Rust
+target
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.code-workspace
+
+# Agent
+AGENTS.md
+agents/
