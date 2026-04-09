@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_STEPS: u32 = 23;
 const DEFAULT_SCALE: f32 = 5.0;
 const QUALITY_TAGS: &str = ", very aesthetic, masterpiece, no text";
-const UC_PRESET_STRONG: &str = ", lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, ";
+const UC_PRESET_HEAVY: &str = ", lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, ";
 const UC_PRESET_LIGHT: &str = ", lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page, ";
 const UC_PRESET_FURRY_FOCUS: &str = ", {worst quality}, distracting watermark, unfinished, bad quality, {widescreen}, upscale, {sequence}, {{grandfathered content}}, blurred foreground, chromatic aberration, sketch, everyone, [sketch background], simple, [flat colors], ych (character), outline, multiple scenes, [[horror (theme)]], comic, ";
 const UC_PRESET_HUMAN_FOCUS: &str = ", lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy, ";
@@ -160,8 +160,8 @@ impl NoiseSchedule {
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UcPreset {
-    /// Strong default UC preset.
-    Strong,
+    /// Heavy default UC preset.
+    Heavy,
     /// Light default UC preset.
     #[default]
     Light,
@@ -177,7 +177,7 @@ impl UcPreset {
     /// Returns the integer value expected by the API.
     pub fn as_api_value(&self) -> i32 {
         match self {
-            Self::Strong => 0,
+            Self::Heavy => 0,
             Self::Light => 1,
             Self::FurryFocus => 2,
             Self::HumanFocus => 3,
@@ -188,7 +188,7 @@ impl UcPreset {
     /// Returns the preset text appended to the negative prompt.
     pub fn preset_text(&self) -> &'static str {
         match self {
-            Self::Strong => UC_PRESET_STRONG,
+            Self::Heavy => UC_PRESET_HEAVY,
             Self::Light => UC_PRESET_LIGHT,
             Self::FurryFocus => UC_PRESET_FURRY_FOCUS,
             Self::HumanFocus => UC_PRESET_HUMAN_FOCUS,
