@@ -1,3 +1,4 @@
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_STEPS: u32 = 23;
@@ -9,13 +10,12 @@ const UC_PRESET_FURRY_FOCUS: &str = ", {worst quality}, distracting watermark, u
 const UC_PRESET_HUMAN_FOCUS: &str = ", lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy, ";
 
 /// Selects how the API key is resolved.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum ApiKeySource {
     /// Read the API key from the `NOVELAI_API_KEY` environment variable.
     Environment,
     /// Use an explicitly provided API key value.
-    Inline { value: String },
+    Inline { value: SecretString },
 }
 
 /// Supported NovelAI image models.

@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use futures_core::Stream;
+pub use secrecy::SecretString;
 
 mod client;
 mod error;

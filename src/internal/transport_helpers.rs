@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::{
     BridgeError, ImageStreamChunk, ImageStreamResult, transport::TransportSseStream,
@@ -21,7 +21,7 @@ fn validate_api_key_value(
 pub(crate) fn resolve_api_key(source: &ApiKeySource) -> Result<SecretString, BridgeError> {
     match source {
         ApiKeySource::Inline { value } => {
-            validate_api_key_value(value, "Inline API key cannot be empty.")
+            validate_api_key_value(value.expose_secret(), "Inline API key cannot be empty.")
         }
         ApiKeySource::Environment => {
             let value = std::env::var("NOVELAI_API_KEY").map_err(|_| {

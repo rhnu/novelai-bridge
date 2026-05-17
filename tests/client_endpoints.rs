@@ -1,6 +1,9 @@
 mod support;
 
-use novelai_bridge::{Client, DirectorTool, EncodeVibeRequest, Model, RunDirectorToolRequest};
+use novelai_bridge::{
+    ApiKeySource, Client, ClientOptions, DirectorTool, EncodeVibeRequest, Model,
+    RunDirectorToolRequest,
+};
 use serde_json::json;
 
 use support::{
@@ -101,6 +104,20 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     assert_eq!(fallback.mime_type.as_deref(), Some("image/png"));
 }
 
+#[test]
+fn client_options_debug_redacts_inline_api_key() {
+    let options = ClientOptions {
+        api_key_source: ApiKeySource::Inline {
+            value: "secret-token".into(),
+        },
+        ..Default::default()
+    };
+
+    let debug = format!("{options:?}");
+
+    assert!(!debug.contains("secret-token"));
+    assert!(debug.contains("REDACTED"));
+}
 #[tokio::test]
 async fn subscription_get_maps_balance_and_tier() {
     let transport = MockTransport::default();
