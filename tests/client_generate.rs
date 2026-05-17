@@ -5,7 +5,7 @@ use futures_util::StreamExt;
 use novelai_bridge::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, Client,
     ControlNetConfig, ControlNetInput, GenerateImageRequest, GenerateImageStreamRequest,
-    ImageFormat, Img2ImgRequest, Model,
+    ImageFormat, Img2ImgRequest, Model, UcPreset,
 };
 use serde_json::json;
 
@@ -401,6 +401,16 @@ async fn generate_rejects_invalid_scale_locally() {
     assert_eq!(error.code, "invalid_request");
     assert!(error.message.contains("scale must be between 0 and 10"));
     assert!(transport.last_path().is_none());
+}
+
+#[test]
+fn uc_preset_uses_light_default_and_rejects_strong_alias() {
+    assert_eq!(UcPreset::default(), UcPreset::Light);
+    assert!(serde_json::from_str::<UcPreset>("\"strong\"").is_err());
+    assert_eq!(
+        serde_json::from_str::<UcPreset>("\"heavy\"").unwrap(),
+        UcPreset::Heavy
+    );
 }
 
 #[tokio::test]

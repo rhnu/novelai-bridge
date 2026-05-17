@@ -160,7 +160,7 @@ impl NoiseSchedule {
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UcPreset {
-    /// Heavy default UC preset.
+    /// Heavy UC preset.
     Heavy,
     /// Light default UC preset.
     #[default]
