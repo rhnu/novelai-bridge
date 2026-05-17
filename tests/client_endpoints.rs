@@ -21,6 +21,7 @@ async fn encode_vibe_returns_base64() {
             image: "data:image/png;base64,QUJDRA==".to_owned(),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
+            strict_mode: false,
         })
         .await
         .unwrap();
@@ -41,11 +42,52 @@ async fn encode_vibe_rejects_invalid_base64_without_transport_call() {
             image: "data:image/png;base64,@@@".to_owned(),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
+            strict_mode: false,
         })
         .await
         .expect_err("invalid base64 should fail locally");
     assert_eq!(error.code, "invalid_request");
     assert!(error.message.contains("encode_vibe.image"));
+    assert!(transport.last_path().is_none());
+}
+
+#[tokio::test]
+async fn encode_vibe_clamps_information_extracted_when_not_strict() {
+    let transport = MockTransport::default();
+    transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
+    let client = Client::with_transport(transport.clone());
+
+    let _ = client
+        .encode_vibe(EncodeVibeRequest {
+            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            information_extracted: 2.0,
+            model: Model::NaiDiffusion45Full,
+            strict_mode: false,
+        })
+        .await
+        .unwrap();
+
+    let body = transport.last_body().expect("encode_vibe body");
+    assert_eq!(body["information_extracted"], json!(1.0));
+}
+
+#[tokio::test]
+async fn encode_vibe_rejects_information_extracted_when_strict() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+
+    let error = client
+        .encode_vibe(EncodeVibeRequest {
+            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            information_extracted: 2.0,
+            model: Model::NaiDiffusion45Full,
+            strict_mode: true,
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, "invalid_request");
+    assert!(error.message.contains("information_extracted"));
     assert!(transport.last_path().is_none());
 }
 
@@ -61,6 +103,7 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
             image: format!("data:image/png;base64,{image_base64}"),
             prompt: None,
             defry: None,
+            strict_mode: false,
         })
         .await
         .unwrap();
@@ -83,6 +126,7 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
             image: create_png_base64(48, 48),
             prompt: None,
             defry: None,
+            strict_mode: false,
         })
         .await
         .unwrap();
@@ -97,11 +141,32 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
             image: create_png_base64(48, 48),
             prompt: None,
             defry: None,
+            strict_mode: false,
         })
         .await
         .unwrap();
     assert_eq!(fallback.bytes, raw_png);
     assert_eq!(fallback.mime_type.as_deref(), Some("image/png"));
+}
+
+#[tokio::test]
+async fn director_tool_clamps_defry_when_not_strict() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let _ = client
+        .run_director_tool(RunDirectorToolRequest {
+            tool: DirectorTool::Colorize,
+            image: create_png_base64(48, 48),
+            prompt: None,
+            defry: Some(9),
+            strict_mode: false,
+        })
+        .await
+        .unwrap();
+
+    let body = transport.last_body().expect("director body");
+    assert_eq!(body["defry"], json!(5));
 }
 
 #[test]
@@ -114,10 +179,10 @@ fn client_options_debug_redacts_inline_api_key() {
     };
 
     let debug = format!("{options:?}");
-
     assert!(!debug.contains("secret-token"));
     assert!(debug.contains("REDACTED"));
 }
+
 #[tokio::test]
 async fn subscription_get_maps_balance_and_tier() {
     let transport = MockTransport::default();

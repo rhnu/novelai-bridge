@@ -135,8 +135,8 @@ pub(crate) fn convert_character_references(
             legacy_uc: Some(false),
         });
         infos.push(1.0);
-        secondary.push((1.0 - item.fidelity).clamp(0.0, 1.0));
-        strengths.push(item.strength.clamp(0.0, 1.0));
+        secondary.push(1.0 - item.fidelity);
+        strengths.push(item.strength);
     }
 
     Ok(Some((images, descriptions, infos, secondary, strengths)))

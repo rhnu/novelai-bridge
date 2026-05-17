@@ -394,12 +394,107 @@ async fn generate_rejects_invalid_scale_locally() {
         .generate(GenerateImageRequest {
             prompt: "1girl".to_owned(),
             scale: 11.0,
+            strict_mode: true,
             ..Default::default()
         })
         .await
         .unwrap_err();
     assert_eq!(error.code, "invalid_request");
     assert!(error.message.contains("scale must be between 0 and 10"));
+    assert!(transport.last_path().is_none());
+}
+
+#[tokio::test]
+async fn generate_clamps_invalid_numeric_values_when_not_strict() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let mut params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        scale: 11.0,
+        cfg_rescale: -0.5,
+        n_samples: 9,
+        size: novelai_bridge::ImageSize {
+            width: 17,
+            height: 1599,
+        },
+        ..Default::default()
+    };
+    params.i2i = Some(Img2ImgRequest {
+        image: "data:image/png;base64,QUJDRA==".to_owned(),
+        strength: 5.0,
+        noise: -0.5,
+        mask: None,
+    });
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(body["parameters"]["scale"], json!(10.0));
+    assert_eq!(body["parameters"]["cfg_rescale"], json!(0.0));
+    assert_eq!(body["parameters"]["n_samples"], json!(4));
+    assert_eq!(body["parameters"]["width"], json!(64));
+    assert_eq!(body["parameters"]["height"], json!(1600));
+    assert!((body["parameters"]["strength"].as_f64().unwrap() - 0.99).abs() < 1e-6);
+    assert_eq!(body["parameters"]["noise"], json!(0.0));
+}
+
+#[tokio::test]
+async fn generate_clamps_reference_numeric_values_when_not_strict() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let mut params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        ..Default::default()
+    };
+    params.controlnet = Some(ControlNetConfig {
+        strength: 2.0,
+        images: vec![ControlNetInput {
+            image: String::new(),
+            info_extracted: 2.0,
+            strength: -1.0,
+            model: Model::NaiDiffusion45Full,
+            vibe_data_cache: Some("AQID".to_owned()),
+        }],
+    });
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(body["parameters"]["controlnet_strength"], json!(1.0));
+    assert_eq!(
+        body["parameters"]["reference_strength_multiple"][0],
+        json!(0.0)
+    );
+    assert_eq!(
+        body["parameters"]["reference_information_extracted_multiple"][0],
+        json!(1.0)
+    );
+}
+
+#[tokio::test]
+async fn generate_rejects_reference_numeric_values_when_strict() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+
+    let mut params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        strict_mode: true,
+        ..Default::default()
+    };
+    params.controlnet = Some(ControlNetConfig {
+        strength: 1.0,
+        images: vec![ControlNetInput {
+            image: String::new(),
+            info_extracted: 2.0,
+            strength: 0.5,
+            model: Model::NaiDiffusion45Full,
+            vibe_data_cache: Some("AQID".to_owned()),
+        }],
+    });
+
+    let error = client.generate(params).await.unwrap_err();
+    assert_eq!(error.code, "invalid_request");
+    assert!(error.message.contains("info_extracted"));
     assert!(transport.last_path().is_none());
 }
 

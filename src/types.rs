@@ -394,6 +394,8 @@ pub struct EncodeVibeRequest {
     pub information_extracted: f32,
     /// Target model for the encoded vibe payload.
     pub model: Model,
+    /// Rejects out-of-range numeric values instead of clamping them.
+    pub strict_mode: bool,
 }
 
 /// Supported NovelAI director tools.
@@ -425,6 +427,8 @@ pub struct RunDirectorToolRequest {
     pub prompt: Option<String>,
     /// Optional defry value for tools that accept it.
     pub defry: Option<u8>,
+    /// Rejects out-of-range numeric values instead of clamping them.
+    pub strict_mode: bool,
 }
 
 /// Request used by [`crate::Client::generate`].
@@ -470,6 +474,8 @@ pub struct GenerateImageRequest {
     pub use_coords: Option<bool>,
     /// Optional output image format.
     pub image_format: Option<ImageFormat>,
+    /// Rejects out-of-range numeric values instead of clamping them.
+    pub strict_mode: bool,
 }
 
 impl Default for GenerateImageRequest {
@@ -495,6 +501,7 @@ impl Default for GenerateImageRequest {
             characters: None,
             use_coords: None,
             image_format: None,
+            strict_mode: false,
         }
     }
 }
