@@ -35,6 +35,8 @@ fn parse_comment_extracts_regular_fields() {
         "scale": 6.5,
         "width": 832,
         "height": 1216,
+        "ucPreset": 1,
+        "qualityToggle": true,
         "v4_prompt": {
             "caption": { "char_captions": [ { "char_caption": "alice" } ] }
         }
@@ -50,6 +52,8 @@ fn parse_comment_extracts_regular_fields() {
     assert_eq!(metadata.scale, Some(6.5));
     assert_eq!(metadata.width, Some(832));
     assert_eq!(metadata.height, Some(1216));
+    assert_eq!(metadata.uc_preset, Some(1));
+    assert_eq!(metadata.quality_toggle, Some(true));
     assert_eq!(metadata.character_prompts, vec!["alice".to_owned()]);
 }
 

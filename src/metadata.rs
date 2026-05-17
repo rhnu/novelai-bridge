@@ -325,10 +325,12 @@ fn parse_comment_payload(parsed: &mut PngMetadata) {
         .or(parsed.cfg_rescale.take());
     parsed.uc_preset = object
         .get("uc_preset")
+        .or_else(|| object.get("ucPreset"))
         .and_then(value_to_i32)
         .or(parsed.uc_preset.take());
     parsed.quality_toggle = object
         .get("quality_toggle")
+        .or_else(|| object.get("qualityToggle"))
         .and_then(value_to_bool)
         .or(parsed.quality_toggle.take());
 
