@@ -51,11 +51,11 @@ fn center_point(position: CharacterPosition, use_coords: bool) -> CenterPoint {
     }
 }
 
-pub(crate) fn is_center_position(value: f32) -> bool {
+pub fn is_center_position(value: f32) -> bool {
     (value - GRID_CENTER).abs() <= GRID_TOLERANCE
 }
 
-pub(crate) fn build_v4_character_captions(
+pub fn build_v4_character_captions(
     characters: Option<&[Character]>,
     negative: bool,
     use_coords: bool,
@@ -79,7 +79,7 @@ pub(crate) fn build_v4_character_captions(
     out
 }
 
-pub(crate) fn convert_character_prompts(
+pub fn convert_character_prompts(
     characters: &[Character],
     use_coords: bool,
 ) -> Vec<CharacterPrompt> {
@@ -94,15 +94,15 @@ pub(crate) fn convert_character_prompts(
         .collect()
 }
 
-pub(crate) struct CharacterReferenceWireParts {
-    pub(crate) images: Vec<String>,
-    pub(crate) descriptions: Vec<ReferenceConditionInput>,
-    pub(crate) information_extracted: Vec<f32>,
-    pub(crate) secondary_strength_values: Vec<f32>,
-    pub(crate) strength_values: Vec<f32>,
+pub struct CharacterReferenceWireParts {
+    pub images: Vec<String>,
+    pub descriptions: Vec<ReferenceConditionInput>,
+    pub information_extracted: Vec<f32>,
+    pub secondary_strength_values: Vec<f32>,
+    pub strength_values: Vec<f32>,
 }
 
-pub(crate) fn convert_character_references(
+pub fn convert_character_references(
     refs: Option<&[CharacterReference]>,
 ) -> Result<Option<CharacterReferenceWireParts>, BridgeError> {
     let Some(refs) = refs else {
@@ -145,7 +145,7 @@ pub(crate) fn convert_character_references(
     }))
 }
 
-pub(crate) fn preprocess_character_reference_image(
+pub fn preprocess_character_reference_image(
     field_name: &str,
     raw: &str,
 ) -> Result<String, BridgeError> {
@@ -187,8 +187,8 @@ fn preprocess_director_reference_bytes(
     let resized = imageops::resize(&source, scaled_width, scaled_height, FilterType::CatmullRom);
 
     let mut canvas = RgbaImage::from_pixel(target_width, target_height, Rgba([0, 0, 0, 255]));
-    let left = ((target_width - scaled_width) / 2) as i64;
-    let top = ((target_height - scaled_height) / 2) as i64;
+    let left = i64::from((target_width - scaled_width) / 2);
+    let top = i64::from((target_height - scaled_height) / 2);
     imageops::overlay(&mut canvas, &resized, left, top);
 
     let mut output = Cursor::new(Vec::new());
@@ -222,8 +222,8 @@ fn director_padding_score(
 ) -> u64 {
     let (scaled_width, scaled_height) =
         fit_within(source_width, source_height, target_width, target_height);
-    let target_area = (target_width as u64) * (target_height as u64);
-    let used_area = (scaled_width as u64) * (scaled_height as u64);
+    let target_area = u64::from(target_width) * u64::from(target_height);
+    let used_area = u64::from(scaled_width) * u64::from(scaled_height);
     target_area.saturating_sub(used_area)
 }
 
@@ -233,16 +233,31 @@ fn fit_within(
     target_width: u32,
     target_height: u32,
 ) -> (u32, u32) {
-    let scale = f64::min(
-        target_width as f64 / source_width as f64,
-        target_height as f64 / source_height as f64,
-    );
-    let scaled_width = ((source_width as f64) * scale).floor().max(1.0) as u32;
-    let scaled_height = ((source_height as f64) * scale).floor().max(1.0) as u32;
-    (scaled_width, scaled_height)
+    let width_limited = u64::from(target_width) * u64::from(source_height)
+        <= u64::from(target_height) * u64::from(source_width);
+
+    if width_limited {
+        let scaled_height = (u64::from(source_height) * u64::from(target_width)
+            / u64::from(source_width))
+        .max(1)
+        .min(u64::from(target_height));
+        (
+            target_width,
+            u32::try_from(scaled_height).unwrap_or(target_height),
+        )
+    } else {
+        let scaled_width = (u64::from(source_width) * u64::from(target_height)
+            / u64::from(source_height))
+        .max(1)
+        .min(u64::from(target_width));
+        (
+            u32::try_from(scaled_width).unwrap_or(target_width),
+            target_height,
+        )
+    }
 }
 
-pub(crate) fn normalize_image_payload(field_name: &str, raw: &str) -> Result<String, BridgeError> {
+pub fn normalize_image_payload(field_name: &str, raw: &str) -> Result<String, BridgeError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(InvalidRequest::EmptyField {
@@ -298,7 +313,7 @@ pub(crate) fn normalize_image_payload(field_name: &str, raw: &str) -> Result<Str
     Ok(compact)
 }
 
-pub(crate) fn is_likely_base64(value: &str) -> bool {
+pub fn is_likely_base64(value: &str) -> bool {
     let compact: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
     if compact.len() <= 24 {
         return false;
@@ -308,7 +323,7 @@ pub(crate) fn is_likely_base64(value: &str) -> bool {
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '+' || ch == '/' || ch == '=')
 }
 
-pub(crate) fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage> {
+pub fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage> {
     if let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(payload.as_slice())) {
         let mut images = Vec::new();
         for idx in 0..archive.len() {
@@ -344,7 +359,7 @@ pub(crate) fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage>
     }]
 }
 
-pub(crate) fn extract_first_image(payload: Vec<u8>) -> GeneratedImage {
+pub fn extract_first_image(payload: Vec<u8>) -> GeneratedImage {
     if let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(payload.as_slice())) {
         for idx in 0..archive.len() {
             let Ok(mut file) = archive.by_index(idx) else {
@@ -376,22 +391,29 @@ pub(crate) fn extract_first_image(payload: Vec<u8>) -> GeneratedImage {
 }
 
 fn is_supported_image_name(name: &str) -> bool {
-    name.ends_with(".png")
-        || name.ends_with(".jpg")
-        || name.ends_with(".jpeg")
-        || name.ends_with(".webp")
+    image_extension(name).is_some()
 }
 
 fn infer_mime_from_name(name: &str) -> Option<String> {
-    if name.ends_with(".png") {
+    let extension = image_extension(name)?;
+    if extension.eq_ignore_ascii_case("png") {
         Some("image/png".to_owned())
-    } else if name.ends_with(".webp") {
+    } else if extension.eq_ignore_ascii_case("webp") {
         Some("image/webp".to_owned())
-    } else if name.ends_with(".jpg") || name.ends_with(".jpeg") {
+    } else if extension.eq_ignore_ascii_case("jpg") || extension.eq_ignore_ascii_case("jpeg") {
         Some("image/jpeg".to_owned())
     } else {
         None
     }
+}
+
+fn image_extension(name: &str) -> Option<&str> {
+    name.rsplit_once('.').map(|(_, ext)| ext).filter(|ext| {
+        ext.eq_ignore_ascii_case("png")
+            || ext.eq_ignore_ascii_case("jpg")
+            || ext.eq_ignore_ascii_case("jpeg")
+            || ext.eq_ignore_ascii_case("webp")
+    })
 }
 
 fn infer_mime_from_bytes(bytes: &[u8]) -> Option<String> {
@@ -406,7 +428,7 @@ fn infer_mime_from_bytes(bytes: &[u8]) -> Option<String> {
     }
 }
 
-pub(crate) fn default_seed() -> i64 {
+pub fn default_seed() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| {

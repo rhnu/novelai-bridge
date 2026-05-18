@@ -200,7 +200,7 @@ async fn get_subscription_maps_balance_and_tier() {
     let transport = MockTransport::default();
     transport.set_json_response(json!({
         "tier": 3,
-        "expiresAt": 1712345678,
+        "expiresAt": 1_712_345_678,
         "trainingStepsLeft": {
             "fixedTrainingStepsLeft": 100,
             "purchasedTrainingSteps": 23

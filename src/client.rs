@@ -14,7 +14,7 @@ mod subscription;
 pub struct ClientOptions {
     /// Selects how the API key is resolved for authenticated requests.
     pub api_key_source: ApiKeySource,
-    /// Configures base URLs for NovelAI image and API endpoints.
+    /// Configures base URLs for `NovelAI` image and API endpoints.
     pub base_urls: BaseUrls,
     /// Overrides the HTTP timeout in milliseconds.
     pub timeout_ms: u64,
@@ -30,7 +30,7 @@ impl Default for ClientOptions {
     }
 }
 
-/// Base URLs used by [`Client`] to resolve NovelAI endpoint paths.
+/// Base URLs used by [`Client`] to resolve `NovelAI` endpoint paths.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BaseUrls {
     /// Base URL for image-generation endpoints.
@@ -48,7 +48,7 @@ impl Default for BaseUrls {
     }
 }
 
-/// High-level NovelAI image API client.
+/// High-level `NovelAI` image API client.
 ///
 /// The client performs local request-shape validation and image payload normalization,
 /// but it intentionally does not parse or reject prompt syntax locally.
@@ -60,6 +60,11 @@ pub struct Client<T: Transport> {
 
 impl Client<ReqwestTransport> {
     /// Creates a client backed by [`ReqwestTransport`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError`] when the API key cannot be resolved or the default transport cannot
+    /// be constructed.
     pub fn new(options: ClientOptions) -> Result<Self, BridgeError> {
         let api_key = resolve_api_key(&options.api_key_source)?;
         let transport = ReqwestTransport::new(api_key, options.timeout_ms)?;

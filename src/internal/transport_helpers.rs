@@ -14,7 +14,7 @@ fn validate_api_key_value(value: &str, field: &'static str) -> Result<SecretStri
     }
 }
 
-pub(crate) fn resolve_api_key(source: &ApiKeySource) -> Result<SecretString, BridgeError> {
+pub fn resolve_api_key(source: &ApiKeySource) -> Result<SecretString, BridgeError> {
     match source {
         ApiKeySource::Inline { value } => validate_api_key_value(value.expose_secret(), "api_key"),
         ApiKeySource::Environment => {

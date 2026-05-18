@@ -4,13 +4,13 @@ use serde_with::skip_serializing_none;
 use crate::DirectorTool;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct CenterPoint {
+pub struct CenterPoint {
     pub x: f32,
     pub y: f32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct CharacterPrompt {
+pub struct CharacterPrompt {
     pub prompt: String,
     pub uc: String,
     pub center: CenterPoint,
@@ -18,19 +18,19 @@ pub(crate) struct CharacterPrompt {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct V4CharacterCaption {
+pub struct V4CharacterCaption {
     pub centers: Option<Vec<CenterPoint>>,
     pub char_caption: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct V4Caption {
+pub struct V4Caption {
     pub base_caption: Option<String>,
     pub char_captions: Option<Vec<V4CharacterCaption>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct V4ConditionInput {
+pub struct V4ConditionInput {
     pub caption: Option<V4Caption>,
     pub legacy_uc: Option<bool>,
     pub use_coords: Option<bool>,
@@ -38,20 +38,20 @@ pub(crate) struct V4ConditionInput {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ReferenceCaption {
+pub struct ReferenceCaption {
     pub base_caption: String,
     pub char_captions: Vec<V4CharacterCaption>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ReferenceConditionInput {
+pub struct ReferenceConditionInput {
     pub caption: Option<ReferenceCaption>,
     pub legacy_uc: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[skip_serializing_none]
-pub(crate) struct ImageParameters {
+pub struct ImageParameters {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub steps: Option<u32>,
@@ -131,14 +131,14 @@ pub(crate) struct ImageParameters {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ImageStreamParameters {
+pub struct ImageStreamParameters {
     #[serde(flatten)]
     pub base: ImageParameters,
     pub stream: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ImageGenerationRequestBody {
+pub struct ImageGenerationRequestBody {
     pub action: String,
     pub input: String,
     pub model: String,
@@ -148,7 +148,7 @@ pub(crate) struct ImageGenerationRequestBody {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct StreamImageGenerationRequestBody {
+pub struct StreamImageGenerationRequestBody {
     pub action: String,
     pub input: String,
     pub model: String,
@@ -158,7 +158,7 @@ pub(crate) struct StreamImageGenerationRequestBody {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct EncodeVibeRequestBody {
+pub struct EncodeVibeRequestBody {
     pub image: String,
     #[serde(rename = "information_extracted")]
     pub information_extracted: f32,
@@ -166,7 +166,7 @@ pub(crate) struct EncodeVibeRequestBody {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct DirectorAugmentRequestBody {
+pub struct DirectorAugmentRequestBody {
     pub req_type: DirectorTool,
     pub width: u32,
     pub height: u32,

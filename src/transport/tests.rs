@@ -28,7 +28,7 @@ fn map_429_includes_retry_after() {
     let err = map_status_error(
         reqwest::StatusCode::TOO_MANY_REQUESTS,
         &headers,
-        "limit".to_owned(),
+        "limit",
         "/ai/generate-image",
     );
     assert!(matches!(
@@ -49,8 +49,7 @@ fn map_400_uses_json_message_field() {
     let err = map_status_error(
         reqwest::StatusCode::BAD_REQUEST,
         &headers,
-        "{\"statusCode\":400,\"message\":\"Error encoding v4 director references: non-200 response: 400\"}"
-            .to_owned(),
+        "{\"statusCode\":400,\"message\":\"Error encoding v4 director references: non-200 response: 400\"}",
         "/ai/generate-image-stream",
     );
     assert!(matches!(

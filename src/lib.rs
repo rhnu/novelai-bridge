@@ -5,7 +5,7 @@ pub use secrecy::SecretString;
 
 mod client;
 mod error;
-mod internal;
+pub(crate) mod internal;
 mod metadata;
 mod transport;
 mod types;

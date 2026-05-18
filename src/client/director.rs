@@ -12,9 +12,14 @@ use crate::{
 use super::Client;
 
 impl<T: Transport> Client<T> {
-    /// Encodes an image into a NovelAI vibe payload.
+    /// Encodes an image into a `NovelAI` vibe payload.
     ///
     /// `req.image` accepts either a raw base64 payload or an image data URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError`] when local request validation, image normalization, transport, or
+    /// response decoding fails.
     pub async fn encode_vibe(&self, req: EncodeVibeRequest) -> Result<String, BridgeError> {
         let information_extracted = normalize_f32_range(
             "information_extracted",
@@ -39,9 +44,14 @@ impl<T: Transport> Client<T> {
         Ok(STANDARD.encode(raw))
     }
 
-    /// Runs a NovelAI director tool against an input image.
+    /// Runs a `NovelAI` director tool against an input image.
     ///
     /// `req.image` accepts either a raw base64 payload or an image data URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError`] when local request validation, image decoding, transport, or
+    /// response decoding fails.
     pub async fn run_director_tool(
         &self,
         req: RunDirectorToolRequest,
@@ -66,7 +76,7 @@ impl<T: Transport> Client<T> {
         if req.strict_mode && defry > 5 {
             return Err(InvalidRequest::NumericOutOfRange {
                 field: "defry".to_owned(),
-                value: defry as f64,
+                value: f64::from(defry),
                 min: 0.0,
                 max: 5.0,
             }
@@ -118,7 +128,7 @@ impl<T: Transport> Client<T> {
         Ok(extract_first_image(raw))
     }
 
-    pub(super) fn resolve_vibe_data_cache(&self, value: &str) -> Result<String, BridgeError> {
+    pub(super) fn resolve_vibe_data_cache(value: &str) -> Result<String, BridgeError> {
         let compact: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
         if compact.is_empty() {
             return Err(InvalidRequest::EmptyField {
@@ -148,16 +158,16 @@ fn normalize_f32_range(
     if !value.is_finite() {
         return Err(InvalidRequest::NonFiniteNumber {
             field: field_name.to_owned(),
-            value: value as f64,
+            value: f64::from(value),
         }
         .into());
     }
     if strict_mode && !(min..=max).contains(&value) {
         return Err(InvalidRequest::NumericOutOfRange {
             field: field_name.to_owned(),
-            value: value as f64,
-            min: min as f64,
-            max: max as f64,
+            value: f64::from(value),
+            min: f64::from(min),
+            max: f64::from(max),
         }
         .into());
     }

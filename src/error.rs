@@ -8,7 +8,7 @@ pub enum BridgeError {
     /// The request failed local validation.
     #[error(transparent)]
     InvalidRequest(#[from] InvalidRequest),
-    /// The NovelAI API returned a non-success status.
+    /// The `NovelAI` API returned a non-success status.
     #[error(transparent)]
     Api(#[from] ApiError),
     /// A transport-level operation failed.
@@ -39,7 +39,7 @@ pub enum InvalidRequest {
         min: f64,
         max: f64,
     },
-    /// An image dimension violated NovelAI size constraints.
+    /// An image dimension violated `NovelAI` size constraints.
     #[error("{field} must be in [{min},{max}] and multiple of {multiple_of}")]
     InvalidImageDimension {
         field: String,
@@ -117,7 +117,7 @@ impl fmt::Display for DataUrlError {
     }
 }
 
-/// Non-success response returned by the NovelAI API.
+/// Non-success response returned by the `NovelAI` API.
 #[derive(Debug)]
 pub struct ApiError {
     /// Category derived from the HTTP status code.
@@ -205,6 +205,7 @@ pub enum ApiErrorReason {
 
 impl ApiErrorReason {
     /// Returns the extracted reason text.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
             Self::Message(value) | Self::Detail(value) | Self::ErrorMessage(value) => value,

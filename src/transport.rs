@@ -54,9 +54,14 @@ pub struct ReqwestTransport {
 
 impl ReqwestTransport {
     /// Creates a transport with a resolved API key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError`] when the authorization header or reqwest client cannot be built.
     pub fn new(api_key: SecretString, timeout_ms: u64) -> Result<Self, BridgeError> {
         let mut headers = HeaderMap::new();
         let auth_value = format!("Bearer {}", api_key.expose_secret());
+        drop(api_key);
         let auth_header =
             reqwest::header::HeaderValue::from_str(&auth_value).map_err(|source| {
                 TransportError {
@@ -106,7 +111,12 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, endpoint));
+            return Err(map_status_error(
+                status,
+                &headers,
+                body_text.as_str(),
+                endpoint,
+            ));
         }
 
         response
@@ -140,7 +150,12 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, endpoint));
+            return Err(map_status_error(
+                status,
+                &headers,
+                body_text.as_str(),
+                endpoint,
+            ));
         }
 
         response
@@ -177,7 +192,12 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, endpoint));
+            return Err(map_status_error(
+                status,
+                &headers,
+                body_text.as_str(),
+                endpoint,
+            ));
         }
 
         let mut event_stream = response.bytes_stream().eventsource();
@@ -217,7 +237,7 @@ fn parse_stream_chunk(data: &str) -> Result<ImageStreamChunk, BridgeError> {
 fn map_status_error(
     status: reqwest::StatusCode,
     headers: &HeaderMap,
-    body_text: String,
+    body_text: &str,
     endpoint: &str,
 ) -> BridgeError {
     let trimmed = body_text.trim();
@@ -275,7 +295,7 @@ fn parse_retry_after(raw: Option<&str>, now: SystemTime) -> Option<Duration> {
         if seconds < 0 {
             return None;
         }
-        return Some(Duration::from_secs(seconds as u64));
+        return Some(Duration::from_secs(seconds.cast_unsigned()));
     }
 
     if let Ok(date) = httpdate::parse_http_date(value.trim()) {

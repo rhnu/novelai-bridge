@@ -6,6 +6,10 @@ use super::Client;
 
 impl<T: Transport> Client<T> {
     /// Fetches the current subscription summary for the configured account.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError`] when the transport request fails or the response cannot be decoded.
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
         let endpoint = self.api_endpoint("/user/subscription");
         let raw = self.transport.get_json::<Value>(endpoint.as_str()).await?;
@@ -61,7 +65,11 @@ fn map_subscription_response(raw: &Value) -> SubscriptionInfo {
 fn read_i64(value: &Value) -> Option<i64> {
     value
         .as_i64()
-        .or_else(|| value.as_u64().map(|item| item.min(i64::MAX as u64) as i64))
+        .or_else(|| {
+            value
+                .as_u64()
+                .map(|item| item.min(i64::MAX.cast_unsigned()).cast_signed())
+        })
         .or_else(|| {
             value
                 .as_str()
@@ -72,7 +80,7 @@ fn read_i64(value: &Value) -> Option<i64> {
 fn read_i32(value: Option<&Value>) -> Option<i32> {
     value
         .and_then(read_i64)
-        .map(|item| item.clamp(0, i32::MAX as i64) as i32)
+        .and_then(|item| i32::try_from(item.clamp(0, i64::from(i32::MAX))).ok())
 }
 
 fn read_timestamp_ms(value: &Value) -> Option<u64> {
@@ -92,7 +100,7 @@ fn read_timestamp_ms(value: &Value) -> Option<u64> {
     }
 }
 
-fn default_tier_name(tier: i32) -> &'static str {
+const fn default_tier_name(tier: i32) -> &'static str {
     match tier {
         0 => "paper",
         1 => "tablet",

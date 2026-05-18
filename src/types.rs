@@ -18,7 +18,7 @@ pub enum ApiKeySource {
     Inline { value: SecretString },
 }
 
-/// Supported NovelAI image models.
+/// Supported `NovelAI` image models.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Model {
     /// `nai-diffusion-4-5-full`
@@ -44,7 +44,8 @@ pub enum Model {
 
 impl Model {
     /// Returns the API model identifier.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::NaiDiffusion45Full => "nai-diffusion-4-5-full",
             Self::NaiDiffusion45Curated => "nai-diffusion-4-5-curated",
@@ -56,7 +57,8 @@ impl Model {
     }
 
     /// Returns `true` when the model uses the V4/V4.5 request shape.
-    pub fn is_v4(&self) -> bool {
+    #[must_use]
+    pub const fn is_v4(&self) -> bool {
         matches!(
             self,
             Self::NaiDiffusion45Full
@@ -67,12 +69,14 @@ impl Model {
     }
 
     /// Returns `true` when the model is a V4.5 variant.
-    pub fn is_v45(&self) -> bool {
+    #[must_use]
+    pub const fn is_v45(&self) -> bool {
         matches!(self, Self::NaiDiffusion45Full | Self::NaiDiffusion45Curated)
     }
 
     /// Returns the model key used by vibe metadata payloads.
-    pub fn vibe_model_key(&self) -> &'static str {
+    #[must_use]
+    pub const fn vibe_model_key(&self) -> &'static str {
         match self {
             Self::NaiDiffusion45Full => "v4-5full",
             Self::NaiDiffusion45Curated => "v4-5curated",
@@ -116,7 +120,8 @@ pub enum Sampler {
 
 impl Sampler {
     /// Returns the API sampler identifier.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::KEuler => "k_euler",
             Self::KEulerAncestral => "k_euler_ancestral",
@@ -147,7 +152,8 @@ pub enum NoiseSchedule {
 
 impl NoiseSchedule {
     /// Returns the API noise schedule identifier.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Karras => "karras",
             Self::Exponential => "exponential",
@@ -156,7 +162,7 @@ impl NoiseSchedule {
     }
 }
 
-/// Built-in UC presets supported by NovelAI.
+/// Built-in UC presets supported by `NovelAI`.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UcPreset {
@@ -175,7 +181,8 @@ pub enum UcPreset {
 
 impl UcPreset {
     /// Returns the integer value expected by the API.
-    pub fn as_api_value(&self) -> i32 {
+    #[must_use]
+    pub const fn as_api_value(&self) -> i32 {
         match self {
             Self::Heavy => 0,
             Self::Light => 1,
@@ -186,7 +193,8 @@ impl UcPreset {
     }
 
     /// Returns the preset text appended to the negative prompt.
-    pub fn preset_text(&self) -> &'static str {
+    #[must_use]
+    pub const fn preset_text(&self) -> &'static str {
         match self {
             Self::Heavy => UC_PRESET_HEAVY,
             Self::Light => UC_PRESET_LIGHT,
@@ -208,7 +216,8 @@ pub enum StreamMode {
 
 impl StreamMode {
     /// Returns the API stream identifier.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Sse => "sse",
         }
@@ -228,7 +237,8 @@ pub enum ImageFormat {
 
 impl ImageFormat {
     /// Returns the API output format identifier.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Png => "png",
             Self::Webp => "webp",
@@ -247,7 +257,8 @@ pub struct ImageSize {
 
 impl ImageSize {
     /// Returns the default portrait canvas.
-    pub fn portrait() -> Self {
+    #[must_use]
+    pub const fn portrait() -> Self {
         Self {
             width: 832,
             height: 1216,
@@ -255,7 +266,8 @@ impl ImageSize {
     }
 
     /// Returns the default landscape canvas.
-    pub fn landscape() -> Self {
+    #[must_use]
+    pub const fn landscape() -> Self {
         Self {
             width: 1216,
             height: 832,
@@ -263,7 +275,8 @@ impl ImageSize {
     }
 
     /// Returns the default square canvas.
-    pub fn square() -> Self {
+    #[must_use]
+    pub const fn square() -> Self {
         Self {
             width: 1024,
             height: 1024,
@@ -271,7 +284,8 @@ impl ImageSize {
     }
 
     /// Returns the large portrait director/reference canvas.
-    pub fn large_portrait() -> Self {
+    #[must_use]
+    pub const fn large_portrait() -> Self {
         Self {
             width: 1024,
             height: 1536,
@@ -279,7 +293,8 @@ impl ImageSize {
     }
 
     /// Returns the large landscape director/reference canvas.
-    pub fn large_landscape() -> Self {
+    #[must_use]
+    pub const fn large_landscape() -> Self {
         Self {
             width: 1536,
             height: 1024,
@@ -394,7 +409,7 @@ pub struct EncodeVibeRequest {
     pub strict_mode: bool,
 }
 
-/// Supported NovelAI director tools.
+/// Supported `NovelAI` director tools.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DirectorTool {
@@ -456,7 +471,7 @@ pub struct GenerateImageRequest {
     pub n_samples: u32,
     /// CFG rescale value in the `[0, 1]` range.
     pub cfg_rescale: f32,
-    /// Enables NovelAI's variety boost behavior.
+    /// Enables `NovelAI`'s variety boost behavior.
     pub variety_boost: bool,
     /// Optional image-to-image configuration.
     pub i2i: Option<Img2ImgRequest>,
@@ -504,6 +519,7 @@ impl Default for GenerateImageRequest {
 
 impl GenerateImageRequest {
     /// Returns the positive prompt after applying built-in quality tags.
+    #[must_use]
     pub fn processed_prompt(&self) -> String {
         if self.quality {
             format!("{}{}", self.prompt, QUALITY_TAGS)
@@ -513,6 +529,7 @@ impl GenerateImageRequest {
     }
 
     /// Returns the negative prompt after applying the selected UC preset text.
+    #[must_use]
     pub fn processed_negative_prompt(&self) -> String {
         format!(
             "{}{}",
@@ -532,7 +549,7 @@ pub struct GenerateImageStreamRequest {
 }
 
 /// Generated image payload.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GeneratedImage {
     /// Raw image bytes.
     pub bytes: Vec<u8>,
@@ -542,7 +559,7 @@ pub struct GeneratedImage {
     pub seed: Option<i64>,
 }
 
-/// Parsed stream chunk emitted by NovelAI image streaming.
+/// Parsed stream chunk emitted by `NovelAI` image streaming.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ImageStreamChunk {
     /// Stream event type.

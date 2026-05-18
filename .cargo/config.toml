@@ -1,0 +1,2 @@
+[alias]
+clippy-strict = "clippy --all-targets -- -D warnings -W clippy::pedantic -W clippy::nursery -W clippy::cargo -A clippy::multiple_crate_versions"

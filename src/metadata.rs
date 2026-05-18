@@ -109,6 +109,11 @@ struct ParameterFallback {
 }
 
 /// Parses PNG metadata from a base64 payload or image data URL.
+///
+/// # Errors
+///
+/// Returns [`BridgeError`] when the payload is empty, invalid base64/data URL input, or not a
+/// valid PNG payload.
 pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, BridgeError> {
     let normalized = normalize_image_payload("metadata.image", image)?;
     let decoded =
@@ -122,6 +127,10 @@ pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, Bridg
 }
 
 /// Parses PNG metadata from raw PNG bytes.
+///
+/// # Errors
+///
+/// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
 pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, BridgeError> {
     let text_chunks = extract_png_text_chunks(bytes)?;
     let mut parsed = PngMetadata {
@@ -153,6 +162,10 @@ pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, Bridge
 }
 
 /// Extracts the serialized embedded vibe document from raw PNG bytes when present.
+///
+/// # Errors
+///
+/// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
 pub fn extract_embedded_vibe_document_from_png_bytes(
     bytes: &[u8],
 ) -> Result<Option<String>, BridgeError> {
@@ -256,7 +269,7 @@ fn parse_vibe_chunks(parsed: &mut PngMetadata) {
     for raw in chunk_values_ci(&parsed.text_chunks, KEY_NAIDATA) {
         if let Some(payload) = parse_json_or_base64_json(raw) {
             push_vibe_entries(
-                payload,
+                &payload,
                 VibeMetadataSource::NaiDataChunk,
                 &mut parsed.vibe_entries,
             );
@@ -265,7 +278,7 @@ fn parse_vibe_chunks(parsed: &mut PngMetadata) {
     for raw in chunk_values_ci(&parsed.text_chunks, KEY_LEGACY_VIBE) {
         if let Some(payload) = parse_json_or_base64_json(raw) {
             push_vibe_entries(
-                payload,
+                &payload,
                 VibeMetadataSource::LegacyVibeChunk,
                 &mut parsed.vibe_entries,
             );
@@ -285,18 +298,19 @@ fn parse_comment_payload(parsed: &mut PngMetadata) {
     };
 
     parsed.raw_comment_json = Some(payload.clone());
-    parsed.prompt = extract_non_empty_string(object, &["prompt"]).or(parsed.prompt.take());
+    parsed.prompt = extract_non_empty_string(object, &["prompt"]).or_else(|| parsed.prompt.take());
     parsed.negative_prompt = extract_non_empty_string(object, &["uc", "negative_prompt"])
-        .or(parsed.negative_prompt.take());
+        .or_else(|| parsed.negative_prompt.take());
     parsed.seed = object
         .get("seed")
         .and_then(value_to_i64)
-        .or(parsed.seed.take());
-    parsed.sampler = extract_non_empty_string(object, &["sampler"]).or(parsed.sampler.take());
+        .or_else(|| parsed.seed.take());
+    parsed.sampler =
+        extract_non_empty_string(object, &["sampler"]).or_else(|| parsed.sampler.take());
     parsed.steps = object
         .get("steps")
         .and_then(value_to_u32)
-        .or(parsed.steps.take());
+        .or_else(|| parsed.steps.take());
     parsed.scale = extract_first_f32(
         object,
         &[
@@ -308,32 +322,32 @@ fn parse_comment_payload(parsed: &mut PngMetadata) {
             "cfgScale",
         ],
     )
-    .or(parsed.scale.take());
+    .or_else(|| parsed.scale.take());
     parsed.width = object
         .get("width")
         .and_then(value_to_u32)
-        .or(parsed.width.take());
+        .or_else(|| parsed.width.take());
     parsed.height = object
         .get("height")
         .and_then(value_to_u32)
-        .or(parsed.height.take());
-    parsed.model = extract_non_empty_string(object, &["model"]).or(parsed.model.take());
-    parsed.noise_schedule =
-        extract_non_empty_string(object, &["noise_schedule"]).or(parsed.noise_schedule.take());
+        .or_else(|| parsed.height.take());
+    parsed.model = extract_non_empty_string(object, &["model"]).or_else(|| parsed.model.take());
+    parsed.noise_schedule = extract_non_empty_string(object, &["noise_schedule"])
+        .or_else(|| parsed.noise_schedule.take());
     parsed.cfg_rescale = object
         .get("cfg_rescale")
         .and_then(value_to_f32)
-        .or(parsed.cfg_rescale.take());
+        .or_else(|| parsed.cfg_rescale.take());
     parsed.uc_preset = object
         .get("uc_preset")
         .or_else(|| object.get("ucPreset"))
         .and_then(value_to_i32)
-        .or(parsed.uc_preset.take());
+        .or_else(|| parsed.uc_preset.take());
     parsed.quality_toggle = object
         .get("quality_toggle")
         .or_else(|| object.get("qualityToggle"))
         .and_then(value_to_bool)
-        .or(parsed.quality_toggle.take());
+        .or_else(|| parsed.quality_toggle.take());
 
     if parsed.character_prompts.is_empty() {
         parsed.character_prompts = extract_v4_character_prompts(object, "v4_prompt");
@@ -464,7 +478,7 @@ fn parse_json_payload(value: &str) -> Option<Value> {
 }
 
 fn push_vibe_entries(
-    payload: Value,
+    payload: &Value,
     source: VibeMetadataSource,
     output: &mut Vec<VibeMetadataEntry>,
 ) {
@@ -480,7 +494,7 @@ fn push_vibe_entries(
         }
         return;
     }
-    if let Some(entry) = parse_vibe_entry(&payload, source) {
+    if let Some(entry) = parse_vibe_entry(payload, source) {
         output.push(entry);
     }
 }
@@ -705,7 +719,7 @@ fn value_to_u32(value: &Value) -> Option<u32> {
     if let Some(raw) = value.as_i64()
         && raw >= 0
     {
-        return u32::try_from(raw as u64).ok();
+        return u32::try_from(raw).ok();
     }
     value
         .as_str()
@@ -714,11 +728,16 @@ fn value_to_u32(value: &Value) -> Option<u32> {
 
 fn value_to_f32(value: &Value) -> Option<f32> {
     if let Some(raw) = value.as_f64() {
-        return Some(raw as f32);
+        return Some(f64_to_f32(raw));
     }
     value
         .as_str()
         .and_then(|raw| raw.trim().parse::<f32>().ok())
+}
+
+#[allow(clippy::cast_possible_truncation)]
+const fn f64_to_f32(raw: f64) -> f32 {
+    raw as f32
 }
 
 fn has_non_empty_value(value: Option<&Value>) -> bool {
