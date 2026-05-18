@@ -16,7 +16,11 @@ use crate::{
 
 use super::Client;
 
-type EncodedControlNet = (Vec<String>, Vec<f32>, Vec<f32>);
+struct ControlNetReferenceWireParts {
+    images: Vec<String>,
+    strengths: Vec<f32>,
+    information_extracted: Vec<f32>,
+}
 
 impl<T: Transport> Client<T> {
     /// Generates images from a request and returns the decoded image payloads.
@@ -342,7 +346,8 @@ impl<T: Transport> Client<T> {
         };
 
         let controlnet_encoded = self.encode_controlnet(params.controlnet.as_ref())?;
-        let character_references = convert_character_references(params)?;
+        let character_references =
+            convert_character_references(params.character_references.as_deref())?;
         let normalized_i2i_image = params
             .i2i
             .as_ref()
@@ -380,26 +385,32 @@ impl<T: Transport> Client<T> {
             strength: params.i2i.as_ref().map(|i2i| i2i.strength),
             noise: params.i2i.as_ref().map(|i2i| i2i.noise),
             mask: normalized_i2i_mask,
-            reference_image_multiple: controlnet_encoded.as_ref().map(|value| value.0.clone()),
-            reference_strength_multiple: controlnet_encoded.as_ref().map(|value| value.1.clone()),
+            reference_image_multiple: controlnet_encoded
+                .as_ref()
+                .map(|value| value.images.clone()),
+            reference_strength_multiple: controlnet_encoded
+                .as_ref()
+                .map(|value| value.strengths.clone()),
             reference_information_extracted_multiple: controlnet_encoded
                 .as_ref()
-                .map(|value| value.2.clone()),
+                .map(|value| value.information_extracted.clone()),
             normalize_reference_strength_multiple: Some(true),
             controlnet_strength: params.controlnet.as_ref().map(|cn| cn.strength),
-            director_reference_images: character_references.as_ref().map(|value| value.0.clone()),
+            director_reference_images: character_references
+                .as_ref()
+                .map(|value| value.images.clone()),
             director_reference_descriptions: character_references
                 .as_ref()
-                .map(|value| value.1.clone()),
+                .map(|value| value.descriptions.clone()),
             director_reference_information_extracted: character_references
                 .as_ref()
-                .map(|value| value.2.clone()),
+                .map(|value| value.information_extracted.clone()),
             director_reference_secondary_strength_values: character_references
                 .as_ref()
-                .map(|value| value.3.clone()),
+                .map(|value| value.secondary_strength_values.clone()),
             director_reference_strength_values: character_references
                 .as_ref()
-                .map(|value| value.4.clone()),
+                .map(|value| value.strength_values.clone()),
             character_prompts: if params.model.is_v4() {
                 Some(
                     params
@@ -458,7 +469,7 @@ impl<T: Transport> Client<T> {
     fn encode_controlnet(
         &self,
         controlnet: Option<&ControlNetConfig>,
-    ) -> Result<Option<EncodedControlNet>, BridgeError> {
+    ) -> Result<Option<ControlNetReferenceWireParts>, BridgeError> {
         let Some(controlnet) = controlnet else {
             return Ok(None);
         };
@@ -474,7 +485,11 @@ impl<T: Transport> Client<T> {
             info_extracted.push(image.info_extracted);
         }
 
-        Ok(Some((encoded, strengths, info_extracted)))
+        Ok(Some(ControlNetReferenceWireParts {
+            images: encoded,
+            strengths,
+            information_extracted: info_extracted,
+        }))
     }
 }
 

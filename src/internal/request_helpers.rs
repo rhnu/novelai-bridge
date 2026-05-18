@@ -12,7 +12,7 @@ use image::{
 };
 
 use crate::{
-    BridgeError, Character, CharacterPosition, CharacterReferenceType, GenerateImageRequest,
+    BridgeError, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
     GeneratedImage,
     internal::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
@@ -95,28 +95,26 @@ pub(crate) fn convert_character_prompts(
         .collect()
 }
 
-#[allow(clippy::type_complexity)]
+pub(crate) struct CharacterReferenceWireParts {
+    pub(crate) images: Vec<String>,
+    pub(crate) descriptions: Vec<ReferenceConditionInput>,
+    pub(crate) information_extracted: Vec<f32>,
+    pub(crate) secondary_strength_values: Vec<f32>,
+    pub(crate) strength_values: Vec<f32>,
+}
+
 pub(crate) fn convert_character_references(
-    params: &GenerateImageRequest,
-) -> Result<
-    Option<(
-        Vec<String>,
-        Vec<ReferenceConditionInput>,
-        Vec<f32>,
-        Vec<f32>,
-        Vec<f32>,
-    )>,
-    BridgeError,
-> {
-    let Some(refs) = params.character_references.as_ref() else {
+    refs: Option<&[CharacterReference]>,
+) -> Result<Option<CharacterReferenceWireParts>, BridgeError> {
+    let Some(refs) = refs else {
         return Ok(None);
     };
 
     let mut images = Vec::with_capacity(refs.len());
     let mut descriptions = Vec::with_capacity(refs.len());
-    let mut infos = Vec::with_capacity(refs.len());
-    let mut secondary = Vec::with_capacity(refs.len());
-    let mut strengths = Vec::with_capacity(refs.len());
+    let mut information_extracted = Vec::with_capacity(refs.len());
+    let mut secondary_strength_values = Vec::with_capacity(refs.len());
+    let mut strength_values = Vec::with_capacity(refs.len());
 
     for (idx, item) in refs.iter().enumerate() {
         images.push(preprocess_character_reference_image(
@@ -134,12 +132,18 @@ pub(crate) fn convert_character_references(
             }),
             legacy_uc: Some(false),
         });
-        infos.push(1.0);
-        secondary.push(1.0 - item.fidelity);
-        strengths.push(item.strength);
+        information_extracted.push(1.0);
+        secondary_strength_values.push(1.0 - item.fidelity);
+        strength_values.push(item.strength);
     }
 
-    Ok(Some((images, descriptions, infos, secondary, strengths)))
+    Ok(Some(CharacterReferenceWireParts {
+        images,
+        descriptions,
+        information_extracted,
+        secondary_strength_values,
+        strength_values,
+    }))
 }
 
 pub(crate) fn preprocess_character_reference_image(

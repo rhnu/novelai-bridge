@@ -169,6 +169,62 @@ async fn generate_normalizes_character_reference_image_payloads() {
 }
 
 #[tokio::test]
+async fn generate_serializes_character_reference_director_fields() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let mut params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        ..Default::default()
+    };
+    params.character_references = Some(vec![
+        CharacterReference {
+            image: format!("data:image/png;base64,{}", create_png_base64(800, 1200)),
+            reference_type: CharacterReferenceType::Character,
+            fidelity: 0.25,
+            strength: 0.8,
+        },
+        CharacterReference {
+            image: format!("data:image/png;base64,{}", create_png_base64(1200, 800)),
+            reference_type: CharacterReferenceType::Style,
+            fidelity: 0.7,
+            strength: 0.3,
+        },
+    ]);
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    let parameters = &body["parameters"];
+
+    assert_eq!(
+        parameters["normalize_reference_strength_multiple"],
+        json!(true)
+    );
+    assert_eq!(
+        parameters["director_reference_descriptions"][0]["caption"]["base_caption"],
+        json!("character")
+    );
+    assert_eq!(
+        parameters["director_reference_descriptions"][1]["caption"]["base_caption"],
+        json!("style")
+    );
+    assert_eq!(
+        parameters["director_reference_information_extracted"],
+        json!([1.0, 1.0])
+    );
+    let secondary = parameters["director_reference_secondary_strength_values"]
+        .as_array()
+        .unwrap();
+    let strengths = parameters["director_reference_strength_values"]
+        .as_array()
+        .unwrap();
+    assert!((secondary[0].as_f64().unwrap() - 0.75).abs() < 1e-6);
+    assert!((secondary[1].as_f64().unwrap() - 0.3).abs() < 1e-6);
+    assert!((strengths[0].as_f64().unwrap() - 0.8).abs() < 1e-6);
+    assert!((strengths[1].as_f64().unwrap() - 0.3).abs() < 1e-6);
+}
+
+#[tokio::test]
 async fn generate_serializes_explicit_controlnet_vibe_data_cache() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
