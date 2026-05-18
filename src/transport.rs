@@ -12,10 +12,11 @@ use reqwest::header::HeaderMap;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{BridgeError, BridgeErrorCode};
+use crate::{BridgeError, BridgeErrorCode, ImageStreamChunk};
 
-/// Raw SSE line stream returned by a transport implementation.
-pub type TransportSseStream = Pin<Box<dyn Stream<Item = Result<String, BridgeError>> + Send>>;
+/// Parsed SSE chunk stream returned by a transport implementation.
+pub type TransportSseStream =
+    Pin<Box<dyn Stream<Item = Result<ImageStreamChunk, BridgeError>> + Send>>;
 
 /// Abstraction over the HTTP transport used by [`crate::Client`].
 ///
@@ -154,7 +155,7 @@ impl Transport for ReqwestTransport {
                 match item {
                     Ok(event) => {
                         if !event.data.is_empty() {
-                            yield format!("data: {}", event.data);
+                            yield parse_stream_chunk(&event.data)?;
                         }
                     }
                     Err(err) => {
@@ -166,6 +167,11 @@ impl Transport for ReqwestTransport {
 
         Ok(Box::pin(output))
     }
+}
+
+fn parse_stream_chunk(data: &str) -> Result<ImageStreamChunk, BridgeError> {
+    serde_json::from_str(data)
+        .map_err(|err| BridgeError::unknown_error(format!("Failed to parse stream chunk: {err}")))
 }
 
 fn map_status_error(

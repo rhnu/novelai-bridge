@@ -5,7 +5,7 @@ use futures_util::StreamExt;
 use novelai_bridge::{
     BaseUrls, Character, CharacterPosition, CharacterReference, CharacterReferenceType, Client,
     ControlNetConfig, ControlNetInput, GenerateImageRequest, GenerateImageStreamRequest,
-    ImageFormat, Img2ImgRequest, Model, UcPreset,
+    ImageFormat, ImageStreamChunk, Img2ImgRequest, Model, UcPreset,
 };
 use serde_json::json;
 
@@ -103,9 +103,14 @@ async fn generate_with_auto_seed_reuses_resolved_seed_in_response() {
 #[tokio::test]
 async fn generate_stream_parses_chunk() {
     let transport = MockTransport::default();
-    transport.set_sse_lines(vec![
-        "data: {\"event_type\":\"step\",\"samp_ix\":0,\"step_ix\":1,\"gen_id\":1,\"sigma\":1.1,\"image\":\"abc\"}".to_owned(),
-    ]);
+    transport.set_sse_chunks(vec![ImageStreamChunk {
+        event_type: "step".to_owned(),
+        samp_ix: 0,
+        step_ix: Some(1),
+        gen_id: 1,
+        sigma: Some(1.1),
+        image: "abc".to_owned(),
+    }]);
     let client = Client::with_transport(transport.clone());
 
     let params = GenerateImageStreamRequest {
@@ -129,7 +134,7 @@ async fn generate_stream_parses_chunk() {
 #[tokio::test]
 async fn generate_stream_uses_custom_image_base_url() {
     let transport = MockTransport::default();
-    transport.set_sse_lines(vec![]);
+    transport.set_sse_chunks(vec![]);
     let client = Client::with_transport_and_base_urls(
         transport.clone(),
         BaseUrls {

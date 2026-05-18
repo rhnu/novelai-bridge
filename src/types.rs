@@ -559,17 +559,6 @@ pub struct ImageStreamChunk {
     pub image: String,
 }
 
-impl ImageStreamChunk {
-    /// Parses a single SSE line into an [`ImageStreamChunk`].
-    pub fn from_sse_line(line: &str) -> Result<Self, serde_json::Error> {
-        let payload = line
-            .strip_prefix("data:")
-            .map(str::trim_start)
-            .unwrap_or(line);
-        serde_json::from_str(payload)
-    }
-}
-
 /// Subscription summary returned by [`crate::Client::get_subscription`].
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SubscriptionInfo {

@@ -52,6 +52,17 @@ fn map_400_uses_json_message_field() {
     );
 }
 
+#[test]
+fn image_stream_chunk_payload_parses_json_data() {
+    let chunk = parse_stream_chunk(
+        "{\"event_type\":\"step\",\"samp_ix\":0,\"step_ix\":1,\"gen_id\":1,\"sigma\":1.1,\"image\":\"abc\"}",
+    )
+    .unwrap();
+    assert_eq!(chunk.event_type, "step");
+    assert_eq!(chunk.step_ix, Some(1));
+    assert_eq!(chunk.image, "abc");
+}
+
 #[tokio::test]
 async fn sse_parser_handles_split_chunks() {
     let chunks = vec![

@@ -11,7 +11,7 @@ use base64::Engine;
 use futures_core::Stream;
 use futures_util::stream;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
-use novelai_bridge::{BridgeError, Transport};
+use novelai_bridge::{BridgeError, ImageStreamChunk, Transport};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -28,7 +28,7 @@ struct MockTransportState {
     byte_paths: Vec<String>,
     bytes_response: Vec<u8>,
     encode_vibe_response: Vec<u8>,
-    sse_lines: Vec<String>,
+    sse_chunks: Vec<ImageStreamChunk>,
     json_response: Value,
     json_error: Option<BridgeError>,
 }
@@ -48,8 +48,8 @@ impl MockTransport {
         self.state.lock().unwrap().encode_vibe_response = encode_vibe_response;
     }
 
-    pub fn set_sse_lines(&self, sse_lines: Vec<String>) {
-        self.state.lock().unwrap().sse_lines = sse_lines;
+    pub fn set_sse_chunks(&self, sse_chunks: Vec<ImageStreamChunk>) {
+        self.state.lock().unwrap().sse_chunks = sse_chunks;
     }
 
     pub fn set_json_response(&self, json_response: Value) {
@@ -129,7 +129,10 @@ impl Transport for MockTransport {
         &self,
         path: &str,
         body: &TReq,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, BridgeError>> + Send>>, BridgeError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<ImageStreamChunk, BridgeError>> + Send>>,
+        BridgeError,
+    > {
         let body = serde_json::to_value(body).map_err(|err| {
             BridgeError::unknown_error(format!("mock post_sse serialize failed: {err}"))
         })?;
@@ -138,8 +141,8 @@ impl Transport for MockTransport {
         state.last_path = Some(path.to_owned());
         state.last_body = Some(body.clone());
         state.post_history.push((path.to_owned(), body));
-        let items: Vec<Result<String, BridgeError>> =
-            state.sse_lines.clone().into_iter().map(Ok).collect();
+        let items: Vec<Result<ImageStreamChunk, BridgeError>> =
+            state.sse_chunks.clone().into_iter().map(Ok).collect();
         drop(state);
 
         Ok(Box::pin(stream::iter(items)))

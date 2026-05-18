@@ -1,10 +1,6 @@
-use futures_util::StreamExt;
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::{
-    BridgeError, ImageStreamChunk, ImageStreamResult, transport::TransportSseStream,
-    types::ApiKeySource,
-};
+use crate::{BridgeError, types::ApiKeySource};
 
 fn validate_api_key_value(
     value: &str,
@@ -30,16 +26,6 @@ pub(crate) fn resolve_api_key(source: &ApiKeySource) -> Result<SecretString, Bri
             validate_api_key_value(value.as_str(), "NOVELAI_API_KEY is configured but empty.")
         }
     }
-}
-
-pub(crate) fn map_sse_stream(stream: TransportSseStream) -> ImageStreamResult {
-    let mapped = stream.map(|item| match item {
-        Ok(line) => ImageStreamChunk::from_sse_line(&line).map_err(|err| {
-            BridgeError::unknown_error(format!("Failed to parse stream chunk: {err}"))
-        }),
-        Err(err) => Err(err),
-    });
-    Box::pin(mapped)
 }
 
 #[cfg(test)]

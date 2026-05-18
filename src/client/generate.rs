@@ -6,7 +6,6 @@ use crate::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
             default_seed, extract_images, is_center_position, normalize_image_payload,
         },
-        transport_helpers::map_sse_stream,
         wire::{
             ImageGenerationRequestBody, ImageParameters, ImageStreamParameters,
             StreamImageGenerationRequestBody, V4Caption, V4ConditionInput,
@@ -56,7 +55,7 @@ impl<T: Transport> Client<T> {
         let request = self.build_stream_request(&params, resolved_seed).await?;
         let endpoint = self.image_endpoint("/ai/generate-image-stream");
         let stream = self.transport.post_sse(endpoint.as_str(), &request).await?;
-        Ok(map_sse_stream(stream))
+        Ok(stream)
     }
 
     fn normalize_generate_request(
