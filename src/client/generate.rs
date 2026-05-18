@@ -32,7 +32,7 @@ impl<T: Transport> Client<T> {
     ) -> Result<Vec<GeneratedImage>, BridgeError> {
         let params = self.normalize_generate_request(params)?;
         let resolved_seed = Self::resolve_seed(params.seed);
-        let request = self.build_generate_request(&params, resolved_seed).await?;
+        let request = self.build_generate_request(&params, resolved_seed)?;
         let endpoint = self.image_endpoint("/ai/generate-image");
         let payload = self
             .transport
@@ -52,7 +52,7 @@ impl<T: Transport> Client<T> {
             stream: params.stream,
         };
         let resolved_seed = Self::resolve_seed(params.base.seed);
-        let request = self.build_stream_request(&params, resolved_seed).await?;
+        let request = self.build_stream_request(&params, resolved_seed)?;
         let endpoint = self.image_endpoint("/ai/generate-image-stream");
         let stream = self.transport.post_sse(endpoint.as_str(), &request).await?;
         Ok(stream)
@@ -228,12 +228,12 @@ impl<T: Transport> Client<T> {
         Ok(params)
     }
 
-    async fn build_generate_request(
+    fn build_generate_request(
         &self,
         params: &GenerateImageRequest,
         resolved_seed: i64,
     ) -> Result<ImageGenerationRequestBody, BridgeError> {
-        let image_parameters = self.build_image_parameters(params, resolved_seed).await?;
+        let image_parameters = self.build_image_parameters(params, resolved_seed)?;
 
         Ok(ImageGenerationRequestBody {
             action: "generate".to_owned(),
@@ -244,14 +244,12 @@ impl<T: Transport> Client<T> {
         })
     }
 
-    async fn build_stream_request(
+    fn build_stream_request(
         &self,
         params: &GenerateImageStreamRequest,
         resolved_seed: i64,
     ) -> Result<StreamImageGenerationRequestBody, BridgeError> {
-        let base = self
-            .build_generate_request(&params.base, resolved_seed)
-            .await?;
+        let base = self.build_generate_request(&params.base, resolved_seed)?;
         Ok(StreamImageGenerationRequestBody {
             action: base.action,
             input: base.input,
@@ -264,7 +262,7 @@ impl<T: Transport> Client<T> {
         })
     }
 
-    async fn build_image_parameters(
+    fn build_image_parameters(
         &self,
         params: &GenerateImageRequest,
         resolved_seed: i64,
