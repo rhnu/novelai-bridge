@@ -1,6 +1,6 @@
 use crate::{
     BridgeError, ControlNetConfig, GenerateImageRequest, GenerateImageStreamRequest,
-    GeneratedImage, ImageStreamResult, NoiseSchedule, Transport,
+    GeneratedImage, ImageStreamResult, InvalidRequest, NoiseSchedule, Transport,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
@@ -63,44 +63,22 @@ impl<T: Transport> Client<T> {
         mut params: GenerateImageRequest,
     ) -> Result<GenerateImageRequest, BridgeError> {
         if params.prompt.trim().is_empty() {
-            return Err(BridgeError::invalid_request("prompt cannot be empty."));
+            return Err(InvalidRequest::EmptyField {
+                field: "prompt".to_owned(),
+            }
+            .into());
         }
 
         let strict_mode = params.strict_mode;
-        params.steps = normalize_u32_range(
-            "steps",
-            params.steps,
-            1,
-            50,
-            strict_mode,
-            "steps must be between 1 and 50.",
-        )?;
-        params.scale = normalize_f32_range(
-            "scale",
-            params.scale,
-            0.0,
-            10.0,
-            strict_mode,
-            "scale must be between 0 and 10.",
-        )?;
-        params.n_samples = normalize_u32_range(
-            "n_samples",
-            params.n_samples,
-            1,
-            4,
-            strict_mode,
-            "n_samples must be between 1 and 4.",
-        )?;
-        params.cfg_rescale = normalize_f32_range(
-            "cfg_rescale",
-            params.cfg_rescale,
-            0.0,
-            1.0,
-            strict_mode,
-            "cfg_rescale must be between 0 and 1.",
-        )?;
-        params.size.width = normalize_image_dimension(params.size.width, strict_mode)?;
-        params.size.height = normalize_image_dimension(params.size.height, strict_mode)?;
+        params.steps = normalize_u32_range("steps", params.steps, 1, 50, strict_mode)?;
+        params.scale = normalize_f32_range("scale", params.scale, 0.0, 10.0, strict_mode)?;
+        params.n_samples = normalize_u32_range("n_samples", params.n_samples, 1, 4, strict_mode)?;
+        params.cfg_rescale =
+            normalize_f32_range("cfg_rescale", params.cfg_rescale, 0.0, 1.0, strict_mode)?;
+        params.size.width =
+            normalize_image_dimension("size.width", params.size.width, strict_mode)?;
+        params.size.height =
+            normalize_image_dimension("size.height", params.size.height, strict_mode)?;
 
         if params
             .character_references
@@ -108,9 +86,11 @@ impl<T: Transport> Client<T> {
             .is_some_and(|refs| !refs.is_empty())
             && !params.model.is_v45()
         {
-            return Err(BridgeError::invalid_request(
-                "character_references are only supported on V4.5 models.",
-            ));
+            return Err(InvalidRequest::UnsupportedModelFeature {
+                feature: "character_references".to_owned(),
+                required_model: "V4.5 models".to_owned(),
+            }
+            .into());
         }
 
         if params
@@ -119,9 +99,11 @@ impl<T: Transport> Client<T> {
             .is_some_and(|chars| !chars.is_empty())
             && !params.model.is_v4()
         {
-            return Err(BridgeError::invalid_request(
-                "characters are only supported on V4/V4.5 models.",
-            ));
+            return Err(InvalidRequest::UnsupportedModelFeature {
+                feature: "characters".to_owned(),
+                required_model: "V4/V4.5 models".to_owned(),
+            }
+            .into());
         }
 
         if params
@@ -133,47 +115,48 @@ impl<T: Transport> Client<T> {
                 .as_ref()
                 .is_some_and(|refs| !refs.is_empty())
         {
-            return Err(BridgeError::invalid_request(
-                "controlnet and character_references cannot be used together.",
-            ));
+            return Err(InvalidRequest::UnsupportedFieldCombination {
+                left: "controlnet".to_owned(),
+                right: "character_references".to_owned(),
+            }
+            .into());
         }
 
         if let Some(chars) = &params.characters {
             for (idx, ch) in chars.iter().enumerate() {
                 if ch.prompt.trim().is_empty() {
-                    return Err(BridgeError::invalid_request(format!(
-                        "characters[{idx}].prompt cannot be empty."
-                    )));
+                    return Err(InvalidRequest::EmptyField {
+                        field: format!("characters[{idx}].prompt"),
+                    }
+                    .into());
                 }
-                if strict_mode
-                    && (!(0.0..=1.0).contains(&ch.position.x)
-                        || !(0.0..=1.0).contains(&ch.position.y))
-                {
-                    return Err(BridgeError::invalid_request(format!(
-                        "characters[{idx}].position must be in [0, 1]."
-                    )));
+                if strict_mode && !(0.0..=1.0).contains(&ch.position.x) {
+                    return Err(InvalidRequest::NumericOutOfRange {
+                        field: format!("characters[{idx}].position.x"),
+                        value: ch.position.x as f64,
+                        min: 0.0,
+                        max: 1.0,
+                    }
+                    .into());
+                }
+                if strict_mode && !(0.0..=1.0).contains(&ch.position.y) {
+                    return Err(InvalidRequest::NumericOutOfRange {
+                        field: format!("characters[{idx}].position.y"),
+                        value: ch.position.y as f64,
+                        min: 0.0,
+                        max: 1.0,
+                    }
+                    .into());
                 }
             }
         }
 
         if let Some(chars) = &mut params.characters {
             for ch in chars {
-                ch.position.x = normalize_f32_range(
-                    "character.position.x",
-                    ch.position.x,
-                    0.0,
-                    1.0,
-                    false,
-                    "characters position must be in [0, 1].",
-                )?;
-                ch.position.y = normalize_f32_range(
-                    "character.position.y",
-                    ch.position.y,
-                    0.0,
-                    1.0,
-                    false,
-                    "characters position must be in [0, 1].",
-                )?;
+                ch.position.x =
+                    normalize_f32_range("character.position.x", ch.position.x, 0.0, 1.0, false)?;
+                ch.position.y =
+                    normalize_f32_range("character.position.y", ch.position.y, 0.0, 1.0, false)?;
             }
         }
 
@@ -185,7 +168,6 @@ impl<T: Transport> Client<T> {
                     0.0,
                     1.0,
                     strict_mode,
-                    "character_references fidelity must be between 0 and 1.",
                 )?;
                 item.strength = normalize_f32_range(
                     &format!("character_references[{idx}].strength"),
@@ -193,28 +175,14 @@ impl<T: Transport> Client<T> {
                     0.0,
                     1.0,
                     strict_mode,
-                    "character_references strength must be between 0 and 1.",
                 )?;
             }
         }
 
         if let Some(i2i) = &mut params.i2i {
-            i2i.strength = normalize_f32_range(
-                "i2i.strength",
-                i2i.strength,
-                0.01,
-                0.99,
-                strict_mode,
-                "i2i.strength must be between 0.01 and 0.99.",
-            )?;
-            i2i.noise = normalize_f32_range(
-                "i2i.noise",
-                i2i.noise,
-                0.0,
-                0.99,
-                strict_mode,
-                "i2i.noise must be between 0.0 and 0.99.",
-            )?;
+            i2i.strength =
+                normalize_f32_range("i2i.strength", i2i.strength, 0.01, 0.99, strict_mode)?;
+            i2i.noise = normalize_f32_range("i2i.noise", i2i.noise, 0.0, 0.99, strict_mode)?;
         }
 
         if let Some(controlnet) = &mut params.controlnet {
@@ -224,20 +192,21 @@ impl<T: Transport> Client<T> {
                 0.0,
                 1.0,
                 strict_mode,
-                "controlnet.strength must be between 0 and 1.",
             )?;
             if controlnet.images.is_empty() {
-                return Err(BridgeError::invalid_request(
-                    "controlnet.images cannot be empty.",
-                ));
+                return Err(InvalidRequest::EmptyField {
+                    field: "controlnet.images".to_owned(),
+                }
+                .into());
             }
 
             for (idx, image) in controlnet.images.iter_mut().enumerate() {
                 let has_cache = !image.vibe_data_cache.trim().is_empty();
                 if !has_cache {
-                    return Err(BridgeError::invalid_request(format!(
-                        "controlnet.images[{idx}] must provide vibe_data_cache."
-                    )));
+                    return Err(InvalidRequest::EmptyField {
+                        field: format!("controlnet.images[{idx}].vibe_data_cache"),
+                    }
+                    .into());
                 }
                 image.info_extracted = normalize_f32_range(
                     &format!("controlnet.images[{idx}].info_extracted"),
@@ -245,7 +214,6 @@ impl<T: Transport> Client<T> {
                     0.01,
                     1.0,
                     strict_mode,
-                    "controlnet.images info_extracted must be between 0.01 and 1.0.",
                 )?;
                 image.strength = normalize_f32_range(
                     &format!("controlnet.images[{idx}].strength"),
@@ -253,7 +221,6 @@ impl<T: Transport> Client<T> {
                     0.0,
                     1.0,
                     strict_mode,
-                    "controlnet.images strength must be between 0 and 1.",
                 )?;
             }
         }
@@ -492,15 +459,20 @@ impl<T: Transport> Client<T> {
 }
 
 fn normalize_u32_range(
-    _field_name: &str,
+    field_name: &str,
     value: u32,
     min: u32,
     max: u32,
     strict_mode: bool,
-    range_message: &'static str,
 ) -> Result<u32, BridgeError> {
     if strict_mode && !(min..=max).contains(&value) {
-        return Err(BridgeError::invalid_request(range_message));
+        return Err(InvalidRequest::NumericOutOfRange {
+            field: field_name.to_owned(),
+            value: value as f64,
+            min: min as f64,
+            max: max as f64,
+        }
+        .into());
     }
     Ok(value.clamp(min, max))
 }
@@ -511,24 +483,40 @@ fn normalize_f32_range(
     min: f32,
     max: f32,
     strict_mode: bool,
-    range_message: &'static str,
 ) -> Result<f32, BridgeError> {
     if !value.is_finite() {
-        return Err(BridgeError::invalid_request(format!(
-            "{field_name} must be finite."
-        )));
+        return Err(InvalidRequest::NonFiniteNumber {
+            field: field_name.to_owned(),
+            value: value as f64,
+        }
+        .into());
     }
     if strict_mode && !(min..=max).contains(&value) {
-        return Err(BridgeError::invalid_request(range_message));
+        return Err(InvalidRequest::NumericOutOfRange {
+            field: field_name.to_owned(),
+            value: value as f64,
+            min: min as f64,
+            max: max as f64,
+        }
+        .into());
     }
     Ok(value.clamp(min, max))
 }
 
-fn normalize_image_dimension(value: u32, strict_mode: bool) -> Result<u32, BridgeError> {
+fn normalize_image_dimension(
+    field_name: &str,
+    value: u32,
+    strict_mode: bool,
+) -> Result<u32, BridgeError> {
     if strict_mode && (!(64..=1600).contains(&value) || !value.is_multiple_of(64)) {
-        return Err(BridgeError::invalid_request(
-            "size width/height must be in [64,1600] and multiple of 64.",
-        ));
+        return Err(InvalidRequest::InvalidImageDimension {
+            field: field_name.to_owned(),
+            value,
+            min: 64,
+            max: 1600,
+            multiple_of: 64,
+        }
+        .into());
     }
 
     let clamped = value.clamp(64, 1600);

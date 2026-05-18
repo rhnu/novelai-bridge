@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
 
 use crate::{
-    BridgeError,
+    BridgeError, InvalidRequest, MetadataError,
     internal::request_helpers::{is_likely_base64, normalize_image_payload},
 };
 
@@ -111,11 +111,13 @@ struct ParameterFallback {
 /// Parses PNG metadata from a base64 payload or image data URL.
 pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, BridgeError> {
     let normalized = normalize_image_payload("metadata.image", image)?;
-    let decoded = STANDARD.decode(normalized.as_bytes()).map_err(|err| {
-        BridgeError::invalid_request(format!(
-            "metadata.image must be valid base64 payload: {err}"
-        ))
-    })?;
+    let decoded =
+        STANDARD
+            .decode(normalized.as_bytes())
+            .map_err(|source| InvalidRequest::InvalidBase64 {
+                field: "metadata.image".to_owned(),
+                source,
+            })?;
     parse_png_metadata_from_bytes(decoded.as_slice())
 }
 
@@ -169,11 +171,7 @@ pub fn extract_embedded_vibe_document_from_png_bytes(
         if identifier != OFFICIAL_VIBE_IDENTIFIER && identifier != OFFICIAL_VIBE_BUNDLE_IDENTIFIER {
             continue;
         }
-        let serialized = serde_json::to_string(&payload).map_err(|err| {
-            BridgeError::invalid_request(format!(
-                "metadata.naidata must contain serializable JSON: {err}"
-            ))
-        })?;
+        let serialized = payload.to_string();
         return Ok(Some(serialized));
     }
     Ok(None)
@@ -181,9 +179,12 @@ pub fn extract_embedded_vibe_document_from_png_bytes(
 
 fn extract_png_text_chunks(bytes: &[u8]) -> Result<BTreeMap<String, Vec<String>>, BridgeError> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-    let reader = decoder.read_info().map_err(|error| {
-        BridgeError::invalid_request(format!("metadata.image must be valid PNG payload: {error}"))
-    })?;
+    let reader = decoder
+        .read_info()
+        .map_err(|source| MetadataError::InvalidPngPayload {
+            field: "metadata.image".to_owned(),
+            source,
+        })?;
     let info = reader.info();
 
     let mut chunks: BTreeMap<String, Vec<String>> = BTreeMap::new();

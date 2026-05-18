@@ -1,8 +1,8 @@
 mod support;
 
 use novelai_bridge::{
-    ApiKeySource, BaseUrls, Client, ClientOptions, DirectorTool, EncodeVibeRequest, Model,
-    RunDirectorToolRequest,
+    ApiKeySource, BaseUrls, BridgeError, Client, ClientOptions, DirectorTool, EncodeVibeRequest,
+    InvalidRequest, Model, RunDirectorToolRequest,
 };
 use serde_json::json;
 
@@ -49,8 +49,11 @@ async fn encode_vibe_rejects_invalid_base64_without_transport_call() {
         })
         .await
         .expect_err("invalid base64 should fail locally");
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("encode_vibe.image"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
+            if field == "encode_vibe.image"
+    ));
     assert!(transport.last_path().is_none());
 }
 
@@ -89,8 +92,11 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
         .await
         .unwrap_err();
 
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("information_extracted"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
+            if field == "information_extracted"
+    ));
     assert!(transport.last_path().is_none());
 }
 

@@ -11,7 +11,10 @@ mod transport;
 mod types;
 
 pub use client::{BaseUrls, Client, ClientOptions};
-pub use error::{BridgeError, BridgeErrorCode};
+pub use error::{
+    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,
+    InvalidRequest, MetadataError, TransportError, TransportOperation,
+};
 pub use metadata::{
     PngMetadata, VibeMetadataEntry, VibeMetadataSource,
     extract_embedded_vibe_document_from_png_bytes, parse_png_metadata_from_bytes,

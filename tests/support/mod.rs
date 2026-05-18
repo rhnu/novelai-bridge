@@ -11,7 +11,10 @@ use base64::Engine;
 use futures_core::Stream;
 use futures_util::stream;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
-use novelai_bridge::{BridgeError, ImageStreamChunk, Transport};
+use novelai_bridge::{
+    BridgeError, DecodeError, DecodeTarget, ImageStreamChunk, Transport, TransportError,
+    TransportOperation,
+};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -92,15 +95,18 @@ impl Transport for MockTransport {
     ) -> Result<TRes, BridgeError> {
         let mut state = self.state.lock().unwrap();
         state.last_path = Some(path.to_owned());
-        if let Some(err) = state.json_error.clone() {
+        if let Some(err) = state.json_error.take() {
             return Err(err);
         }
         let payload = state.json_response.clone();
         drop(state);
 
-        serde_json::from_value(payload).map_err(|err| {
-            BridgeError::unknown_error(format!("mock get_json deserialize failed: {err}"))
-        })
+        serde_json::from_value(payload)
+            .map_err(|source| DecodeError {
+                target: DecodeTarget::JsonResponse,
+                source: Box::new(source),
+            })
+            .map_err(Into::into)
     }
 
     async fn post_bytes<TReq: Serialize + Send + Sync>(
@@ -108,9 +114,13 @@ impl Transport for MockTransport {
         path: &str,
         body: &TReq,
     ) -> Result<Vec<u8>, BridgeError> {
-        let body = serde_json::to_value(body).map_err(|err| {
-            BridgeError::unknown_error(format!("mock post_bytes serialize failed: {err}"))
-        })?;
+        let body = serde_json::to_value(body)
+            .map_err(|source| TransportError {
+                operation: TransportOperation::SendRequest,
+                endpoint: Some(path.to_owned()),
+                source: Box::new(source),
+            })
+            .map_err(BridgeError::from)?;
 
         let mut state = self.state.lock().unwrap();
         state.last_path = Some(path.to_owned());
@@ -133,9 +143,13 @@ impl Transport for MockTransport {
         Pin<Box<dyn Stream<Item = Result<ImageStreamChunk, BridgeError>> + Send>>,
         BridgeError,
     > {
-        let body = serde_json::to_value(body).map_err(|err| {
-            BridgeError::unknown_error(format!("mock post_sse serialize failed: {err}"))
-        })?;
+        let body = serde_json::to_value(body)
+            .map_err(|source| TransportError {
+                operation: TransportOperation::SendRequest,
+                endpoint: Some(path.to_owned()),
+                source: Box::new(source),
+            })
+            .map_err(BridgeError::from)?;
 
         let mut state = self.state.lock().unwrap();
         state.last_path = Some(path.to_owned());

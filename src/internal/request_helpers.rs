@@ -1,6 +1,5 @@
 use std::{
     cmp::Ordering,
-    io::Write,
     io::{Cursor, Read},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -13,7 +12,7 @@ use image::{
 
 use crate::{
     BridgeError, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
-    GeneratedImage,
+    DataUrlError, GeneratedImage, InvalidRequest,
     internal::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
     },
@@ -151,9 +150,12 @@ pub(crate) fn preprocess_character_reference_image(
     raw: &str,
 ) -> Result<String, BridgeError> {
     let normalized = normalize_image_payload(field_name, raw)?;
-    let decoded = STANDARD.decode(&normalized).map_err(|_| {
-        BridgeError::invalid_request(format!("{field_name} must be valid base64 image payload."))
-    })?;
+    let decoded = STANDARD
+        .decode(&normalized)
+        .map_err(|source| InvalidRequest::InvalidBase64 {
+            field: field_name.to_owned(),
+            source,
+        })?;
 
     let processed = preprocess_director_reference_bytes(field_name, &decoded)?;
     Ok(STANDARD.encode(processed))
@@ -163,17 +165,20 @@ fn preprocess_director_reference_bytes(
     field_name: &str,
     bytes: &[u8],
 ) -> Result<Vec<u8>, BridgeError> {
-    let decoded = image::load_from_memory(bytes).map_err(|_| {
-        BridgeError::invalid_request(format!("{field_name} must be a decodable image payload."))
-    })?;
+    let decoded =
+        image::load_from_memory(bytes).map_err(|source| InvalidRequest::UndecodableImage {
+            field: field_name.to_owned(),
+            source,
+        })?;
 
     let source = decoded.to_rgba8();
     let source_width = source.width();
     let source_height = source.height();
     if source_width == 0 || source_height == 0 {
-        return Err(BridgeError::invalid_request(format!(
-            "{field_name} image size cannot be zero."
-        )));
+        return Err(InvalidRequest::ZeroImageDimension {
+            field: field_name.to_owned(),
+        }
+        .into());
     }
 
     let (target_width, target_height) = pick_director_target_size(source_width, source_height);
@@ -189,14 +194,10 @@ fn preprocess_director_reference_bytes(
     let mut output = Cursor::new(Vec::new());
     DynamicImage::ImageRgba8(canvas)
         .write_to(&mut output, EncodedImageFormat::Png)
-        .map_err(|err| {
-            BridgeError::invalid_request(format!("{field_name} failed to encode as PNG: {err}"))
+        .map_err(|source| InvalidRequest::ImageEncodingFailed {
+            field: field_name.to_owned(),
+            source,
         })?;
-    output.flush().map_err(|err| {
-        BridgeError::invalid_request(format!(
-            "{field_name} failed to finalize PNG payload: {err}"
-        ))
-    })?;
     Ok(output.into_inner())
 }
 
@@ -244,25 +245,34 @@ fn fit_within(
 pub(crate) fn normalize_image_payload(field_name: &str, raw: &str) -> Result<String, BridgeError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(BridgeError::invalid_request(format!(
-            "{field_name} cannot be empty."
-        )));
+        return Err(InvalidRequest::EmptyField {
+            field: field_name.to_owned(),
+        }
+        .into());
     }
 
     let base64_payload = if trimmed.starts_with("data:") {
-        let (meta, payload) = trimmed.split_once(',').ok_or_else(|| {
-            BridgeError::invalid_request(format!("{field_name} data URL is invalid."))
-        })?;
+        let (meta, payload) =
+            trimmed
+                .split_once(',')
+                .ok_or_else(|| InvalidRequest::InvalidDataUrl {
+                    field: field_name.to_owned(),
+                    reason: DataUrlError::MissingPayloadSeparator,
+                })?;
         let lower_meta = meta.to_ascii_lowercase();
         if !lower_meta.starts_with("data:image/") {
-            return Err(BridgeError::invalid_request(format!(
-                "{field_name} only supports image data URL."
-            )));
+            return Err(InvalidRequest::InvalidDataUrl {
+                field: field_name.to_owned(),
+                reason: DataUrlError::UnsupportedMediaType,
+            }
+            .into());
         }
         if !lower_meta.contains(";base64") {
-            return Err(BridgeError::invalid_request(format!(
-                "{field_name} data URL must be base64 encoded."
-            )));
+            return Err(InvalidRequest::InvalidDataUrl {
+                field: field_name.to_owned(),
+                reason: DataUrlError::MissingBase64Marker,
+            }
+            .into());
         }
         payload
     } else {
@@ -274,13 +284,17 @@ pub(crate) fn normalize_image_payload(field_name: &str, raw: &str) -> Result<Str
         .filter(|ch| !ch.is_whitespace())
         .collect();
     if compact.is_empty() {
-        return Err(BridgeError::invalid_request(format!(
-            "{field_name} cannot be empty."
-        )));
+        return Err(InvalidRequest::EmptyField {
+            field: field_name.to_owned(),
+        }
+        .into());
     }
-    STANDARD.decode(&compact).map_err(|_| {
-        BridgeError::invalid_request(format!("{field_name} must be valid base64 image payload."))
-    })?;
+    STANDARD
+        .decode(&compact)
+        .map_err(|source| InvalidRequest::InvalidBase64 {
+            field: field_name.to_owned(),
+            source,
+        })?;
     Ok(compact)
 }
 

@@ -5,20 +5,20 @@ use super::*;
 
 #[test]
 fn retry_after_parses_seconds() {
-    let parsed = parse_retry_after_ms(Some("15"), SystemTime::UNIX_EPOCH);
-    assert_eq!(parsed, Some(15_000));
+    let parsed = parse_retry_after(Some("15"), SystemTime::UNIX_EPOCH);
+    assert_eq!(parsed, Some(Duration::from_secs(15)));
 }
 
 #[test]
-fn retry_after_negative_is_zero() {
-    let parsed = parse_retry_after_ms(Some("-1"), SystemTime::UNIX_EPOCH);
-    assert_eq!(parsed, Some(0));
+fn retry_after_negative_is_none() {
+    let parsed = parse_retry_after(Some("-1"), SystemTime::UNIX_EPOCH);
+    assert_eq!(parsed, None);
 }
 
 #[test]
-fn retry_after_invalid_is_zero() {
-    let parsed = parse_retry_after_ms(Some("abc"), SystemTime::UNIX_EPOCH);
-    assert_eq!(parsed, Some(0));
+fn retry_after_invalid_is_none() {
+    let parsed = parse_retry_after(Some("abc"), SystemTime::UNIX_EPOCH);
+    assert_eq!(parsed, None);
 }
 
 #[test]
@@ -31,8 +31,16 @@ fn map_429_includes_retry_after() {
         "limit".to_owned(),
         "/ai/generate-image",
     );
-    assert_eq!(err.code, "rate_limited");
-    assert_eq!(err.retry_after_ms, Some(5000));
+    assert!(matches!(
+        err,
+        BridgeError::Api(ApiError {
+            kind: ApiErrorKind::RateLimited {
+                retry_after: Some(delay),
+            },
+            status: 429,
+            ..
+        }) if delay == Duration::from_secs(5)
+    ));
 }
 
 #[test]
@@ -45,11 +53,15 @@ fn map_400_uses_json_message_field() {
             .to_owned(),
         "/ai/generate-image-stream",
     );
-    assert_eq!(err.code, "invalid_request");
-    assert_eq!(
-        err.message,
-        "Error encoding v4 director references: non-200 response: 400"
-    );
+    assert!(matches!(
+        err,
+        BridgeError::Api(ApiError {
+            kind: ApiErrorKind::InvalidRequest,
+            status: 400,
+            server_reason: Some(ApiErrorReason::Message(ref message)),
+            ..
+        }) if message == "Error encoding v4 director references: non-200 response: 400"
+    ));
 }
 
 #[test]

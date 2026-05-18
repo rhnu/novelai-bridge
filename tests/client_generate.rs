@@ -3,9 +3,10 @@ mod support;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use novelai_bridge::{
-    BaseUrls, Character, CharacterPosition, CharacterReference, CharacterReferenceType, Client,
-    ControlNetConfig, ControlNetInput, GenerateImageRequest, GenerateImageStreamRequest,
-    ImageFormat, ImageStreamChunk, Img2ImgRequest, Model, UcPreset,
+    BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
+    CharacterReferenceType, Client, ControlNetConfig, ControlNetInput, GenerateImageRequest,
+    GenerateImageStreamRequest, ImageFormat, ImageStreamChunk, Img2ImgRequest, InvalidRequest,
+    Model, UcPreset,
 };
 use serde_json::json;
 
@@ -345,8 +346,11 @@ async fn generate_rejects_controlnet_without_explicit_vibe_data_cache() {
     });
 
     let error = client.generate(params).await.unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("vibe_data_cache"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
+            if field == "controlnet.images[0].vibe_data_cache"
+    ));
     assert!(transport.byte_paths().is_empty());
 }
 
@@ -369,8 +373,11 @@ async fn generate_rejects_invalid_vibe_data_cache_without_transport_call() {
     });
 
     let error = client.generate(params).await.unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("vibe_data_cache"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
+            if field == "vibe_data_cache"
+    ));
     assert!(transport.byte_paths().is_empty());
 }
 
@@ -393,8 +400,11 @@ async fn generate_rejects_base64_shaped_invalid_vibe_data_cache_without_transpor
     });
 
     let error = client.generate(params).await.unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("vibe_data_cache"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
+            if field == "vibe_data_cache"
+    ));
     assert!(transport.byte_paths().is_empty());
 }
 
@@ -488,8 +498,13 @@ async fn validate_rejects_controlnet_and_character_references_together() {
     }]);
 
     let error = client.generate(params).await.unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("cannot be used together"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::UnsupportedFieldCombination {
+            ref left,
+            ref right,
+        }) if left == "controlnet" && right == "character_references"
+    ));
 }
 
 #[tokio::test]
@@ -504,8 +519,11 @@ async fn generate_rejects_empty_prompt_locally() {
         })
         .await
         .unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("prompt cannot be empty"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
+            if field == "prompt"
+    ));
     assert!(transport.last_path().is_none());
 }
 
@@ -523,8 +541,11 @@ async fn generate_rejects_invalid_scale_locally() {
         })
         .await
         .unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("scale must be between 0 and 10"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
+            if field == "scale"
+    ));
     assert!(transport.last_path().is_none());
 }
 
@@ -613,8 +634,11 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
     });
 
     let error = client.generate(params).await.unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("info_extracted"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
+            if field == "controlnet.images[0].info_extracted"
+    ));
     assert!(transport.last_path().is_none());
 }
 

@@ -32,14 +32,23 @@ fn normalize_image_payload_accepts_data_url() {
 fn normalize_image_payload_rejects_non_image_data_url() {
     let error =
         normalize_image_payload("test.image", "data:text/plain;base64,QUJDRA==").unwrap_err();
-    assert_eq!(error.code, "invalid_request");
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::InvalidDataUrl {
+            field,
+            reason: DataUrlError::UnsupportedMediaType,
+        }) if field == "test.image"
+    ));
 }
 
 #[test]
 fn normalize_image_payload_rejects_empty_input() {
     let error = normalize_image_payload("test.image", "   ").unwrap_err();
-    assert_eq!(error.code, "invalid_request");
-    assert!(error.message.contains("cannot be empty"));
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::EmptyField { field })
+            if field == "test.image"
+    ));
 }
 
 #[test]
