@@ -1,11 +1,21 @@
 # Rust
 target
 
+# Python
+__pycache__/
+*.py[cod]
+
 # IDE
 .idea/
 .vscode/
 *.iml
 *.code-workspace
+
+# Local secrets
+.env
+.env.*
+!.env.example
+scripts/out/
 
 # Agent
 AGENTS.md
