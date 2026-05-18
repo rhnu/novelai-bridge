@@ -10,7 +10,12 @@ repository = "https://github.com/RhNu/novelai-bridge"
 readme = "README.md"
 keywords = ["novelai", "image-gen", "api-client", "png", "metadata"]
 categories = ["api-bindings", "multimedia::images"]
-exclude = ["/agents/**", "/AGENTS.md"]
+exclude = [
+    "/.cargo/**",
+    "/agents/**",
+    "/AGENTS.md",
+    "/scripts/**",
+]
 
 [dependencies]
 async-stream = "0.3.6"

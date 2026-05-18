@@ -38,6 +38,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+When using `ApiKeySource::Environment`, set `NOVELAI_API_KEY` before constructing the client.
+
 Disclaimer:
 
 - This project is under experimental development and does not guarantee API or behavior stability.
