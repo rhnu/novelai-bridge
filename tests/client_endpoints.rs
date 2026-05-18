@@ -184,7 +184,7 @@ fn client_options_debug_redacts_inline_api_key() {
 }
 
 #[tokio::test]
-async fn subscription_get_maps_balance_and_tier() {
+async fn get_subscription_maps_balance_and_tier() {
     let transport = MockTransport::default();
     transport.set_json_response(json!({
         "tier": 3,

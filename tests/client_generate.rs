@@ -62,6 +62,22 @@ async fn generate_serializes_image_format() {
 }
 
 #[tokio::test]
+async fn generate_serializes_variety_boost() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        variety_boost: true,
+        ..Default::default()
+    };
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(body["parameters"]["skip_cfg_above_sigma"], json!(58));
+}
+
+#[tokio::test]
 async fn generate_with_auto_seed_reuses_resolved_seed_in_response() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::with_transport(transport.clone());
