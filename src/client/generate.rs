@@ -34,9 +34,10 @@ impl<T: Transport> Client<T> {
         let params = self.normalize_generate_request(params)?;
         let resolved_seed = Self::resolve_seed(params.seed);
         let request = self.build_generate_request(&params, resolved_seed).await?;
+        let endpoint = self.image_endpoint("/ai/generate-image");
         let payload = self
             .transport
-            .post_bytes("/ai/generate-image", &request)
+            .post_bytes(endpoint.as_str(), &request)
             .await?;
 
         Ok(extract_images(payload, resolved_seed))
@@ -53,10 +54,8 @@ impl<T: Transport> Client<T> {
         };
         let resolved_seed = Self::resolve_seed(params.base.seed);
         let request = self.build_stream_request(&params, resolved_seed).await?;
-        let stream = self
-            .transport
-            .post_sse("/ai/generate-image-stream", &request)
-            .await?;
+        let endpoint = self.image_endpoint("/ai/generate-image-stream");
+        let stream = self.transport.post_sse(endpoint.as_str(), &request).await?;
         Ok(map_sse_stream(stream))
     }
 

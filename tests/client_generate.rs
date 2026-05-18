@@ -3,7 +3,7 @@ mod support;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use novelai_bridge::{
-    Character, CharacterPosition, CharacterReference, CharacterReferenceType, Client,
+    BaseUrls, Character, CharacterPosition, CharacterReference, CharacterReferenceType, Client,
     ControlNetConfig, ControlNetInput, GenerateImageRequest, GenerateImageStreamRequest,
     ImageFormat, Img2ImgRequest, Model, UcPreset,
 };
@@ -29,7 +29,10 @@ async fn generate_builds_baseline_text2img_request_shape() {
     assert_eq!(images.len(), 1);
 
     let body = transport.last_body().expect("generate body");
-    assert_eq!(transport.last_path().as_deref(), Some("/ai/generate-image"));
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.novelai.net/ai/generate-image")
+    );
     assert_eq!(body["action"], json!("generate"));
     assert_eq!(body["input"], json!("1girl"));
     assert_eq!(body["model"], json!("nai-diffusion-3"));
@@ -103,7 +106,7 @@ async fn generate_stream_parses_chunk() {
     transport.set_sse_lines(vec![
         "data: {\"event_type\":\"step\",\"samp_ix\":0,\"step_ix\":1,\"gen_id\":1,\"sigma\":1.1,\"image\":\"abc\"}".to_owned(),
     ]);
-    let client = Client::with_transport(transport);
+    let client = Client::with_transport(transport.clone());
 
     let params = GenerateImageStreamRequest {
         base: GenerateImageRequest {
@@ -117,6 +120,37 @@ async fn generate_stream_parses_chunk() {
     let item = stream.next().await.unwrap().unwrap();
     assert_eq!(item.event_type, "step");
     assert_eq!(item.step_ix, Some(1));
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.novelai.net/ai/generate-image-stream")
+    );
+}
+
+#[tokio::test]
+async fn generate_stream_uses_custom_image_base_url() {
+    let transport = MockTransport::default();
+    transport.set_sse_lines(vec![]);
+    let client = Client::with_transport_and_base_urls(
+        transport.clone(),
+        BaseUrls {
+            image: "https://image.example.test/root/".to_owned(),
+            api: "https://api.example.test/root/".to_owned(),
+        },
+    );
+
+    let params = GenerateImageStreamRequest {
+        base: GenerateImageRequest {
+            prompt: "1girl".to_owned(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let _stream = client.generate_stream(params).await.unwrap();
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.example.test/root/ai/generate-image-stream")
+    );
 }
 
 #[tokio::test]
@@ -249,17 +283,17 @@ async fn generate_serializes_explicit_controlnet_vibe_data_cache() {
     let _ = client.generate(build_params()).await.unwrap();
 
     let body = transport
-        .bodies_for_path("/ai/generate-image")
+        .bodies_for_path("https://image.novelai.net/ai/generate-image")
         .pop()
         .expect("generate body");
     let paths = transport.byte_paths();
     let encode_calls = paths
         .iter()
-        .filter(|path| path.as_str() == "/ai/encode-vibe")
+        .filter(|path| path.as_str() == "https://image.novelai.net/ai/encode-vibe")
         .count();
     let generate_calls = paths
         .iter()
-        .filter(|path| path.as_str() == "/ai/generate-image")
+        .filter(|path| path.as_str() == "https://image.novelai.net/ai/generate-image")
         .count();
     assert_eq!(encode_calls, 0);
     assert_eq!(generate_calls, 1);
@@ -601,5 +635,8 @@ async fn generate_does_not_parse_prompt_syntax_locally() {
 
     let images = client.generate(params).await.unwrap();
     assert_eq!(images.len(), 1);
-    assert_eq!(transport.last_path().as_deref(), Some("/ai/generate-image"));
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.novelai.net/ai/generate-image")
+    );
 }

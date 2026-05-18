@@ -18,25 +18,27 @@ use crate::{BridgeError, BridgeErrorCode};
 pub type TransportSseStream = Pin<Box<dyn Stream<Item = Result<String, BridgeError>> + Send>>;
 
 /// Abstraction over the HTTP transport used by [`crate::Client`].
+///
+/// Each method receives a complete endpoint URL resolved by the client.
 #[async_trait]
 pub trait Transport: Send + Sync {
-    /// Sends a GET request and deserializes a JSON response.
+    /// Sends a GET request to `endpoint` and deserializes a JSON response.
     async fn get_json<TRes: DeserializeOwned + Send>(
         &self,
-        path: &str,
+        endpoint: &str,
     ) -> Result<TRes, BridgeError>;
 
-    /// Sends a JSON POST request and returns raw response bytes.
+    /// Sends a JSON POST request to `endpoint` and returns raw response bytes.
     async fn post_bytes<TReq: Serialize + Send + Sync>(
         &self,
-        path: &str,
+        endpoint: &str,
         body: &TReq,
     ) -> Result<Vec<u8>, BridgeError>;
 
-    /// Sends a JSON POST request and returns an SSE stream.
+    /// Sends a JSON POST request to `endpoint` and returns an SSE stream.
     async fn post_sse<TReq: Serialize + Send + Sync>(
         &self,
-        path: &str,
+        endpoint: &str,
         body: &TReq,
     ) -> Result<TransportSseStream, BridgeError>;
 }
@@ -44,16 +46,11 @@ pub trait Transport: Send + Sync {
 /// Default [`Transport`] implementation backed by `reqwest + rustls`.
 pub struct ReqwestTransport {
     client: reqwest::Client,
-    image_base: String,
 }
 
 impl ReqwestTransport {
-    /// Creates a transport with a resolved API key and image endpoint base URL.
-    pub fn new(
-        api_key: SecretString,
-        image_base: impl Into<String>,
-        timeout_ms: u64,
-    ) -> Result<Self, BridgeError> {
+    /// Creates a transport with a resolved API key.
+    pub fn new(api_key: SecretString, timeout_ms: u64) -> Result<Self, BridgeError> {
         let mut headers = HeaderMap::new();
         let auth_value = format!("Bearer {}", api_key.expose_secret());
         let auth_header = reqwest::header::HeaderValue::from_str(&auth_value)
@@ -72,18 +69,7 @@ impl ReqwestTransport {
                 BridgeError::network_error(format!("Failed to initialize HTTP client: {err}"))
             })?;
 
-        Ok(Self {
-            client,
-            image_base: image_base.into(),
-        })
-    }
-
-    fn endpoint_url(&self, path: &str) -> String {
-        if path.starts_with("http://") || path.starts_with("https://") {
-            path.to_owned()
-        } else {
-            format!("{}{}", self.image_base.trim_end_matches('/'), path)
-        }
+        Ok(Self { client })
     }
 }
 
@@ -91,12 +77,11 @@ impl ReqwestTransport {
 impl Transport for ReqwestTransport {
     async fn get_json<TRes: DeserializeOwned + Send>(
         &self,
-        path: &str,
+        endpoint: &str,
     ) -> Result<TRes, BridgeError> {
-        let endpoint = self.endpoint_url(path);
         let response = self
             .client
-            .get(&endpoint)
+            .get(endpoint)
             .send()
             .await
             .map_err(|err| BridgeError::network_error(format!("Network error: {err}")))?;
@@ -105,7 +90,7 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, path));
+            return Err(map_status_error(status, &headers, body_text, endpoint));
         }
 
         response.json::<TRes>().await.map_err(|err| {
@@ -115,13 +100,12 @@ impl Transport for ReqwestTransport {
 
     async fn post_bytes<TReq: Serialize + Send + Sync>(
         &self,
-        path: &str,
+        endpoint: &str,
         body: &TReq,
     ) -> Result<Vec<u8>, BridgeError> {
-        let endpoint = self.endpoint_url(path);
         let response = self
             .client
-            .post(&endpoint)
+            .post(endpoint)
             .json(body)
             .send()
             .await
@@ -131,7 +115,7 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, path));
+            return Err(map_status_error(status, &headers, body_text, endpoint));
         }
 
         response
@@ -145,13 +129,12 @@ impl Transport for ReqwestTransport {
 
     async fn post_sse<TReq: Serialize + Send + Sync>(
         &self,
-        path: &str,
+        endpoint: &str,
         body: &TReq,
     ) -> Result<TransportSseStream, BridgeError> {
-        let endpoint = self.endpoint_url(path);
         let response = self
             .client
-            .post(&endpoint)
+            .post(endpoint)
             .header(reqwest::header::ACCEPT, "text/event-stream")
             .json(body)
             .send()
@@ -162,7 +145,7 @@ impl Transport for ReqwestTransport {
         if !status.is_success() {
             let headers = response.headers().clone();
             let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(status, &headers, body_text, path));
+            return Err(map_status_error(status, &headers, body_text, endpoint));
         }
 
         let mut event_stream = response.bytes_stream().eventsource();

@@ -10,7 +10,7 @@ mod metadata;
 mod transport;
 mod types;
 
-pub use client::{Client, ClientOptions};
+pub use client::{BaseUrls, Client, ClientOptions};
 pub use error::{BridgeError, BridgeErrorCode};
 pub use metadata::{
     PngMetadata, VibeMetadataEntry, VibeMetadataSource,

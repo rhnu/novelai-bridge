@@ -118,7 +118,7 @@ impl Transport for MockTransport {
         state.post_history.push((path.to_owned(), body));
         state.byte_paths.push(path.to_owned());
 
-        if path == "/ai/encode-vibe" {
+        if path.ends_with("/ai/encode-vibe") {
             Ok(state.encode_vibe_response.clone())
         } else {
             Ok(state.bytes_response.clone())

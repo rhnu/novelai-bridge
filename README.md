@@ -16,12 +16,13 @@ Scope:
 Example:
 
 ```rust
-use novelai_bridge::{ApiKeySource, Client, ClientOptions, GenerateImageRequest};
+use novelai_bridge::{ApiKeySource, BaseUrls, Client, ClientOptions, GenerateImageRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new(ClientOptions {
         api_key_source: ApiKeySource::Environment,
+        base_urls: BaseUrls::default(),
         ..Default::default()
     })?;
 

@@ -1,7 +1,7 @@
 mod support;
 
 use novelai_bridge::{
-    ApiKeySource, Client, ClientOptions, DirectorTool, EncodeVibeRequest, Model,
+    ApiKeySource, BaseUrls, Client, ClientOptions, DirectorTool, EncodeVibeRequest, Model,
     RunDirectorToolRequest,
 };
 use serde_json::json;
@@ -29,7 +29,10 @@ async fn encode_vibe_returns_base64() {
     assert_eq!(encoded, "AQID");
     let body = transport.last_body().expect("encode_vibe body");
     assert_eq!(body["image"], json!("QUJDRA=="));
-    assert_eq!(transport.last_path().as_deref(), Some("/ai/encode-vibe"));
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.novelai.net/ai/encode-vibe")
+    );
 }
 
 #[tokio::test]
@@ -109,7 +112,10 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
         .unwrap();
 
     let body = transport.last_body().expect("director body");
-    assert_eq!(transport.last_path().as_deref(), Some("/ai/augment-image"));
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.novelai.net/ai/augment-image")
+    );
     assert_eq!(body["req_type"], json!("lineart"));
     assert_eq!(body["width"], json!(320));
     assert_eq!(body["height"], json!(240));
@@ -203,5 +209,38 @@ async fn get_subscription_maps_balance_and_tier() {
     assert_eq!(
         transport.last_path().as_deref(),
         Some("https://api.novelai.net/user/subscription")
+    );
+}
+
+#[tokio::test]
+async fn custom_base_urls_route_image_and_api_endpoints() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    transport.set_json_response(json!({ "tier": 1 }));
+    let client = Client::with_transport_and_base_urls(
+        transport.clone(),
+        BaseUrls {
+            image: "https://image.example.test/root/".to_owned(),
+            api: "https://api.example.test/root/".to_owned(),
+        },
+    );
+
+    let _ = client
+        .encode_vibe(EncodeVibeRequest {
+            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            information_extracted: 0.7,
+            model: Model::NaiDiffusion45Full,
+            strict_mode: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://image.example.test/root/ai/encode-vibe")
+    );
+
+    let _ = client.get_subscription().await.unwrap();
+    assert_eq!(
+        transport.last_path().as_deref(),
+        Some("https://api.example.test/root/user/subscription")
     );
 }

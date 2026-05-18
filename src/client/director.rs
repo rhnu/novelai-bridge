@@ -32,9 +32,10 @@ impl<T: Transport> Client<T> {
             model: req.model.as_str().to_owned(),
         };
 
+        let endpoint = self.image_endpoint("/ai/encode-vibe");
         let raw = self
             .transport
-            .post_bytes("/ai/encode-vibe", &payload)
+            .post_bytes(endpoint.as_str(), &payload)
             .await?;
         Ok(STANDARD.encode(raw))
     }
@@ -96,9 +97,10 @@ impl<T: Transport> Client<T> {
             defry: resolved_defry,
         };
 
+        let endpoint = self.image_endpoint("/ai/augment-image");
         let raw = self
             .transport
-            .post_bytes("/ai/augment-image", &payload)
+            .post_bytes(endpoint.as_str(), &payload)
             .await?;
         Ok(extract_first_image(raw))
     }

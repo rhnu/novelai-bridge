@@ -7,7 +7,7 @@ use super::Client;
 impl<T: Transport> Client<T> {
     /// Fetches the current subscription summary for the configured account.
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
-        let endpoint = format!("{}/user/subscription", self.api_base.trim_end_matches('/'));
+        let endpoint = self.api_endpoint("/user/subscription");
         let raw = self.transport.get_json::<Value>(endpoint.as_str()).await?;
         Ok(map_subscription_response(&raw))
     }
