@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
 use secrecy::SecretString;
 
@@ -46,7 +43,6 @@ impl Default for ClientOptions {
 pub struct Client<T: Transport> {
     pub(super) transport: Arc<T>,
     pub(super) api_base: String,
-    pub(super) vibe_cache: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Client<ReqwestTransport> {
@@ -82,7 +78,6 @@ impl<T: Transport> Client<T> {
         Self {
             transport: Arc::new(transport),
             api_base,
-            vibe_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

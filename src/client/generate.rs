@@ -16,6 +16,8 @@ use crate::{
 
 use super::Client;
 
+type EncodedControlNet = (Vec<String>, Vec<f32>, Vec<f32>);
+
 impl<T: Transport> Client<T> {
     /// Generates images from a request and returns the decoded image payloads.
     ///
@@ -229,14 +231,10 @@ impl<T: Transport> Client<T> {
             }
 
             for (idx, image) in controlnet.images.iter_mut().enumerate() {
-                let has_image = !image.image.trim().is_empty();
-                let has_cache = image
-                    .vibe_data_cache
-                    .as_ref()
-                    .is_some_and(|value| !value.trim().is_empty());
-                if !has_image && !has_cache {
+                let has_cache = !image.vibe_data_cache.trim().is_empty();
+                if !has_cache {
                     return Err(BridgeError::invalid_request(format!(
-                        "controlnet.images[{idx}] must provide image or vibe_data_cache."
+                        "controlnet.images[{idx}] must provide vibe_data_cache."
                     )));
                 }
                 image.info_extracted = normalize_f32_range(
@@ -343,7 +341,7 @@ impl<T: Transport> Client<T> {
             (None, None, Some(processed_prompt.clone()))
         };
 
-        let controlnet_encoded = self.encode_controlnet(params.controlnet.as_ref()).await?;
+        let controlnet_encoded = self.encode_controlnet(params.controlnet.as_ref())?;
         let character_references = convert_character_references(params)?;
         let normalized_i2i_image = params
             .i2i
@@ -457,10 +455,10 @@ impl<T: Transport> Client<T> {
         })
     }
 
-    async fn encode_controlnet(
+    fn encode_controlnet(
         &self,
         controlnet: Option<&ControlNetConfig>,
-    ) -> Result<Option<(Vec<String>, Vec<f32>, Vec<f32>)>, BridgeError> {
+    ) -> Result<Option<EncodedControlNet>, BridgeError> {
         let Some(controlnet) = controlnet else {
             return Ok(None);
         };
@@ -469,52 +467,8 @@ impl<T: Transport> Client<T> {
         let mut strengths = Vec::with_capacity(controlnet.images.len());
         let mut info_extracted = Vec::with_capacity(controlnet.images.len());
 
-        for (idx, image) in controlnet.images.iter().enumerate() {
-            if let Some(vibe_data_cache) = image
-                .vibe_data_cache
-                .as_ref()
-                .map(|value| value.trim())
-                .filter(|value| !value.is_empty())
-            {
-                let vibe = self.resolve_vibe_data_cache(vibe_data_cache)?;
-                encoded.push(vibe);
-                strengths.push(image.strength);
-                info_extracted.push(image.info_extracted);
-                continue;
-            }
-
-            let normalized_image =
-                normalize_image_payload(&format!("controlnet.images[{idx}].image"), &image.image)?;
-            let cache_key = format!(
-                "{}:{}:{}",
-                image.model.as_str(),
-                image.info_extracted,
-                normalized_image.as_str()
-            );
-
-            let cached = self
-                .vibe_cache
-                .lock()
-                .ok()
-                .and_then(|cache| cache.get(&cache_key).cloned());
-
-            let vibe = if let Some(cached) = cached {
-                cached
-            } else {
-                let encoded_vibe = self
-                    .encode_vibe(crate::EncodeVibeRequest {
-                        image: normalized_image,
-                        information_extracted: image.info_extracted,
-                        model: image.model,
-                        strict_mode: false,
-                    })
-                    .await?;
-                if let Ok(mut cache) = self.vibe_cache.lock() {
-                    cache.insert(cache_key, encoded_vibe.clone());
-                }
-                encoded_vibe
-            };
-
+        for image in &controlnet.images {
+            let vibe = self.resolve_vibe_data_cache(&image.vibe_data_cache)?;
             encoded.push(vibe);
             strengths.push(image.strength);
             info_extracted.push(image.info_extracted);

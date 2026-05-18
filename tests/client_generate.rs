@@ -153,12 +153,12 @@ async fn generate_normalizes_character_reference_image_payloads() {
 }
 
 #[tokio::test]
-async fn generate_serializes_controlnet_and_reuses_vibe_cache() {
+async fn generate_serializes_explicit_controlnet_vibe_data_cache() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
     let client = Client::with_transport(transport.clone());
 
-    let build_params = |image: &str| {
+    let build_params = || {
         let mut params = GenerateImageRequest {
             prompt: "1girl".to_owned(),
             ..Default::default()
@@ -166,21 +166,15 @@ async fn generate_serializes_controlnet_and_reuses_vibe_cache() {
         params.controlnet = Some(ControlNetConfig {
             strength: 1.0,
             images: vec![ControlNetInput {
-                image: image.to_owned(),
                 info_extracted: 0.7,
                 strength: 0.6,
-                model: Model::NaiDiffusion45Full,
-                vibe_data_cache: None,
+                vibe_data_cache: "AQID".to_owned(),
             }],
         });
         params
     };
 
-    let _ = client
-        .generate(build_params("data:image/png;base64,QUJDRA=="))
-        .await
-        .unwrap();
-    let _ = client.generate(build_params("QUJDRA==")).await.unwrap();
+    let _ = client.generate(build_params()).await.unwrap();
 
     let body = transport
         .bodies_for_path("/ai/generate-image")
@@ -195,8 +189,8 @@ async fn generate_serializes_controlnet_and_reuses_vibe_cache() {
         .iter()
         .filter(|path| path.as_str() == "/ai/generate-image")
         .count();
-    assert_eq!(encode_calls, 1);
-    assert_eq!(generate_calls, 2);
+    assert_eq!(encode_calls, 0);
+    assert_eq!(generate_calls, 1);
     assert_eq!(
         body["parameters"]["reference_image_multiple"][0],
         json!("AQID")
@@ -221,6 +215,31 @@ async fn generate_serializes_controlnet_and_reuses_vibe_cache() {
 }
 
 #[tokio::test]
+async fn generate_rejects_controlnet_without_explicit_vibe_data_cache() {
+    let transport = MockTransport::default();
+    transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
+    let client = Client::with_transport(transport.clone());
+
+    let mut params = GenerateImageRequest {
+        prompt: "1girl".to_owned(),
+        ..Default::default()
+    };
+    params.controlnet = Some(ControlNetConfig {
+        strength: 1.0,
+        images: vec![ControlNetInput {
+            info_extracted: 0.7,
+            strength: 0.6,
+            vibe_data_cache: String::new(),
+        }],
+    });
+
+    let error = client.generate(params).await.unwrap_err();
+    assert_eq!(error.code, "invalid_request");
+    assert!(error.message.contains("vibe_data_cache"));
+    assert!(transport.byte_paths().is_empty());
+}
+
+#[tokio::test]
 async fn generate_rejects_invalid_vibe_data_cache_without_transport_call() {
     let transport = MockTransport::default();
     let client = Client::with_transport(transport.clone());
@@ -232,11 +251,9 @@ async fn generate_rejects_invalid_vibe_data_cache_without_transport_call() {
     params.controlnet = Some(ControlNetConfig {
         strength: 1.0,
         images: vec![ControlNetInput {
-            image: String::new(),
             info_extracted: 0.7,
             strength: 0.6,
-            model: Model::NaiDiffusion45Full,
-            vibe_data_cache: Some("not-base64".to_owned()),
+            vibe_data_cache: "not-base64".to_owned(),
         }],
     });
 
@@ -258,11 +275,9 @@ async fn generate_rejects_base64_shaped_invalid_vibe_data_cache_without_transpor
     params.controlnet = Some(ControlNetConfig {
         strength: 1.0,
         images: vec![ControlNetInput {
-            image: String::new(),
             info_extracted: 0.7,
             strength: 0.6,
-            model: Model::NaiDiffusion45Full,
-            vibe_data_cache: Some("AAAAAAAAAAAAAAAAAAAAAAAAA".to_owned()),
+            vibe_data_cache: "AAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         }],
     });
 
@@ -349,11 +364,9 @@ async fn validate_rejects_controlnet_and_character_references_together() {
     params.controlnet = Some(ControlNetConfig {
         strength: 1.0,
         images: vec![ControlNetInput {
-            image: "data:image/png;base64,AAA".to_owned(),
             info_extracted: 1.0,
             strength: 1.0,
-            model: Model::NaiDiffusion45Full,
-            vibe_data_cache: None,
+            vibe_data_cache: String::new(),
         }],
     });
     params.character_references = Some(vec![CharacterReference {
@@ -450,11 +463,9 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
     params.controlnet = Some(ControlNetConfig {
         strength: 2.0,
         images: vec![ControlNetInput {
-            image: String::new(),
             info_extracted: 2.0,
             strength: -1.0,
-            model: Model::NaiDiffusion45Full,
-            vibe_data_cache: Some("AQID".to_owned()),
+            vibe_data_cache: "AQID".to_owned(),
         }],
     });
 
@@ -484,11 +495,9 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
     params.controlnet = Some(ControlNetConfig {
         strength: 1.0,
         images: vec![ControlNetInput {
-            image: String::new(),
             info_extracted: 2.0,
             strength: 0.5,
-            model: Model::NaiDiffusion45Full,
-            vibe_data_cache: Some("AQID".to_owned()),
+            vibe_data_cache: "AQID".to_owned(),
         }],
     });
 

@@ -364,22 +364,18 @@ pub struct Img2ImgRequest {
 /// One controlnet-style reference input.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ControlNetInput {
-    /// Base64 payload or image data URL for the source image.
-    pub image: String,
+    /// Precomputed base64 vibe payload returned by [`crate::Client::encode_vibe`].
+    pub vibe_data_cache: String,
     /// Information-extracted value used for vibe encoding.
     pub info_extracted: f32,
     /// Per-image reference strength.
     pub strength: f32,
-    /// Model used when encoding the vibe payload.
-    pub model: Model,
-    /// Optional precomputed base64 vibe payload.
-    pub vibe_data_cache: Option<String>,
 }
 
 /// Controlnet-style configuration.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ControlNetConfig {
-    /// One or more controlnet images.
+    /// One or more precomputed controlnet vibe payloads.
     pub images: Vec<ControlNetInput>,
     /// Overall controlnet strength.
     pub strength: f32,
