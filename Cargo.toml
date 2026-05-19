@@ -1,8 +1,8 @@
 [package]
 name = "novelai-bridge"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
-license = "GPL-3.0-only"
+license = "Apache-2.0"
 description = "A Rust library for NovelAI image generation APIs and related helpers."
 documentation = "https://docs.rs/novelai-bridge"
 homepage = "https://github.com/RhNu/novelai-bridge"
