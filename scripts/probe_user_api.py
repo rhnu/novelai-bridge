@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Probe NovelAI user API endpoints without printing secrets.
+"""Probe NovelAI image-service user endpoints without printing secrets.
 
-The script reads a bearer token from NOVELAI_USR_TOKEN in the process
+The script reads a bearer token from NOVELAI_API_KEY in the process
 environment or from a repository-local .env file. It prints response shape and
 redacted previews only.
 """
@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_BASE_URL = "https://api.novelai.net"
+DEFAULT_BASE_URL = "https://image.novelai.net"
 DEFAULT_ENDPOINTS = ["/user/subscription", "/user/data"]
-DEFAULT_TOKEN_VAR = "NOVELAI_USR_TOKEN"
+DEFAULT_TOKEN_VAR = "NOVELAI_API_KEY"
 
 SENSITIVE_KEY_RE = re.compile(
     r"(token|secret|password|email|username|user_name|customer|payment|"
