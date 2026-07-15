@@ -11,7 +11,7 @@ impl<T: Transport> Client<T> {
     ///
     /// Returns [`BridgeError`] when the transport request fails or the response cannot be decoded.
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
-        let endpoint = self.api_endpoint("/user/subscription");
+        let endpoint = self.image_endpoint("/user/subscription");
         let raw = self.transport.get_json::<Value>(endpoint.as_str()).await?;
         Ok(map_subscription_response(&raw))
     }

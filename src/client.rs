@@ -33,9 +33,11 @@ impl Default for ClientOptions {
 /// Base URLs used by [`Client`] to resolve `NovelAI` endpoint paths.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BaseUrls {
-    /// Base URL for image-generation endpoints.
+    /// Base URL for image-service endpoints, including subscription queries.
     pub image: String,
-    /// Base URL for non-image API endpoints.
+    /// Base URL reserved for non-image API endpoints.
+    ///
+    /// Current public client methods do not use this base URL.
     pub api: String,
 }
 
@@ -83,7 +85,8 @@ impl<T: Transport> Client<T> {
 
     /// Creates a client from an existing transport and explicit base URLs.
     ///
-    /// The client resolves relative image and API endpoint paths before calling the transport.
+    /// The client resolves relative endpoint paths against the configured base URLs before
+    /// calling the transport.
     pub fn with_transport_and_base_urls(transport: T, base_urls: BaseUrls) -> Self {
         Self {
             transport: Arc::new(transport),
@@ -93,10 +96,6 @@ impl<T: Transport> Client<T> {
 
     pub(super) fn image_endpoint(&self, path: &str) -> String {
         join_base_and_path(&self.base_urls.image, path)
-    }
-
-    pub(super) fn api_endpoint(&self, path: &str) -> String {
-        join_base_and_path(&self.base_urls.api, path)
     }
 }
 

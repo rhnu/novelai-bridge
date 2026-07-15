@@ -214,12 +214,12 @@ async fn get_subscription_maps_balance_and_tier() {
     assert_eq!(subscription.tier_name, "opus");
     assert_eq!(
         transport.last_path().as_deref(),
-        Some("https://api.novelai.net/user/subscription")
+        Some("https://image.novelai.net/user/subscription")
     );
 }
 
 #[tokio::test]
-async fn custom_base_urls_route_image_and_api_endpoints() {
+async fn custom_base_urls_route_image_service_endpoints() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     transport.set_json_response(json!({ "tier": 1 }));
     let client = Client::with_transport_and_base_urls(
@@ -247,6 +247,6 @@ async fn custom_base_urls_route_image_and_api_endpoints() {
     let _ = client.get_subscription().await.unwrap();
     assert_eq!(
         transport.last_path().as_deref(),
-        Some("https://api.example.test/root/user/subscription")
+        Some("https://image.example.test/root/user/subscription")
     );
 }
