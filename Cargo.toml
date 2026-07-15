@@ -26,14 +26,14 @@ futures-core = "0.3.32"
 futures-util = "0.3.32"
 httpdate = "1.0.3"
 image = "0.25.10"
-log = "0.4.29"
+log = "0.4.33"
 png = "0.18.1"
-reqwest = { version = "0.13.3", features = ["json", "stream", "rustls"] }
+reqwest = { version = "0.13.4", features = ["json", "stream", "rustls"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-serde_with = { version = "3.20.0", features = ["macros"] }
-thiserror = "2.0.17"
+serde_json = "1.0.150"
+serde_with = { version = "3.21.0", features = ["macros"] }
+thiserror = "2.0.18"
 zip = "8.6.0"
 
 [dev-dependencies]
