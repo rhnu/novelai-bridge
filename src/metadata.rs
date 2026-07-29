@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
@@ -19,7 +20,7 @@ const OFFICIAL_VIBE_IDENTIFIER: &str = "novelai-vibe-transfer";
 const OFFICIAL_VIBE_BUNDLE_IDENTIFIER: &str = "novelai-vibe-transfer-bundle";
 
 /// Indicates where a vibe metadata entry was recovered from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VibeMetadataSource {
     /// Read from the `NovelAI_Vibe_Encoding_Base64` PNG text chunk.
     NovelAiVibeEncodingChunk,
@@ -32,7 +33,7 @@ pub enum VibeMetadataSource {
 }
 
 /// A single vibe-related metadata entry recovered from a PNG payload.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VibeMetadataEntry {
     /// The source that produced this entry.
     pub source: VibeMetadataSource,
@@ -50,8 +51,16 @@ pub struct VibeMetadataEntry {
     pub has_image: bool,
 }
 
+/// Recoverable issue encountered while interpreting PNG text metadata.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PngMetadataWarning {
+    /// A non-empty `Comment` text chunk was present but was not valid supported JSON.
+    InvalidCommentJson,
+}
+
 /// Parsed metadata recovered from a PNG image payload.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct PngMetadata {
     /// Prompt text when present.
     pub prompt: Option<String>,
@@ -93,6 +102,70 @@ pub struct PngMetadata {
     pub text_chunks: BTreeMap<String, Vec<String>>,
     /// Parsed JSON payload from the `Comment` chunk when available.
     pub raw_comment_json: Option<Value>,
+    /// Recoverable interpretation issues; successfully decoded text chunks remain available.
+    pub warnings: Vec<PngMetadataWarning>,
+}
+
+impl PngMetadata {
+    /// Returns whether the PNG contained any text metadata chunks.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.text_chunks.is_empty()
+    }
+
+    /// Returns whether at least one recognized generation setting was recovered.
+    #[must_use]
+    pub fn has_generation_data(&self) -> bool {
+        self.prompt.is_some()
+            || self.negative_prompt.is_some()
+            || self.seed.is_some()
+            || self.sampler.is_some()
+            || self.steps.is_some()
+            || self.scale.is_some()
+            || self.width.is_some()
+            || self.height.is_some()
+            || self.model.is_some()
+            || self.noise_schedule.is_some()
+            || self.cfg_rescale.is_some()
+            || self.uc_preset.is_some()
+            || self.quality_toggle.is_some()
+            || !self.character_prompts.is_empty()
+            || !self.character_negative_prompts.is_empty()
+    }
+}
+
+/// Best-effort metadata inspection state for one generated image.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "status", content = "value", rename_all = "snake_case")]
+pub enum GeneratedImageMetadata {
+    /// PNG metadata was parsed successfully.
+    Parsed(Box<PngMetadata>),
+    /// The payload is a valid PNG but contains no text metadata.
+    NotPresent,
+    /// The image format does not use the supported NovelAI PNG metadata representation.
+    UnsupportedFormat,
+    /// The payload looked like PNG data but its metadata could not be decoded.
+    Invalid {
+        /// Human-readable parser diagnostic.
+        message: String,
+    },
+}
+
+impl GeneratedImageMetadata {
+    /// Returns parsed PNG metadata when available.
+    #[must_use]
+    pub fn parsed(&self) -> Option<&PngMetadata> {
+        match self {
+            Self::Parsed(metadata) => Some(metadata.as_ref()),
+            Self::NotPresent | Self::UnsupportedFormat | Self::Invalid { .. } => None,
+        }
+    }
+
+    /// Returns the per-image seed recovered from embedded metadata.
+    #[must_use]
+    pub fn seed(&self) -> Option<i64> {
+        self.parsed().and_then(|metadata| metadata.seed)
+    }
 }
 
 #[derive(Default)]
@@ -159,6 +232,31 @@ pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, Bridge
     }
 
     Ok(parsed)
+}
+
+/// Inspects a generated image without promoting metadata problems to generation failures.
+///
+/// PNG payloads are parsed with [`parse_png_metadata_from_bytes`]. Non-PNG payloads are reported
+/// as [`GeneratedImageMetadata::UnsupportedFormat`]. A supplied MIME type is treated as a hint;
+/// the PNG signature is also recognized.
+#[must_use]
+pub fn inspect_generated_image_metadata(
+    bytes: &[u8],
+    mime_type: Option<&str>,
+) -> GeneratedImageMetadata {
+    let is_png = bytes.starts_with(&[0x89, b'P', b'N', b'G'])
+        || mime_type.is_some_and(|value| value.eq_ignore_ascii_case("image/png"));
+    if !is_png {
+        return GeneratedImageMetadata::UnsupportedFormat;
+    }
+
+    match parse_png_metadata_from_bytes(bytes) {
+        Ok(metadata) if metadata.is_empty() => GeneratedImageMetadata::NotPresent,
+        Ok(metadata) => GeneratedImageMetadata::Parsed(Box::new(metadata)),
+        Err(error) => GeneratedImageMetadata::Invalid {
+            message: error.to_string(),
+        },
+    }
 }
 
 /// Extracts the serialized embedded vibe document from raw PNG bytes when present.
@@ -291,6 +389,9 @@ fn parse_comment_payload(parsed: &mut PngMetadata) {
         return;
     };
     let Some(payload) = parse_json_payload(comment) else {
+        if !comment.trim().is_empty() {
+            parsed.warnings.push(PngMetadataWarning::InvalidCommentJson);
+        }
         return;
     };
     let Some(object) = payload.as_object() else {

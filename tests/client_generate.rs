@@ -5,12 +5,15 @@ use futures_util::StreamExt;
 use novelai_bridge::{
     BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
     CharacterReferenceType, Client, ControlNetConfig, ControlNetInput, GenerateImageRequest,
-    GenerateImageStreamRequest, ImageFormat, ImageStreamChunk, Img2ImgRequest, InvalidRequest,
-    Model, UcPreset,
+    GenerateImageStreamRequest, GeneratedImageMetadata, ImageFormat, ImageStreamChunk,
+    Img2ImgRequest, InvalidRequest, Model, UcPreset,
 };
 use serde_json::json;
 
-use support::{MockTransport, create_png_base64, create_zip_with_single_png};
+use support::{
+    MockTransport, create_png_base64, create_png_with_comment, create_zip_with_pngs,
+    create_zip_with_single_png,
+};
 
 #[tokio::test]
 async fn generate_builds_baseline_text2img_request_shape() {
@@ -26,8 +29,8 @@ async fn generate_builds_baseline_text2img_request_shape() {
     let expected_prompt = params.processed_prompt();
     let expected_negative_prompt = params.processed_negative_prompt();
 
-    let images = client.generate(params).await.unwrap();
-    assert_eq!(images.len(), 1);
+    let result = client.generate(params).await.unwrap();
+    assert_eq!(result.images.len(), 1);
 
     let body = transport.last_body().expect("generate body");
     assert_eq!(
@@ -82,11 +85,11 @@ async fn generate_serializes_variety_boost() {
 }
 
 #[tokio::test]
-async fn generate_with_auto_seed_reuses_resolved_seed_in_response() {
+async fn generate_with_auto_seed_returns_resolved_request_seed_without_faking_image_seed() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::with_transport(transport.clone());
 
-    let images = client
+    let result = client
         .generate(GenerateImageRequest {
             prompt: "1girl".to_owned(),
             seed: 0,
@@ -98,7 +101,81 @@ async fn generate_with_auto_seed_reuses_resolved_seed_in_response() {
     let body = transport.last_body().expect("generate body");
     let request_seed = body["parameters"]["seed"].as_i64().expect("request seed");
     assert_ne!(request_seed, 0);
-    assert_eq!(images[0].seed, Some(request_seed));
+    assert_eq!(result.resolved_seed, request_seed);
+    assert_eq!(result.images[0].seed(), None);
+}
+
+#[tokio::test]
+async fn generate_with_fixed_seed_returns_exact_request_seed() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport);
+
+    let result = client
+        .generate(GenerateImageRequest {
+            prompt: "1girl".to_owned(),
+            seed: 4242,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.resolved_seed, 4242);
+    assert_eq!(result.images[0].seed(), None);
+}
+
+#[tokio::test]
+async fn generate_parses_each_zip_images_embedded_seed() {
+    let first = create_png_with_comment(&json!({"prompt": "first", "seed": 101}));
+    let second = create_png_with_comment(&json!({"prompt": "second", "seed": 202}));
+    let transport = MockTransport::with_bytes_response(create_zip_with_pngs(&[
+        ("first.png", first),
+        ("second.png", second),
+    ]));
+    let client = Client::with_transport(transport);
+
+    let result = client
+        .generate(GenerateImageRequest {
+            prompt: "request prompt".to_owned(),
+            seed: 77,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.resolved_seed, 77);
+    assert_eq!(result.images[0].seed(), Some(101));
+    assert_eq!(result.images[1].seed(), Some(202));
+}
+
+#[tokio::test]
+async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
+    let valid_without_metadata = STANDARD
+        .decode(create_png_base64(2, 2))
+        .expect("decode png");
+    let invalid_png = vec![0x89, b'P', b'N', b'G', 0, 1, 2, 3];
+    let transport = MockTransport::with_bytes_response(create_zip_with_pngs(&[
+        ("missing.png", valid_without_metadata),
+        ("invalid.png", invalid_png),
+    ]));
+    let client = Client::with_transport(transport);
+
+    let result = client
+        .generate(GenerateImageRequest {
+            prompt: "1girl".to_owned(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.images.len(), 2);
+    assert!(matches!(
+        result.images[0].metadata,
+        GeneratedImageMetadata::NotPresent
+    ));
+    assert!(matches!(
+        result.images[1].metadata,
+        GeneratedImageMetadata::Invalid { .. }
+    ));
 }
 
 #[tokio::test]
@@ -123,6 +200,13 @@ async fn generate_stream_parses_chunk() {
     };
 
     let mut stream = client.generate_stream(params).await.unwrap();
+    assert_ne!(stream.resolved_seed, 0);
+    assert_eq!(
+        stream.resolved_seed,
+        transport.last_body().unwrap()["parameters"]["seed"]
+            .as_i64()
+            .unwrap()
+    );
     let item = stream.next().await.unwrap().unwrap();
     assert_eq!(item.event_type, "step");
     assert_eq!(item.step_ix, Some(1));
@@ -662,8 +746,8 @@ async fn generate_does_not_parse_prompt_syntax_locally() {
         ..Default::default()
     };
 
-    let images = client.generate(params).await.unwrap();
-    assert_eq!(images.len(), 1);
+    let result = client.generate(params).await.unwrap();
+    assert_eq!(result.images.len(), 1);
     assert_eq!(
         transport.last_path().as_deref(),
         Some("https://image.novelai.net/ai/generate-image")

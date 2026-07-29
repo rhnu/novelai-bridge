@@ -1,6 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use novelai_bridge::{
-    VibeMetadataSource, extract_embedded_vibe_document_from_png_bytes,
+    GeneratedImageMetadata, PngMetadataWarning, VibeMetadataSource,
+    extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
 
@@ -22,6 +23,35 @@ fn create_png_with_text_chunks(chunks: &[(&str, &str)]) -> Vec<u8> {
         .expect("write image");
     drop(writer);
     output
+}
+
+#[test]
+fn inspect_metadata_distinguishes_absent_invalid_and_unsupported() {
+    let empty_png = create_png_with_text_chunks(&[]);
+    assert!(matches!(
+        inspect_generated_image_metadata(&empty_png, Some("image/png")),
+        GeneratedImageMetadata::NotPresent
+    ));
+    assert!(matches!(
+        inspect_generated_image_metadata(&[0x89, b'P', b'N', b'G'], Some("image/png")),
+        GeneratedImageMetadata::Invalid { .. }
+    ));
+    assert!(matches!(
+        inspect_generated_image_metadata(b"RIFF0000WEBP", Some("image/webp")),
+        GeneratedImageMetadata::UnsupportedFormat
+    ));
+}
+
+#[test]
+fn malformed_comment_is_recoverable_and_diagnostic() {
+    let png =
+        create_png_with_text_chunks(&[("Comment", "{not-json"), ("prompt", "fallback prompt")]);
+    let metadata = parse_png_metadata_from_bytes(&png).expect("valid png");
+    assert_eq!(metadata.prompt.as_deref(), Some("fallback prompt"));
+    assert_eq!(
+        metadata.warnings,
+        vec![PngMetadataWarning::InvalidCommentJson]
+    );
 }
 
 #[test]
@@ -55,6 +85,7 @@ fn parse_comment_extracts_regular_fields() {
     assert_eq!(metadata.uc_preset, Some(1));
     assert_eq!(metadata.quality_toggle, Some(true));
     assert_eq!(metadata.character_prompts, vec!["alice".to_owned()]);
+    assert!(metadata.has_generation_data());
 }
 
 #[test]

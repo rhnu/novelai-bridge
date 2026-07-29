@@ -54,10 +54,14 @@ fn normalize_image_payload_rejects_empty_input() {
 #[test]
 fn extract_images_falls_back_to_raw_payload_mime() {
     let payload = create_webp_bytes();
-    let images = extract_images(payload.clone(), 42);
+    let images = extract_images(payload.clone());
     assert_eq!(images.len(), 1);
     assert_eq!(images[0].bytes, payload);
     assert_eq!(images[0].mime_type.as_deref(), Some("image/webp"));
+    assert!(matches!(
+        images[0].metadata,
+        crate::GeneratedImageMetadata::UnsupportedFormat
+    ));
 }
 
 #[test]

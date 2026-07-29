@@ -1,6 +1,8 @@
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
+use crate::metadata::GeneratedImageMetadata;
+
 const DEFAULT_STEPS: u32 = 23;
 const DEFAULT_SCALE: f32 = 5.0;
 const QUALITY_TAGS: &str = ", very aesthetic, masterpiece, no text";
@@ -548,15 +550,34 @@ pub struct GenerateImageStreamRequest {
     pub stream: StreamMode,
 }
 
+/// Result of a non-streaming image-generation request.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GenerateImageResult {
+    /// Request-level seed actually sent to `NovelAI` after resolving an input seed of `0`.
+    pub resolved_seed: i64,
+    /// Images decoded from the response.
+    pub images: Vec<GeneratedImage>,
+}
+
 /// Generated image payload.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GeneratedImage {
     /// Raw image bytes.
     pub bytes: Vec<u8>,
     /// Best-effort MIME type inferred from the response.
     pub mime_type: Option<String>,
-    /// Seed associated with the generated image when known.
-    pub seed: Option<i64>,
+    /// Best-effort inspection of metadata embedded in this specific image.
+    pub metadata: GeneratedImageMetadata,
+}
+
+impl GeneratedImage {
+    /// Returns the seed embedded in this image's metadata when available.
+    ///
+    /// This never falls back to the request-level resolved seed.
+    #[must_use]
+    pub fn seed(&self) -> Option<i64> {
+        self.metadata.seed()
+    }
 }
 
 /// Parsed stream chunk emitted by `NovelAI` image streaming.

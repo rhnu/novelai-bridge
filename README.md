@@ -26,14 +26,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let images = client
+    let result = client
         .generate(GenerateImageRequest {
             prompt: "1girl".to_owned(),
             ..Default::default()
         })
         .await?;
 
-    println!("generated {} image(s)", images.len());
+    println!(
+        "generated {} image(s) with request seed {}",
+        result.images.len(),
+        result.resolved_seed
+    );
+    for image in &result.images {
+        println!("embedded output seed: {:?}", image.seed());
+    }
     Ok(())
 }
 ```
@@ -48,6 +55,11 @@ Disclaimer:
 Notes:
 
 - This crate does local shape/range validation, not prompt syntax parsing.
+- `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
+- Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request
+  seed is never presented as an image seed.
+- `inspect_generated_image_metadata` provides a non-failing metadata inspection path for complete
+  generated images, while `parse_png_metadata_from_bytes` remains the strict PNG parser.
 - The default transport uses `reqwest + rustls`.
 - This project is not affiliated with NovelAI.
 

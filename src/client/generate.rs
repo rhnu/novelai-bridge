@@ -1,7 +1,7 @@
 use crate::{
     BridgeError, Character, CharacterReference, ControlNetConfig, GenerateImageRequest,
-    GenerateImageStreamRequest, GeneratedImage, ImageStreamResult, Img2ImgRequest, InvalidRequest,
-    Transport,
+    GenerateImageResult, GenerateImageStream, GenerateImageStreamRequest, Img2ImgRequest,
+    InvalidRequest, Transport,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
@@ -50,7 +50,7 @@ impl<T: Transport> Client<T> {
     pub async fn generate(
         &self,
         params: GenerateImageRequest,
-    ) -> Result<Vec<GeneratedImage>, BridgeError> {
+    ) -> Result<GenerateImageResult, BridgeError> {
         let params = Self::normalize_generate_request(params)?;
         let resolved_seed = Self::resolve_seed(params.seed);
         let request = Self::build_generate_request(&params, resolved_seed)?;
@@ -60,7 +60,10 @@ impl<T: Transport> Client<T> {
             .post_bytes(endpoint.as_str(), &request)
             .await?;
 
-        Ok(extract_images(payload, resolved_seed))
+        Ok(GenerateImageResult {
+            resolved_seed,
+            images: extract_images(payload),
+        })
     }
 
     /// Starts a streaming image generation request and returns parsed SSE chunks.
@@ -72,7 +75,7 @@ impl<T: Transport> Client<T> {
     pub async fn generate_stream(
         &self,
         params: GenerateImageStreamRequest,
-    ) -> Result<ImageStreamResult, BridgeError> {
+    ) -> Result<GenerateImageStream, BridgeError> {
         let params = GenerateImageStreamRequest {
             base: Self::normalize_generate_request(params.base)?,
             stream: params.stream,
@@ -81,7 +84,7 @@ impl<T: Transport> Client<T> {
         let request = Self::build_stream_request(&params, resolved_seed)?;
         let endpoint = self.image_endpoint("/ai/generate-image-stream");
         let stream = self.transport.post_sse(endpoint.as_str(), &request).await?;
-        Ok(stream)
+        Ok(GenerateImageStream::new(resolved_seed, stream))
     }
 
     fn normalize_generate_request(

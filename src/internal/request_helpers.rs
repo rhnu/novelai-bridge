@@ -12,7 +12,7 @@ use image::{
 
 use crate::{
     BridgeError, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
-    DataUrlError, GeneratedImage, InvalidRequest,
+    DataUrlError, GeneratedImage, InvalidRequest, inspect_generated_image_metadata,
     internal::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
     },
@@ -323,7 +323,7 @@ pub fn is_likely_base64(value: &str) -> bool {
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '+' || ch == '/' || ch == '=')
 }
 
-pub fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage> {
+pub fn extract_images(payload: Vec<u8>) -> Vec<GeneratedImage> {
     if let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(payload.as_slice())) {
         let mut images = Vec::new();
         for idx in 0..archive.len() {
@@ -338,10 +338,12 @@ pub fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage> {
 
             let mut data = Vec::new();
             if file.read_to_end(&mut data).is_ok() {
+                let mime_type = infer_mime_from_name(&lower_name);
+                let metadata = inspect_generated_image_metadata(&data, mime_type.as_deref());
                 images.push(GeneratedImage {
                     bytes: data,
-                    mime_type: infer_mime_from_name(&lower_name),
-                    seed: Some(seed),
+                    mime_type,
+                    metadata,
                 });
             }
         }
@@ -352,10 +354,11 @@ pub fn extract_images(payload: Vec<u8>, seed: i64) -> Vec<GeneratedImage> {
     }
 
     let mime_type = infer_mime_from_bytes(&payload);
+    let metadata = inspect_generated_image_metadata(&payload, mime_type.as_deref());
     vec![GeneratedImage {
         bytes: payload,
         mime_type,
-        seed: Some(seed),
+        metadata,
     }]
 }
 
@@ -373,20 +376,23 @@ pub fn extract_first_image(payload: Vec<u8>) -> GeneratedImage {
 
             let mut data = Vec::new();
             if file.read_to_end(&mut data).is_ok() {
+                let mime_type = infer_mime_from_name(&lower_name);
+                let metadata = inspect_generated_image_metadata(&data, mime_type.as_deref());
                 return GeneratedImage {
                     bytes: data,
-                    mime_type: infer_mime_from_name(&lower_name),
-                    seed: None,
+                    mime_type,
+                    metadata,
                 };
             }
         }
     }
 
     let mime_type = infer_mime_from_bytes(&payload);
+    let metadata = inspect_generated_image_metadata(&payload, mime_type.as_deref());
     GeneratedImage {
         bytes: payload,
         mime_type,
-        seed: None,
+        metadata,
     }
 }
 
