@@ -18,6 +18,7 @@ const KEY_NAIDATA: &str = "naidata";
 const KEY_LEGACY_VIBE: &str = "naiv4vibe";
 const OFFICIAL_VIBE_IDENTIFIER: &str = "novelai-vibe-transfer";
 const OFFICIAL_VIBE_BUNDLE_IDENTIFIER: &str = "novelai-vibe-transfer-bundle";
+const TEXT_CHUNK_DECOMPRESSION_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Indicates where a vibe metadata entry was recovered from.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -57,6 +58,13 @@ pub struct VibeMetadataEntry {
 pub enum PngMetadataWarning {
     /// A non-empty `Comment` text chunk was present but was not valid supported JSON.
     InvalidCommentJson,
+    /// A compressed PNG text chunk could not be decoded within the supported limit.
+    InvalidTextChunk {
+        /// PNG text chunk keyword.
+        keyword: String,
+        /// Decoder diagnostic.
+        message: String,
+    },
 }
 
 /// Parsed metadata recovered from a PNG image payload.
@@ -107,10 +115,10 @@ pub struct PngMetadata {
 }
 
 impl PngMetadata {
-    /// Returns whether the PNG contained any text metadata chunks.
+    /// Returns whether the PNG contained no decoded text chunks or text diagnostics.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.text_chunks.is_empty()
+        self.text_chunks.is_empty() && self.warnings.is_empty()
     }
 
     /// Returns whether at least one recognized generation setting was recovered.
@@ -205,11 +213,12 @@ pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, Bridg
 ///
 /// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
 pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, BridgeError> {
-    let text_chunks = extract_png_text_chunks(bytes)?;
+    let extracted = extract_png_text_chunks(bytes)?;
     let mut parsed = PngMetadata {
-        source: first_chunk_value_ci(&text_chunks, KEY_SOURCE).map(str::to_owned),
-        software: first_chunk_value_ci(&text_chunks, KEY_SOFTWARE).map(str::to_owned),
-        text_chunks,
+        source: first_chunk_value_ci(&extracted.text_chunks, KEY_SOURCE).map(str::to_owned),
+        software: first_chunk_value_ci(&extracted.text_chunks, KEY_SOFTWARE).map(str::to_owned),
+        text_chunks: extracted.text_chunks,
+        warnings: extracted.warnings,
         ..Default::default()
     };
 
@@ -267,8 +276,8 @@ pub fn inspect_generated_image_metadata(
 pub fn extract_embedded_vibe_document_from_png_bytes(
     bytes: &[u8],
 ) -> Result<Option<String>, BridgeError> {
-    let text_chunks = extract_png_text_chunks(bytes)?;
-    for raw in chunk_values_ci(&text_chunks, KEY_NAIDATA) {
+    let extracted = extract_png_text_chunks(bytes)?;
+    for raw in chunk_values_ci(&extracted.text_chunks, KEY_NAIDATA) {
         let Some(payload) = parse_json_or_base64_json(raw) else {
             continue;
         };
@@ -288,31 +297,92 @@ pub fn extract_embedded_vibe_document_from_png_bytes(
     Ok(None)
 }
 
-fn extract_png_text_chunks(bytes: &[u8]) -> Result<BTreeMap<String, Vec<String>>, BridgeError> {
+struct ExtractedPngText {
+    text_chunks: BTreeMap<String, Vec<String>>,
+    warnings: Vec<PngMetadataWarning>,
+}
+
+fn extract_png_text_chunks(bytes: &[u8]) -> Result<ExtractedPngText, BridgeError> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-    let reader = decoder
-        .read_info()
-        .map_err(|source| MetadataError::InvalidPngPayload {
-            field: "metadata.image".to_owned(),
-            source,
-        })?;
+    let mut reader = decoder.read_info().map_err(invalid_png_payload)?;
+    let output_size = reader
+        .output_buffer_size()
+        .ok_or(png::DecodingError::LimitsExceeded)
+        .map_err(invalid_png_payload)?;
+    let mut output = vec![0_u8; output_size];
+    reader
+        .next_frame(output.as_mut_slice())
+        .map_err(invalid_png_payload)?;
+    reader.finish().map_err(invalid_png_payload)?;
     let info = reader.info();
 
     let mut chunks: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut warnings = Vec::new();
     for chunk in &info.uncompressed_latin1_text {
         push_text_chunk(&mut chunks, chunk.keyword.as_str(), chunk.text.as_str());
     }
     for chunk in &info.compressed_latin1_text {
-        if let Ok(text) = chunk.get_text() {
-            push_text_chunk(&mut chunks, chunk.keyword.as_str(), text.as_str());
-        }
+        decode_compressed_text_chunk(
+            &mut chunks,
+            &mut warnings,
+            chunk.keyword.as_str(),
+            chunk.clone(),
+        );
     }
     for chunk in &info.utf8_text {
-        if let Ok(text) = chunk.get_text() {
-            push_text_chunk(&mut chunks, chunk.keyword.as_str(), text.as_str());
-        }
+        decode_compressed_text_chunk(
+            &mut chunks,
+            &mut warnings,
+            chunk.keyword.as_str(),
+            chunk.clone(),
+        );
     }
-    Ok(chunks)
+    Ok(ExtractedPngText {
+        text_chunks: chunks,
+        warnings,
+    })
+}
+
+fn decode_compressed_text_chunk<T>(
+    chunks: &mut BTreeMap<String, Vec<String>>,
+    warnings: &mut Vec<PngMetadataWarning>,
+    keyword: &str,
+    mut chunk: T,
+) where
+    T: PngTextChunk,
+{
+    match chunk.decode_text(TEXT_CHUNK_DECOMPRESSION_LIMIT) {
+        Ok(text) => push_text_chunk(chunks, keyword, text.as_str()),
+        Err(error) => warnings.push(PngMetadataWarning::InvalidTextChunk {
+            keyword: keyword.to_owned(),
+            message: error.to_string(),
+        }),
+    }
+}
+
+trait PngTextChunk {
+    fn decode_text(&mut self, limit: usize) -> Result<String, png::DecodingError>;
+}
+
+impl PngTextChunk for png::text_metadata::ZTXtChunk {
+    fn decode_text(&mut self, limit: usize) -> Result<String, png::DecodingError> {
+        self.decompress_text_with_limit(limit)?;
+        self.get_text()
+    }
+}
+
+impl PngTextChunk for png::text_metadata::ITXtChunk {
+    fn decode_text(&mut self, limit: usize) -> Result<String, png::DecodingError> {
+        self.decompress_text_with_limit(limit)?;
+        self.get_text()
+    }
+}
+
+fn invalid_png_payload(source: png::DecodingError) -> MetadataError {
+    MetadataError::InvalidPngPayload {
+        field: "metadata.image".to_owned(),
+        source,
+    }
 }
 
 fn push_text_chunk(chunks: &mut BTreeMap<String, Vec<String>>, key: &str, value: &str) {

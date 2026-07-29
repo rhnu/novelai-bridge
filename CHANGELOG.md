@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Validate complete PNG image data through `IEND` before reporting parsed metadata.
+- Read PNG text chunks that appear after image data.
+- Preserve bounded `zTXt` / `iTXt` decoding failures as structured metadata warnings.
+
 ## 0.3.0
 
 - Change `Client::generate` to return `GenerateImageResult`, separating the request-level

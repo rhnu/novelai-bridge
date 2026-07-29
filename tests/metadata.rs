@@ -25,6 +25,22 @@ fn create_png_with_text_chunks(chunks: &[(&str, &str)]) -> Vec<u8> {
     output
 }
 
+fn create_png_with_post_image_text_chunks(chunks: &[png::text_metadata::TEXtChunk]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut encoder = png::Encoder::new(&mut output, 2, 2);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().expect("write header");
+    writer
+        .write_image_data(&[255_u8; 2 * 2 * 4])
+        .expect("write image");
+    for chunk in chunks {
+        writer.write_text_chunk(chunk).expect("write text chunk");
+    }
+    writer.finish().expect("finish png");
+    output
+}
+
 #[test]
 fn inspect_metadata_distinguishes_absent_invalid_and_unsupported() {
     let empty_png = create_png_with_text_chunks(&[]);
@@ -52,6 +68,62 @@ fn malformed_comment_is_recoverable_and_diagnostic() {
         metadata.warnings,
         vec![PngMetadataWarning::InvalidCommentJson]
     );
+}
+
+#[test]
+fn parses_text_chunks_after_image_data() {
+    let comment = serde_json::json!({
+        "prompt": "post-idat prompt",
+        "seed": 9876
+    })
+    .to_string();
+    let png = create_png_with_post_image_text_chunks(&[png::text_metadata::TEXtChunk::new(
+        "Comment", comment,
+    )]);
+
+    let metadata = parse_png_metadata_from_bytes(&png).expect("valid png");
+    assert_eq!(metadata.prompt.as_deref(), Some("post-idat prompt"));
+    assert_eq!(metadata.seed, Some(9876));
+}
+
+#[test]
+fn rejects_png_truncated_before_iend() {
+    let mut png = create_png_with_text_chunks(&[("prompt", "should not survive truncation")]);
+    png.truncate(png.len() - 12);
+
+    assert!(parse_png_metadata_from_bytes(&png).is_err());
+    assert!(matches!(
+        inspect_generated_image_metadata(&png, Some("image/png")),
+        GeneratedImageMetadata::Invalid { .. }
+    ));
+}
+
+#[test]
+fn invalid_compressed_text_is_recoverable_and_diagnostic() {
+    let mut output = Vec::new();
+    let mut encoder = png::Encoder::new(&mut output, 2, 2);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .add_text_chunk("prompt".to_owned(), "fallback prompt".to_owned())
+        .expect("add prompt");
+    let mut writer = encoder.write_header().expect("write header");
+    writer
+        .write_image_data(&[255_u8; 2 * 2 * 4])
+        .expect("write image");
+    let mut invalid_ztxt = b"Comment\0\0".to_vec();
+    invalid_ztxt.extend_from_slice(b"not-zlib-data");
+    writer
+        .write_chunk(png::chunk::zTXt, &invalid_ztxt)
+        .expect("write invalid zTXt");
+    writer.finish().expect("finish png");
+
+    let metadata = parse_png_metadata_from_bytes(&output).expect("valid png structure");
+    assert_eq!(metadata.prompt.as_deref(), Some("fallback prompt"));
+    assert!(matches!(
+        metadata.warnings.as_slice(),
+        [PngMetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "Comment"
+    ));
 }
 
 #[test]
