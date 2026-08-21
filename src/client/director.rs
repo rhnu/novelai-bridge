@@ -21,6 +21,14 @@ impl<T: Transport> Client<T> {
     /// Returns [`BridgeError`] when local request validation, image normalization, transport, or
     /// response decoding fails.
     pub async fn encode_vibe(&self, req: EncodeVibeRequest) -> Result<String, BridgeError> {
+        if !req.model.capabilities().supports_encoded_vibe {
+            return Err(InvalidRequest::UnsupportedModelFeature {
+                feature: "encode_vibe".to_owned(),
+                required_model: "V4 and V4.5 models".to_owned(),
+            }
+            .into());
+        }
+
         let information_extracted = normalize_f32_range(
             "information_extracted",
             req.information_extracted,
@@ -37,11 +45,19 @@ impl<T: Transport> Client<T> {
         };
 
         let endpoint = self.image_endpoint("/ai/encode-vibe");
-        let raw = self
-            .transport
-            .post_bytes(endpoint.as_str(), &payload)
-            .await?;
-        Ok(STANDARD.encode(raw))
+        let observation = self
+            .begin_simple_observation(crate::ObservedOperation::EncodeVibe)
+            .await;
+        match self.transport.post_bytes(endpoint.as_str(), &payload).await {
+            Ok(raw) => {
+                self.finish_observation_succeeded(observation, 0).await;
+                Ok(STANDARD.encode(raw))
+            }
+            Err(error) => {
+                self.finish_observation_failed(observation, &error).await;
+                Err(error)
+            }
+        }
     }
 
     /// Runs a `NovelAI` director tool against an input image.
@@ -121,11 +137,19 @@ impl<T: Transport> Client<T> {
         };
 
         let endpoint = self.image_endpoint("/ai/augment-image");
-        let raw = self
-            .transport
-            .post_bytes(endpoint.as_str(), &payload)
-            .await?;
-        Ok(extract_first_image(raw))
+        let observation = self
+            .begin_simple_observation(crate::ObservedOperation::AugmentImage)
+            .await;
+        match self.transport.post_bytes(endpoint.as_str(), &payload).await {
+            Ok(raw) => {
+                self.finish_observation_succeeded(observation, 1).await;
+                Ok(extract_first_image(raw))
+            }
+            Err(error) => {
+                self.finish_observation_failed(observation, &error).await;
+                Err(error)
+            }
+        }
     }
 
     pub(super) fn resolve_vibe_data_cache(value: &str) -> Result<String, BridgeError> {

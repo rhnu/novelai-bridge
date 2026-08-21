@@ -1,11 +1,13 @@
 use serde_json::Value;
 
-use crate::{BridgeError, SubscriptionInfo, Transport};
+use crate::{BridgeError, SubscriptionInfo, Transport, V5UsageStatus};
 
 use super::Client;
 
 impl<T: Transport> Client<T> {
     /// Fetches the current subscription summary for the configured account.
+    ///
+    /// Reports the result to the attached [`crate::CreditObserver`], if any.
     ///
     /// # Errors
     ///
@@ -13,7 +15,9 @@ impl<T: Transport> Client<T> {
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
         let endpoint = self.image_endpoint("/user/subscription");
         let raw = self.transport.get_json::<Value>(endpoint.as_str()).await?;
-        Ok(map_subscription_response(&raw))
+        let info = map_subscription_response(&raw);
+        self.observe_balance(&info).await;
+        Ok(info)
     }
 }
 
@@ -59,7 +63,43 @@ fn map_subscription_response(raw: &Value) -> SubscriptionInfo {
         tier,
         tier_name,
         expires_at_ms,
+        v5_usage: read_v5_usage(raw),
     }
+}
+
+/// Reads the free V5 generation allowance from the `usage` object, when present.
+fn read_v5_usage(raw: &Value) -> Option<V5UsageStatus> {
+    let usage = raw.get("usage")?;
+    let percent = read_truncated_i64(usage.get("percent"))?;
+    let seconds = read_truncated_i64(
+        usage
+            .get("timeUntilNextPercent")
+            .or_else(|| usage.get("time_until_next_percent")),
+    )?;
+    let is_negative = usage
+        .get("isNegative")
+        .or_else(|| usage.get("is_negative"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    Some(V5UsageStatus {
+        is_negative,
+        percent: u32::try_from(percent.clamp(0, 100)).unwrap_or(0),
+        seconds_until_next_percent: u64::try_from(seconds.max(0)).unwrap_or(0),
+    })
+}
+
+/// Reads an integer, truncating fractional values the way the web client does.
+fn read_truncated_i64(value: Option<&Value>) -> Option<i64> {
+    let value = value?;
+    if let Some(parsed) = read_i64(value) {
+        return Some(parsed);
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    value
+        .as_f64()
+        .filter(|number| number.is_finite())
+        .map(|number| number.trunc() as i64)
 }
 
 fn read_i64(value: &Value) -> Option<i64> {

@@ -1,16 +1,17 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, atomic::AtomicU64};
 
 use crate::{
-    ApiKeySource, BridgeError, DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, DEFAULT_TIMEOUT_MS,
-    ReqwestTransport, Transport, internal::transport_helpers::resolve_api_key,
+    ApiKeySource, BridgeError, CreditBalance, CreditObserver, DEFAULT_API_BASE, DEFAULT_IMAGE_BASE,
+    DEFAULT_TIMEOUT_MS, ReqwestTransport, Transport, internal::transport_helpers::resolve_api_key,
 };
 
 mod director;
 mod generate;
+mod observe;
 mod subscription;
 
 /// Options used to construct a [`Client`] with the default [`ReqwestTransport`].
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ClientOptions {
     /// Selects how the API key is resolved for authenticated requests.
     pub api_key_source: ApiKeySource,
@@ -18,6 +19,19 @@ pub struct ClientOptions {
     pub base_urls: BaseUrls,
     /// Overrides the HTTP timeout in milliseconds.
     pub timeout_ms: u64,
+    /// Optional observer notified about request cost and account credit.
+    pub credit_observer: Option<Arc<dyn CreditObserver>>,
+}
+
+impl std::fmt::Debug for ClientOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientOptions")
+            .field("api_key_source", &self.api_key_source)
+            .field("base_urls", &self.base_urls)
+            .field("timeout_ms", &self.timeout_ms)
+            .field("credit_observer", &self.credit_observer.is_some())
+            .finish()
+    }
 }
 
 impl Default for ClientOptions {
@@ -26,6 +40,7 @@ impl Default for ClientOptions {
             api_key_source: ApiKeySource::Environment,
             base_urls: BaseUrls::default(),
             timeout_ms: DEFAULT_TIMEOUT_MS,
+            credit_observer: None,
         }
     }
 }
@@ -52,12 +67,15 @@ impl Default for BaseUrls {
 
 /// High-level `NovelAI` image API client.
 ///
-/// The client performs local request-shape validation and image payload normalization,
-/// but it intentionally does not parse or reject prompt syntax locally.
+/// The client performs local request-shape validation, model capability gating and image payload
+/// normalization, but it intentionally does not parse or reject prompt syntax locally.
 #[derive(Clone)]
 pub struct Client<T: Transport> {
     pub(super) transport: Arc<T>,
     pub(super) base_urls: BaseUrls,
+    pub(super) credit_observer: Option<Arc<dyn CreditObserver>>,
+    pub(super) request_counter: Arc<AtomicU64>,
+    pub(super) last_balance: Arc<Mutex<Option<CreditBalance>>>,
 }
 
 impl Client<ReqwestTransport> {
@@ -70,10 +88,11 @@ impl Client<ReqwestTransport> {
     pub fn new(options: ClientOptions) -> Result<Self, BridgeError> {
         let api_key = resolve_api_key(&options.api_key_source)?;
         let transport = ReqwestTransport::new(api_key, options.timeout_ms)?;
-        Ok(Self::with_transport_and_base_urls(
-            transport,
-            options.base_urls,
-        ))
+        let client = Self::with_transport_and_base_urls(transport, options.base_urls);
+        Ok(match options.credit_observer {
+            Some(observer) => client.with_credit_observer(observer),
+            None => client,
+        })
     }
 }
 
@@ -91,7 +110,23 @@ impl<T: Transport> Client<T> {
         Self {
             transport: Arc::new(transport),
             base_urls,
+            credit_observer: None,
+            request_counter: Arc::new(AtomicU64::new(1)),
+            last_balance: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Attaches a [`CreditObserver`], replacing any previously attached observer.
+    #[must_use]
+    pub fn with_credit_observer(mut self, observer: Arc<dyn CreditObserver>) -> Self {
+        self.credit_observer = Some(observer);
+        self
+    }
+
+    /// Returns the most recently sampled account balance, if [`Client::get_subscription`] has run.
+    #[must_use]
+    pub fn last_sampled_balance(&self) -> Option<CreditBalance> {
+        self.last_balance.lock().ok().and_then(|last| last.clone())
     }
 
     pub(super) fn image_endpoint(&self, path: &str) -> String {
