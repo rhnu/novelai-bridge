@@ -1,9 +1,9 @@
 use std::sync::atomic::Ordering;
 
 use crate::{
-    AnlasEstimateInput, BridgeError, CreditBalance, CreditEvent, GenerateImageRequest,
-    ObservedOperation, RequestFailure, RequestFingerprint, RequestOutcome, SubscriptionInfo,
-    Transport, estimate_anlas_cost,
+    BridgeError, CreditBalance, CreditEvent, GenerateImageRequest, ObservedOperation,
+    RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome, SubscriptionInfo,
+    Transport,
 };
 
 use super::Client;
@@ -40,6 +40,9 @@ impl<T: Transport> Client<T> {
             model: Some(params.core.model),
             size: Some(params.core.size),
             steps: Some(params.sampling.steps),
+            sampler: Some(params.sampling.sampler),
+            smea: params.guidance.smea,
+            smea_dyn: params.guidance.smea_dyn,
             n_samples: params.core.n_samples,
             has_img2img: params.img2img.is_some(),
             has_inpaint_mask: params
@@ -56,20 +59,12 @@ impl<T: Transport> Client<T> {
             ),
         };
 
-        let estimate = estimate_anlas_cost(AnlasEstimateInput {
-            size: params.core.size,
-            steps: params.sampling.steps,
-            n_samples: params.core.n_samples,
-            img2img_strength: fingerprint.img2img_strength,
-            character_reference_count: fingerprint.character_reference_count,
-            pending_vibe_encodes: 0,
-            is_opus: self.last_known_opus(),
-        });
+        let estimate = self.estimate_anlas_cost(params);
 
         observer
             .observe(CreditEvent::RequestPlanned {
                 fingerprint: fingerprint.clone(),
-                estimate,
+                estimate: RequestCostEstimate::Generation(estimate),
             })
             .await;
 
@@ -80,6 +75,7 @@ impl<T: Transport> Client<T> {
     pub(super) async fn begin_simple_observation(
         &self,
         operation: ObservedOperation,
+        estimate: RequestCostEstimate,
     ) -> Option<PendingObservation> {
         let observer = self.credit_observer.as_ref()?;
         let fingerprint = RequestFingerprint {
@@ -88,6 +84,9 @@ impl<T: Transport> Client<T> {
             model: None,
             size: None,
             steps: None,
+            sampler: None,
+            smea: false,
+            smea_dyn: false,
             n_samples: 1,
             has_img2img: false,
             has_inpaint_mask: false,
@@ -102,7 +101,7 @@ impl<T: Transport> Client<T> {
         observer
             .observe(CreditEvent::RequestPlanned {
                 fingerprint: fingerprint.clone(),
-                estimate: crate::AnlasEstimate::default(),
+                estimate,
             })
             .await;
 
@@ -165,14 +164,6 @@ impl<T: Transport> Client<T> {
 
     fn next_request_id(&self) -> u64 {
         self.request_counter.fetch_add(1, Ordering::Relaxed)
-    }
-
-    fn last_known_opus(&self) -> bool {
-        self.last_balance
-            .lock()
-            .ok()
-            .and_then(|last| last.as_ref().map(|balance| balance.is_opus))
-            .unwrap_or(false)
     }
 }
 

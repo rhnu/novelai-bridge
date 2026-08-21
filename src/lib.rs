@@ -18,9 +18,9 @@ mod types;
 pub use capability::{ModelCapabilities, PromptStructure};
 pub use client::{BaseUrls, Client, ClientOptions};
 pub use credit::{
-    AnlasEstimate, AnlasEstimateInput, CreditBalance, CreditEvent, CreditObserver,
-    ObservedOperation, RequestFailure, RequestFingerprint, RequestOutcome, estimate_anlas_cost,
-    estimate_director_tool_cost,
+    AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, CreditBalance,
+    CreditEvent, CreditObserver, ObservedOperation, RequestCostEstimate, RequestFailure,
+    RequestFingerprint, RequestOutcome, estimate_anlas_cost, estimate_director_tool_cost,
 };
 pub use error::{
     ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,

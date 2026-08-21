@@ -432,17 +432,13 @@ fn apply_capability_gates(
         .into());
     }
 
+    let has_inpaint_mask = params
+        .img2img
+        .as_ref()
+        .is_some_and(Img2ImgRequest::is_infill)
+        && capabilities.supports_inpainting;
     if let Some(references) = params.references.as_mut() {
-        if !references.character_references.is_empty()
-            && !require_capability(
-                capabilities.supports_character_reference,
-                "character_references",
-                "V4.5 models",
-                strict_mode,
-            )?
-        {
-            references.character_references.clear();
-        }
+        gate_character_references(references, capabilities, has_inpaint_mask, strict_mode)?;
 
         if references
             .vibe_transfer
@@ -501,6 +497,37 @@ fn apply_capability_gates(
     }
 
     gate_guidance(&mut params.guidance, capabilities, strict_mode)?;
+    Ok(())
+}
+
+fn gate_character_references(
+    references: &mut ReferenceSet,
+    capabilities: &ModelCapabilities,
+    has_inpaint_mask: bool,
+    strict_mode: bool,
+) -> Result<(), BridgeError> {
+    if !references.character_references.is_empty()
+        && !require_capability(
+            capabilities.supports_character_reference,
+            "character_references",
+            "V4.5 models",
+            strict_mode,
+        )?
+    {
+        references.character_references.clear();
+    }
+
+    if !references.character_references.is_empty()
+        && has_inpaint_mask
+        && !require_capability(
+            capabilities.supports_character_reference_inpainting,
+            "character_references with img2img.mask",
+            "models with character-reference inpainting",
+            strict_mode,
+        )?
+    {
+        references.character_references.clear();
+    }
     Ok(())
 }
 

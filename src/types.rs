@@ -1095,6 +1095,8 @@ pub struct SubscriptionInfo {
     pub anlas_balance: i64,
     /// Whether the account is effectively on Opus tier.
     pub is_opus: bool,
+    /// Whether the paid subscription is currently active.
+    pub subscription_active: bool,
     /// Numeric tier value.
     pub tier: i32,
     /// Lowercase tier name.

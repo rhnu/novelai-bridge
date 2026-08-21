@@ -10,8 +10,8 @@ use novelai_bridge::{
     CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver,
     GenerateImageRequest, GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams,
     ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model,
-    ObservedOperation, QualityPreset, ReferenceSet, RequestOutcome, UcPreset, VibeReference,
-    VibeTransferConfig,
+    ObservedOperation, QualityPreset, ReferenceSet, RequestCostEstimate, RequestOutcome, UcPreset,
+    VibeReference, VibeTransferConfig,
 };
 use serde_json::{Value, json};
 
@@ -1343,7 +1343,7 @@ async fn credit_observer_receives_paired_events_without_prompt_text() {
     assert_eq!(planned.operation, ObservedOperation::GenerateImage);
     assert_eq!(planned.model, Some(Model::NaiDiffusion45Full));
     assert!(planned.prompt_len_chars > 0);
-    assert!(estimate.total > 0);
+    assert!(matches!(estimate, RequestCostEstimate::Generation(value) if value.total > 0));
     assert!(!format!("{planned:?}").contains("secret prompt"));
 
     let CreditEvent::RequestSettled {

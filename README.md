@@ -10,7 +10,7 @@ Scope:
 - `augment-image` director tools
 - `get_subscription`
 - model capability descriptions
-- optional credit observation and Anlas cost estimation
+- optional credit observation and NAI 3, 4, 4.5, 5 Anlas cost estimation
 - PNG metadata parsing
 - embedded vibe document extraction
 - local image payload normalization / reference preprocessing helpers
@@ -48,6 +48,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 When using `ApiKeySource::Environment`, set `NOVELAI_API_KEY` before constructing the client.
 
+Cost estimates are available both as a standalone calculator and from an assembled request. They
+share the same input mapping and formula:
+
+```rust
+use novelai_bridge::{AnlasPricingContext, GenerateImageRequest, Model};
+
+let request = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Curated).build();
+let estimate = request.estimate_anlas_cost(AnlasPricingContext::default());
+let client_estimate = client.estimate_anlas_cost(&request);
+assert_eq!(estimate, client_estimate);
+```
+
+`estimate_anlas_cost(AnlasEstimateInput { .. })` is the independent entry point. The calculator
+implements the NAI 3, 4, 4.5, 5 branch only; older and unrelated model price tables are intentionally out
+of scope. Check `AnlasEstimate::is_too_expensive()` for the web client's over-140 state.
+
 Disclaimer:
 
 - This project is under experimental development and does not guarantee API or behavior stability.
@@ -55,7 +71,6 @@ Disclaimer:
 
 Notes:
 
-- This crate does local shape/range validation, not prompt syntax parsing.
 - `Model::capabilities()` describes what a model family supports; request assembly and validation
   are driven entirely by it, and callers can use it to gate their own UI.
 - Request fields are grouped by capability. A group the selected model does not support is

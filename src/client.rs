@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex, atomic::AtomicU64};
 
 use crate::{
-    ApiKeySource, BridgeError, CreditBalance, CreditObserver, DEFAULT_API_BASE, DEFAULT_IMAGE_BASE,
-    DEFAULT_TIMEOUT_MS, ReqwestTransport, Transport, internal::transport_helpers::resolve_api_key,
+    AnlasEstimate, AnlasPricingContext, ApiKeySource, BridgeError, CreditBalance, CreditObserver,
+    DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, DEFAULT_TIMEOUT_MS, GenerateImageRequest,
+    ReqwestTransport, Transport, internal::transport_helpers::resolve_api_key,
 };
 
 mod director;
@@ -127,6 +128,24 @@ impl<T: Transport> Client<T> {
     #[must_use]
     pub fn last_sampled_balance(&self) -> Option<CreditBalance> {
         self.last_balance.lock().ok().and_then(|last| last.clone())
+    }
+
+    /// Estimates a generation request with the most recently sampled account context.
+    ///
+    /// This is the client-facing counterpart of [`GenerateImageRequest::estimate_anlas_cost`].
+    /// It never performs network I/O; when no subscription has been sampled, the estimate assumes
+    /// a non-Opus account.
+    #[must_use]
+    pub fn estimate_anlas_cost(&self, request: &GenerateImageRequest) -> AnlasEstimate {
+        request.estimate_anlas_cost(self.last_pricing_context())
+    }
+
+    pub(super) fn last_pricing_context(&self) -> AnlasPricingContext {
+        self.last_balance
+            .lock()
+            .ok()
+            .and_then(|last| last.as_ref().map(AnlasPricingContext::from))
+            .unwrap_or_default()
     }
 
     pub(super) fn image_endpoint(&self, path: &str) -> String {

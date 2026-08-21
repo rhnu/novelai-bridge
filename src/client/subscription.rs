@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde_json::Value;
 
 use crate::{BridgeError, SubscriptionInfo, Transport, V5UsageStatus};
@@ -56,10 +58,19 @@ fn map_subscription_response(raw: &Value) -> SubscriptionInfo {
         .get("expiresAt")
         .or_else(|| raw.get("expires_at"))
         .and_then(read_timestamp_ms);
+    let subscription_active = raw
+        .get("active")
+        .or_else(|| raw.get("isActive"))
+        .or_else(|| raw.get("is_active"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| {
+            tier > 0 && expires_at_ms.is_none_or(|expires| expires > current_time_ms())
+        });
 
     SubscriptionInfo {
         anlas_balance,
         is_opus,
+        subscription_active,
         tier,
         tier_name,
         expires_at_ms,
@@ -138,6 +149,14 @@ fn read_timestamp_ms(value: &Value) -> Option<u64> {
     } else {
         Some(raw)
     }
+}
+
+fn current_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+        .unwrap_or(0)
 }
 
 const fn default_tier_name(tier: i32) -> &'static str {

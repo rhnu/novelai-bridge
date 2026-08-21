@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0-rc.2
+
+Breaking release candidate refining Anlas pricing and credit observation.
+
+### Added
+
+- Update Anlas pricing for the NAI 3, 4, 4.5, 5 web formula: raw-pixel pricing, SMEA/V5 multipliers,
+  resolution sample caps, Opus first-image eligibility, character-reference and vibe surcharges,
+  and an explicit over-140 estimate status. `GenerateImageRequest` and `Client` now expose the
+  same calculator mapping, while older and unrelated model pricing remains out of scope.
+- Add `AnlasPricingContext` and `RequestCostEstimate` for account-sensitive pricing and uniform
+  observed-request totals.
+
+### Changed
+
+- `CreditEvent::RequestPlanned::estimate` now uses `RequestCostEstimate`, separating generation
+  breakdowns from fixed encode-vibe and director-tool charges.
+- `estimate_director_tool_cost` now accepts `AnlasPricingContext`, so an expired Opus subscription
+  no longer receives the free director allowance.
+- `AnlasEstimate::free` is replaced by the derived `is_free()` method, and the sample breakdown now
+  distinguishes requested, priced and billable counts.
+- Generation cost multiplier, Opus usage limiting and character-reference inpainting support now
+  come from `ModelCapabilities` instead of duplicated model checks.
+
+### Migration
+
+- Replace `estimate_director_tool_cost(size, is_opus)` with
+  `estimate_director_tool_cost(size, context)`. Build an `AnlasPricingContext` from the latest
+  subscription or balance state, or use `Default::default()` when that state is unavailable.
+- Handle `CreditEvent::RequestPlanned::estimate` as either
+  `RequestCostEstimate::Generation(estimate)` or `RequestCostEstimate::Fixed { anlas }`.
+- Replace `estimate.free` with `estimate.is_free()`. Update `AnlasEstimateInput` initializers to
+  use `context` instead of `is_opus`, and update `AnlasEstimate` literals because it no longer
+  implements `Default`.
+- Add the new fields when constructing `RequestFingerprint`, `CreditBalance`, `SubscriptionInfo`
+  or `ModelCapabilities` directly.
+
 ## 0.4.0-rc.1
 
 Breaking release candidate. It adds NovelAI Diffusion V5, replaces model-version branching with a
@@ -49,7 +86,7 @@ credit observation.
   model-dependent coefficient (19 for V4, 58 for V4.5) instead of a hardcoded integer `58`. V5
   does not support variety boost and never receives the field.
 - Correct the Furry V3 model identifier from `nai-diffusion-3-furry` to `nai-diffusion-furry-3`.
-- Merge the UC preset text *before* the caller's negative prompt and include the leading `nsfw`
+- Merge the UC preset text _before_ the caller's negative prompt and include the leading `nsfw`
   tag, matching the NovelAI web client. Previously the preset was appended after.
 - Omit parameters a model family does not accept instead of sending them as `null`. The
   `skip_serializing_none` attribute was placed after `derive(Serialize)`, where it had no effect.

@@ -1,8 +1,10 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 
 use crate::{
-    BridgeError, DirectorTool, EncodeVibeRequest, GeneratedImage, InvalidRequest,
-    RunDirectorToolRequest, Transport,
+    BridgeError, DirectorTool, EncodeVibeRequest, GeneratedImage, ImageSize, InvalidRequest,
+    RequestCostEstimate, RunDirectorToolRequest, Transport,
+    credit::VIBE_ENCODE_COST,
+    estimate_director_tool_cost,
     internal::{
         request_helpers::{extract_first_image, normalize_image_payload},
         wire::{DirectorAugmentRequestBody, EncodeVibeRequestBody},
@@ -46,7 +48,12 @@ impl<T: Transport> Client<T> {
 
         let endpoint = self.image_endpoint("/ai/encode-vibe");
         let observation = self
-            .begin_simple_observation(crate::ObservedOperation::EncodeVibe)
+            .begin_simple_observation(
+                crate::ObservedOperation::EncodeVibe,
+                RequestCostEstimate::Fixed {
+                    anlas: VIBE_ENCODE_COST,
+                },
+            )
             .await;
         match self.transport.post_bytes(endpoint.as_str(), &payload).await {
             Ok(raw) => {
@@ -137,8 +144,18 @@ impl<T: Transport> Client<T> {
         };
 
         let endpoint = self.image_endpoint("/ai/augment-image");
+        let estimate = estimate_director_tool_cost(
+            ImageSize {
+                width: decoded.width(),
+                height: decoded.height(),
+            },
+            self.last_pricing_context(),
+        );
         let observation = self
-            .begin_simple_observation(crate::ObservedOperation::AugmentImage)
+            .begin_simple_observation(
+                crate::ObservedOperation::AugmentImage,
+                RequestCostEstimate::Fixed { anlas: estimate },
+            )
             .await;
         match self.transport.post_bytes(endpoint.as_str(), &payload).await {
             Ok(raw) => {

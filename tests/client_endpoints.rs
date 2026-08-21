@@ -1,9 +1,25 @@
 mod support;
 
+use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
 use novelai_bridge::{
-    ApiKeySource, BaseUrls, BridgeError, Client, ClientOptions, DirectorTool, EncodeVibeRequest,
-    InvalidRequest, Model, RunDirectorToolRequest,
+    ApiKeySource, BaseUrls, BridgeError, Client, ClientOptions, CreditEvent, CreditObserver,
+    DirectorTool, EncodeVibeRequest, InvalidRequest, Model, RequestCostEstimate,
+    RunDirectorToolRequest,
 };
+
+#[derive(Default)]
+struct RecordingObserver {
+    events: Mutex<Vec<CreditEvent>>,
+}
+
+#[async_trait]
+impl CreditObserver for RecordingObserver {
+    async fn observe(&self, event: CreditEvent) {
+        self.events.lock().unwrap().push(event);
+    }
+}
 use serde_json::json;
 
 use support::{
@@ -33,6 +49,30 @@ async fn encode_vibe_returns_base64() {
         transport.last_path().as_deref(),
         Some("https://image.novelai.net/ai/encode-vibe")
     );
+}
+
+#[tokio::test]
+async fn encode_vibe_observation_reports_a_fixed_cost() {
+    let transport = MockTransport::default();
+    transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
+    let observer = Arc::new(RecordingObserver::default());
+    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
+
+    client
+        .encode_vibe(EncodeVibeRequest {
+            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            information_extracted: 0.7,
+            model: Model::NaiDiffusion45Full,
+            strict_mode: false,
+        })
+        .await
+        .unwrap();
+
+    let estimate = match &observer.events.lock().unwrap()[0] {
+        CreditEvent::RequestPlanned { estimate, .. } => *estimate,
+        event => panic!("expected planned event, got {event:?}"),
+    };
+    assert_eq!(estimate, RequestCostEstimate::Fixed { anlas: 2 });
 }
 
 #[tokio::test]
@@ -223,6 +263,7 @@ async fn get_subscription_maps_balance_and_tier() {
     let transport = MockTransport::default();
     transport.set_json_response(json!({
         "tier": 3,
+        "active": true,
         "expiresAt": 1_712_345_678,
         "trainingStepsLeft": {
             "fixedTrainingStepsLeft": 100,
@@ -234,6 +275,7 @@ async fn get_subscription_maps_balance_and_tier() {
     let subscription = client.get_subscription().await.unwrap();
     assert_eq!(subscription.anlas_balance, 123);
     assert!(subscription.is_opus);
+    assert!(subscription.subscription_active);
     assert_eq!(subscription.tier_name, "opus");
     assert_eq!(subscription.v5_usage, None);
     assert_eq!(
@@ -277,6 +319,27 @@ async fn get_subscription_records_last_sampled_balance() {
     let balance = client.last_sampled_balance().expect("sampled balance");
     assert_eq!(balance.anlas, 55);
     assert!(balance.is_opus);
+}
+
+#[tokio::test]
+async fn get_subscription_infers_activity_from_expiration_and_honors_explicit_state() {
+    let transport = MockTransport::default();
+    transport.set_json_response(json!({
+        "tier": 3,
+        "expiresAt": 4_102_444_800_u64
+    }));
+    let client = Client::with_transport(transport.clone());
+    assert!(client.get_subscription().await.unwrap().subscription_active);
+
+    transport.set_json_response(json!({
+        "tier": 3,
+        "expiresAt": 4_102_444_800_u64,
+        "active": false
+    }));
+    assert!(!client.get_subscription().await.unwrap().subscription_active);
+
+    transport.set_json_response(json!({ "tier": 3, "expiresAt": 1 }));
+    assert!(!client.get_subscription().await.unwrap().subscription_active);
 }
 
 #[tokio::test]

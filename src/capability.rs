@@ -43,6 +43,8 @@ pub struct ModelCapabilities {
     pub supports_encoded_vibe: bool,
     /// Whether director-style character references are supported.
     pub supports_character_reference: bool,
+    /// Whether character references remain supported for inpainting requests.
+    pub supports_character_reference_inpainting: bool,
     /// Whether variety boost (`skip_cfg_above_sigma`) is supported.
     pub supports_variety_boost: bool,
     /// Whether an inpainting sibling model exists for infill requests.
@@ -53,6 +55,10 @@ pub struct ModelCapabilities {
     pub supports_dynamic_thresholding: bool,
     /// Whether the model uses the V5 request extensions.
     pub uses_v5_extensions: bool,
+    /// Whether an overdrawn Opus usage allowance disables free generation for this model.
+    pub has_opus_usage_limit: bool,
+    /// Multiplier applied by the current Anlas generation-pricing formula.
+    pub anlas_cost_multiplier: f64,
     /// Whether [`crate::QualityPreset::Light`] is offered in addition to standard quality tags.
     pub supports_light_quality_preset: bool,
     /// Whether transparent-background output is offered.
@@ -100,11 +106,14 @@ const V3: ModelCapabilities = ModelCapabilities {
     supports_vibe_transfer: true,
     supports_encoded_vibe: false,
     supports_character_reference: false,
+    supports_character_reference_inpainting: false,
     supports_variety_boost: false,
     supports_inpainting: true,
     supports_smea: true,
     supports_dynamic_thresholding: true,
     uses_v5_extensions: false,
+    has_opus_usage_limit: false,
+    anlas_cost_multiplier: 1.0,
     supports_light_quality_preset: false,
     supports_transparent_background: false,
     variety_sigma_coefficient: None,
@@ -125,11 +134,14 @@ const V4: ModelCapabilities = ModelCapabilities {
     supports_vibe_transfer: true,
     supports_encoded_vibe: true,
     supports_character_reference: false,
+    supports_character_reference_inpainting: false,
     supports_variety_boost: true,
     supports_inpainting: true,
     supports_smea: false,
     supports_dynamic_thresholding: false,
     uses_v5_extensions: false,
+    has_opus_usage_limit: false,
+    anlas_cost_multiplier: 1.0,
     supports_light_quality_preset: false,
     supports_transparent_background: false,
     variety_sigma_coefficient: Some(19.0),
@@ -139,6 +151,7 @@ const V4: ModelCapabilities = ModelCapabilities {
 const V45: ModelCapabilities = ModelCapabilities {
     default_scale: 5.0,
     supports_character_reference: true,
+    supports_character_reference_inpainting: true,
     variety_sigma_coefficient: Some(58.0),
     ..V4
 };
@@ -154,6 +167,8 @@ const V5_FULL: ModelCapabilities = ModelCapabilities {
     supports_character_reference: false,
     supports_variety_boost: false,
     uses_v5_extensions: true,
+    has_opus_usage_limit: true,
+    anlas_cost_multiplier: 1.5,
     supports_light_quality_preset: true,
     supports_transparent_background: true,
     variety_sigma_coefficient: None,
