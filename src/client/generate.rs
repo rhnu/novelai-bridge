@@ -51,7 +51,6 @@ impl GenerationAction {
 struct VibeWireParts {
     images: Vec<String>,
     strengths: Vec<f32>,
-    information_extracted: Vec<f32>,
     strength: f32,
 }
 
@@ -280,11 +279,6 @@ impl<T: Transport> Client<T> {
             mask: img2img.mask,
             reference_image_multiple: vibe.as_ref().map(|value| value.images.clone()),
             reference_strength_multiple: vibe.as_ref().map(|value| value.strengths.clone()),
-            // TODO(verify): a 2026 web capture omits this field because the value is baked into
-            // the encoded vibe payload. Kept until a live request confirms it is optional.
-            reference_information_extracted_multiple: vibe
-                .as_ref()
-                .map(|value| value.information_extracted.clone()),
             normalize_reference_strength_multiple: vibe.as_ref().map(|_| true),
             controlnet_strength: Some(vibe.as_ref().map_or(1.0, |value| value.strength)),
             director_reference_images: character_references
@@ -341,18 +335,15 @@ impl<T: Transport> Client<T> {
     ) -> Result<VibeWireParts, BridgeError> {
         let mut images = Vec::with_capacity(vibe.references.len());
         let mut strengths = Vec::with_capacity(vibe.references.len());
-        let mut information_extracted = Vec::with_capacity(vibe.references.len());
 
         for reference in &vibe.references {
             images.push(Self::resolve_vibe_data_cache(&reference.vibe_data_cache)?);
             strengths.push(reference.strength);
-            information_extracted.push(reference.info_extracted);
         }
 
         Ok(VibeWireParts {
             images,
             strengths,
-            information_extracted,
             strength: vibe.strength,
         })
     }
@@ -710,13 +701,6 @@ fn normalize_vibe_transfer(
             }
             .into());
         }
-        reference.info_extracted = normalize_f32_range(
-            &format!("vibe_transfer.references[{idx}].info_extracted"),
-            reference.info_extracted,
-            0.01,
-            1.0,
-            strict_mode,
-        )?;
         reference.strength = normalize_f32_range(
             &format!("vibe_transfer.references[{idx}].strength"),
             reference.strength,

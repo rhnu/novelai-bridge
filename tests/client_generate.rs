@@ -607,7 +607,6 @@ async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
         .vibe_transfer(VibeTransferConfig {
             references: vec![VibeReference {
                 vibe_data_cache: "QUJDRA==".to_owned(),
-                info_extracted: 0.7,
                 strength: 0.6,
             }],
             strength: 0.8,
@@ -634,7 +633,6 @@ async fn generate_serializes_explicit_vibe_data_cache() {
         .vibe_transfer(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                info_extracted: 0.7,
                 strength: 0.6,
                 vibe_data_cache: "AQID".to_owned(),
             }],
@@ -669,14 +667,9 @@ async fn generate_serializes_explicit_vibe_data_cache() {
             .abs()
             < 1e-6
     );
-    assert!(
-        (body["parameters"]["reference_information_extracted_multiple"][0]
-            .as_f64()
-            .unwrap()
-            - 0.7)
-            .abs()
-            < 1e-6
-    );
+    // A live A/B showed this field changes nothing and is accepted when absent, so it is no
+    // longer sent: encode_vibe bakes the value into the cache.
+    assert!(body["parameters"]["reference_information_extracted_multiple"].is_null());
     assert!((body["parameters"]["controlnet_strength"].as_f64().unwrap() - 1.0).abs() < 1e-6);
 }
 
@@ -700,7 +693,6 @@ async fn generate_rejects_vibe_transfer_without_explicit_vibe_data_cache() {
         .vibe_transfer(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                info_extracted: 0.7,
                 strength: 0.6,
                 vibe_data_cache: String::new(),
             }],
@@ -726,7 +718,6 @@ async fn generate_rejects_invalid_vibe_data_cache_without_transport_call() {
             .vibe_transfer(VibeTransferConfig {
                 strength: 1.0,
                 references: vec![VibeReference {
-                    info_extracted: 0.7,
                     strength: 0.6,
                     vibe_data_cache: cache.to_owned(),
                 }],
@@ -839,7 +830,6 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
         vibe_transfer: Some(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                info_extracted: 1.0,
                 strength: 1.0,
                 vibe_data_cache: "AQID".to_owned(),
             }],
@@ -874,7 +864,6 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
         .vibe_transfer(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                info_extracted: 1.0,
                 strength: 1.0,
                 vibe_data_cache: "AQID".to_owned(),
             }],
@@ -977,7 +966,6 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
         .vibe_transfer(VibeTransferConfig {
             strength: 2.0,
             references: vec![VibeReference {
-                info_extracted: 2.0,
                 strength: -1.0,
                 vibe_data_cache: "AQID".to_owned(),
             }],
@@ -991,10 +979,6 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
         body["parameters"]["reference_strength_multiple"][0],
         json!(0.0)
     );
-    assert_eq!(
-        body["parameters"]["reference_information_extracted_multiple"][0],
-        json!(1.0)
-    );
 }
 
 #[tokio::test]
@@ -1006,8 +990,7 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
         .vibe_transfer(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                info_extracted: 2.0,
-                strength: 0.5,
+                strength: 5.0,
                 vibe_data_cache: "AQID".to_owned(),
             }],
         })
@@ -1018,7 +1001,7 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "vibe_transfer.references[0].info_extracted"
+            if field == "vibe_transfer.references[0].strength"
     ));
     assert!(transport.last_path().is_none());
 }

@@ -463,9 +463,10 @@ pub struct CharacterReference {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VibeReference {
     /// Precomputed base64 vibe payload returned by [`crate::Client::encode_vibe`].
+    ///
+    /// The information-extracted value is baked into this payload by `encode_vibe`; generation
+    /// requests carry no separate field for it.
     pub vibe_data_cache: String,
-    /// Information-extracted value used for vibe encoding.
-    pub info_extracted: f32,
     /// Per-image reference strength.
     pub strength: f32,
 }
@@ -535,8 +536,8 @@ impl Img2ImgRequest {
             mask: None,
             color_correct: true,
             extra_noise_seed: None,
-            // TODO(verify): a 2026 web capture sends `true` unconditionally, while another
-            // third-party client sends `false` for infill. `true` matches the capture.
+            // A live infill A/B confirms `true` leaves the area outside the mask pixel-identical
+            // to the source, while `false` re-encodes the whole canvas and loses fidelity there.
             add_original_image: true,
         }
     }

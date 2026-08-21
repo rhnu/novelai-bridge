@@ -102,8 +102,6 @@ pub struct ImageParameters {
     pub reference_image_multiple: Option<Vec<String>>,
     #[serde(rename = "reference_strength_multiple")]
     pub reference_strength_multiple: Option<Vec<f32>>,
-    #[serde(rename = "reference_information_extracted_multiple")]
-    pub reference_information_extracted_multiple: Option<Vec<f32>>,
     #[serde(rename = "normalize_reference_strength_multiple")]
     pub normalize_reference_strength_multiple: Option<bool>,
     #[serde(rename = "controlnet_strength")]

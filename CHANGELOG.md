@@ -97,20 +97,31 @@ credit observation.
   `use_coords`.
 - `character_references` and `controlnet` moved into `references: Option<ReferenceSet>` as
   `character_references` and `vibe_transfer`.
+- `VibeReference::info_extracted` is removed. Pass the value to `encode_vibe`, which bakes it
+  into the cache; generation requests carry no separate field for it.
 - Callers pinning `Model::NaiDiffusion3Furry` by its serialized name must update stored values
   from `nai-diffusion-3-furry` to `nai-diffusion-furry-3`.
 - Negative prompts change: the UC preset now precedes the caller's text and starts with `nsfw`.
   Select `UcPreset::None` to send the caller's negative prompt verbatim.
 
-### Unverified
+### Verified against the live API
 
-The following are carried over from V4.5 or from a single source, and are marked
-`TODO(verify)` in the code pending a live capture:
+Settled with `cargo xtask probe` against a real key, at a fixed seed (generation is
+pixel-deterministic, so A/B runs are comparable):
 
-- Whether `add_original_image` should be `false` for infill; the web capture sends `true`
-  unconditionally, which is what this release does.
-- Whether `reference_information_extracted_multiple` is required in generation requests. It is
-  still sent.
+- `reference_information_extracted_multiple` is **not** required and has **no effect**. Omitting
+  it, sending `[0.1]` and sending `[1.0]` all produce pixel-identical output, because
+  `encode_vibe` bakes the value into the returned cache. The field is no longer sent, and
+  `VibeReference::info_extracted` is removed rather than kept as an input that does nothing.
+- `add_original_image: true` is correct for infill. With `true` the region outside the mask is
+  pixel-identical to the source; with `false` it drifts by a mean of ~1.8/255 from a full-canvas
+  VAE round trip. The masked region is unaffected either way.
+- Request shapes accepted with HTTP 200: V5 text-to-image, V5 image-to-image, V4.5
+  image-to-image, V4.5 infill, and V4.5 `encode_vibe` plus vibe-transfer generation.
+
+Still unverified: the `usage` object carrying the free V5 allowance never appeared on the
+account used for probing, so `SubscriptionInfo::v5_usage` is parsed from the documented field
+names but has not been seen populated.
 
 ## 0.3.1
 
