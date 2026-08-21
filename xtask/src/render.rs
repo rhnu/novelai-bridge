@@ -98,11 +98,12 @@ pub fn remove_path(root: &mut Value, path: &str) -> bool {
                 Some(next) => next,
                 None => return false,
             },
-            Value::Array(items) => match segment.parse::<usize>().ok().and_then(|i| items.get_mut(i))
-            {
-                Some(next) => next,
-                None => return false,
-            },
+            Value::Array(items) => {
+                match segment.parse::<usize>().ok().and_then(|i| items.get_mut(i)) {
+                    Some(next) => next,
+                    None => return false,
+                }
+            }
             _ => return false,
         };
     }
@@ -127,8 +128,7 @@ pub fn parse_override(raw: &str) -> Result<(String, Value), String> {
     if path.is_empty() {
         return Err(format!("--set path cannot be empty in `{raw}`"));
     }
-    let parsed =
-        serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_owned()));
+    let parsed = serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_owned()));
     Ok((path.to_owned(), parsed))
 }
 

@@ -28,8 +28,7 @@ impl<T: Transport> Client<T> {
         let vibe_reference_count = references
             .and_then(|set| set.vibe_transfer.as_ref())
             .map_or(0, |vibe| vibe.references.len());
-        let character_reference_count =
-            references.map_or(0, |set| set.character_references.len());
+        let character_reference_count = references.map_or(0, |set| set.character_references.len());
         let character_count = params
             .characters
             .as_ref()
@@ -159,7 +158,9 @@ impl<T: Transport> Client<T> {
         let Some(observer) = self.credit_observer.as_ref() else {
             return;
         };
-        observer.observe(CreditEvent::BalanceSampled { balance }).await;
+        observer
+            .observe(CreditEvent::BalanceSampled { balance })
+            .await;
     }
 
     fn next_request_id(&self) -> u64 {

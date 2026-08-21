@@ -1,8 +1,7 @@
 use crate::{
     BridgeError, Character, CharacterSet, GenerateImageRequest, GenerateImageResult,
     GenerateImageStream, GenerateImageStreamRequest, GuidanceParams, ImageSize, Img2ImgRequest,
-    InvalidRequest, ModelCapabilities, QualityPreset, ReferenceSet, Transport,
-    VibeTransferConfig,
+    InvalidRequest, ModelCapabilities, QualityPreset, ReferenceSet, Transport, VibeTransferConfig,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
@@ -333,9 +332,7 @@ impl<T: Transport> Client<T> {
         if seed == 0 { default_seed() } else { seed }
     }
 
-    fn encode_vibe_references(
-        vibe: &VibeTransferConfig,
-    ) -> Result<VibeWireParts, BridgeError> {
+    fn encode_vibe_references(vibe: &VibeTransferConfig) -> Result<VibeWireParts, BridgeError> {
         let mut images = Vec::with_capacity(vibe.references.len());
         let mut strengths = Vec::with_capacity(vibe.references.len());
 
@@ -381,7 +378,8 @@ fn normalize_base_fields(
     params: &mut GenerateImageRequest,
     strict_mode: bool,
 ) -> Result<(), BridgeError> {
-    params.sampling.steps = normalize_u32_range("steps", params.sampling.steps, 1, 50, strict_mode)?;
+    params.sampling.steps =
+        normalize_u32_range("steps", params.sampling.steps, 1, 50, strict_mode)?;
     params.sampling.scale =
         normalize_f32_range("scale", params.sampling.scale, 0.0, 10.0, strict_mode)?;
     params.core.n_samples =
@@ -465,7 +463,10 @@ fn apply_capability_gates(
         }
     }
 
-    if params.img2img.as_ref().is_some_and(Img2ImgRequest::is_infill)
+    if params
+        .img2img
+        .as_ref()
+        .is_some_and(Img2ImgRequest::is_infill)
         && !require_capability(
             capabilities.supports_inpainting,
             "img2img.mask",
@@ -569,7 +570,12 @@ fn validate_feature_combinations(
         }
         log::warn!("dropping vibe_transfer: not supported together with character_references");
         references.vibe_transfer = None;
-    } else if has_vibe && params.img2img.as_ref().is_some_and(Img2ImgRequest::is_infill) {
+    } else if has_vibe
+        && params
+            .img2img
+            .as_ref()
+            .is_some_and(Img2ImgRequest::is_infill)
+    {
         // NovelAI returns a server error when an infill request also carries a vibe payload.
         if strict_mode {
             return Err(InvalidRequest::UnsupportedFieldCombination {

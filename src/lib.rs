@@ -37,9 +37,8 @@ pub use types::{
     CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
     GenerateImageRequestBuilder, GenerateImageResult, GenerateImageStreamRequest, GeneratedImage,
     GenerationCore, GuidanceParams, ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest,
-    Model, NoiseSchedule, OutputParams, ReferenceSet, RunDirectorToolRequest, Sampler,
-    QualityPreset, SamplingParams, StreamMode, SubscriptionInfo, UcPreset, V5UsageStatus,
-    VibeReference,
+    Model, NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, RunDirectorToolRequest,
+    Sampler, SamplingParams, StreamMode, SubscriptionInfo, UcPreset, V5UsageStatus, VibeReference,
     VibeTransferConfig,
 };
 

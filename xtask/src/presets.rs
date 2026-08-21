@@ -245,7 +245,9 @@ fn save_input(args: &RunArgs, name: &str, data_url: String) -> String {
         return data_url;
     };
 
-    let payload = data_url.split_once(",").map_or(data_url.as_str(), |(_, b)| b);
+    let payload = data_url
+        .split_once(",")
+        .map_or(data_url.as_str(), |(_, b)| b);
     let path = dir.join(format!("input-{name}.png"));
     match STANDARD
         .decode(payload)
@@ -267,10 +269,7 @@ fn read_as_data_url(path: &Path) -> Result<String, BridgeError> {
         endpoint: Some(path.display().to_string()),
         source: Box::new(source),
     })?;
-    Ok(format!(
-        "data:image/png;base64,{}",
-        STANDARD.encode(&bytes)
-    ))
+    Ok(format!("data:image/png;base64,{}", STANDARD.encode(&bytes)))
 }
 
 /// A diagonal gradient, so a returned image visibly differs from its source.

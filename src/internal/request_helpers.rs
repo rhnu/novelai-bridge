@@ -222,13 +222,7 @@ pub fn fit_encoded_image_to_canvas(
     filter: FilterType,
 ) -> Result<String, BridgeError> {
     let decoded = decode_image_payload(field_name, raw)?;
-    let fitted = fit_image_to_canvas(
-        field_name,
-        &decoded,
-        target_width,
-        target_height,
-        filter,
-    )?;
+    let fitted = fit_image_to_canvas(field_name, &decoded, target_width, target_height, filter)?;
     Ok(STANDARD.encode(fitted))
 }
 
@@ -261,7 +255,8 @@ pub fn fit_mask_image(field_name: &str, raw: &str, size: ImageSize) -> Result<St
     )
 }
 
-fn image_dimensions(field_name: &str, bytes: &[u8]) -> Result<(u32, u32), BridgeError> {    let decoded =
+fn image_dimensions(field_name: &str, bytes: &[u8]) -> Result<(u32, u32), BridgeError> {
+    let decoded =
         image::load_from_memory(bytes).map_err(|source| InvalidRequest::UndecodableImage {
             field: field_name.to_owned(),
             source,
@@ -275,7 +270,6 @@ fn image_dimensions(field_name: &str, bytes: &[u8]) -> Result<(u32, u32), Bridge
     }
     Ok((width, height))
 }
-
 
 fn pick_director_target_size(source_width: u32, source_height: u32) -> (u32, u32) {
     let mut best = DIRECTOR_TARGET_SIZES[0];
@@ -511,12 +505,10 @@ fn infer_mime_from_bytes(bytes: &[u8]) -> Option<String> {
 }
 
 pub fn default_seed() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(1, |d| {
-            let seed = (d.as_millis() % 10_000_000_000) as i64;
-            if seed == 0 { 1 } else { seed }
-        })
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(1, |d| {
+        let seed = (d.as_millis() % 10_000_000_000) as i64;
+        if seed == 0 { 1 } else { seed }
+    })
 }
 
 #[cfg(test)]

@@ -2,7 +2,8 @@
 
 use async_trait::async_trait;
 use novelai_bridge::{
-    BridgeError, ReqwestTransport, Transport, TransportError, TransportOperation, TransportSseStream,
+    BridgeError, ReqwestTransport, Transport, TransportError, TransportOperation,
+    TransportSseStream,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;

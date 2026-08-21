@@ -7,11 +7,11 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use novelai_bridge::{
     BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
-    CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver, GenerateImageRequest,
-    GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams, ImageFormat, ImageSize,
-    ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model, ObservedOperation, QualityPreset,
-    ReferenceSet,
-    RequestOutcome, UcPreset, VibeReference, VibeTransferConfig,
+    CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver,
+    GenerateImageRequest, GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams,
+    ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model,
+    ObservedOperation, QualityPreset, ReferenceSet, RequestOutcome, UcPreset, VibeReference,
+    VibeTransferConfig,
 };
 use serde_json::{Value, json};
 
@@ -278,9 +278,15 @@ async fn infill_uses_inpainting_model_for_each_family() {
 
     for (model, expected) in [
         (Model::NaiDiffusion5Full, "nai-diffusion-5-full-inpainting"),
-        (Model::NaiDiffusion4Curated, "nai-diffusion-4-curated-inpainting"),
+        (
+            Model::NaiDiffusion4Curated,
+            "nai-diffusion-4-curated-inpainting",
+        ),
         (Model::NaiDiffusion3, "nai-diffusion-3-inpainting"),
-        (Model::NaiDiffusion3Furry, "nai-diffusion-furry-3-inpainting"),
+        (
+            Model::NaiDiffusion3Furry,
+            "nai-diffusion-furry-3-inpainting",
+        ),
     ] {
         let mut img2img = Img2ImgRequest::new(png_data_url(128, 128), 0.6, 0.0);
         img2img.mask = Some(png_data_url(128, 128));
@@ -309,8 +315,14 @@ async fn img2img_source_and_mask_are_fitted_to_the_requested_canvas() {
     let _ = client.generate(params).await.unwrap();
     let body = transport.last_body().expect("generate body");
 
-    assert_eq!(decoded_dimensions(&body["parameters"]["image"]), (1024, 1024));
-    assert_eq!(decoded_dimensions(&body["parameters"]["mask"]), (1024, 1024));
+    assert_eq!(
+        decoded_dimensions(&body["parameters"]["image"]),
+        (1024, 1024)
+    );
+    assert_eq!(
+        decoded_dimensions(&body["parameters"]["mask"]),
+        (1024, 1024)
+    );
 }
 
 #[tokio::test]
@@ -1285,7 +1297,10 @@ async fn generate_does_not_parse_prompt_syntax_locally() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::with_transport(transport.clone());
 
-    let result = client.generate(request("{bad prompt syntax")).await.unwrap();
+    let result = client
+        .generate(request("{bad prompt syntax"))
+        .await
+        .unwrap();
     assert_eq!(result.images.len(), 1);
     assert_eq!(
         transport.last_path().as_deref(),
