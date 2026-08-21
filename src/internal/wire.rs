@@ -29,6 +29,7 @@ pub struct V4Caption {
     pub char_captions: Option<Vec<V4CharacterCaption>>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct V4ConditionInput {
     pub caption: Option<V4Caption>,
@@ -43,15 +44,23 @@ pub struct ReferenceCaption {
     pub char_captions: Vec<V4CharacterCaption>,
 }
 
+#[skip_serializing_none]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ReferenceConditionInput {
     pub caption: Option<ReferenceCaption>,
     pub legacy_uc: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// `NovelAI` image parameters.
+///
+/// Every field is optional so that capability-driven assembly can omit whatever a model family
+/// does not accept. `skip_serializing_none` keeps omitted fields out of the payload entirely
+/// rather than sending explicit nulls.
 #[skip_serializing_none]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ImageParameters {
+    #[serde(rename = "params_version")]
+    pub params_version: Option<u32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub steps: Option<u32>,
@@ -62,6 +71,8 @@ pub struct ImageParameters {
     pub n_samples: Option<u32>,
     pub prompt: Option<String>,
     pub negative_prompt: Option<String>,
+    /// Legacy top-level negative prompt used by V3 and earlier.
+    pub uc: Option<String>,
     #[serde(rename = "ucPreset")]
     pub uc_preset: Option<i32>,
     #[serde(rename = "qualityToggle")]
@@ -75,10 +86,17 @@ pub struct ImageParameters {
     #[serde(rename = "noise_schedule")]
     pub noise_schedule: Option<String>,
     #[serde(rename = "skip_cfg_above_sigma")]
-    pub skip_cfg_above_sigma: Option<i32>,
+    pub skip_cfg_above_sigma: Option<f32>,
+    /// Set to `NativeInfillingRequest` for infill requests.
+    #[serde(rename = "request_type")]
+    pub request_type: Option<String>,
     pub image: Option<String>,
     pub strength: Option<f32>,
     pub noise: Option<f32>,
+    #[serde(rename = "extra_noise_seed")]
+    pub extra_noise_seed: Option<i64>,
+    #[serde(rename = "color_correct")]
+    pub color_correct: Option<bool>,
     pub mask: Option<String>,
     #[serde(rename = "reference_image_multiple")]
     pub reference_image_multiple: Option<Vec<String>>,
@@ -102,8 +120,6 @@ pub struct ImageParameters {
     pub director_reference_strength_values: Option<Vec<f32>>,
     #[serde(rename = "characterPrompts")]
     pub character_prompts: Option<Vec<CharacterPrompt>>,
-    #[serde(rename = "params_version")]
-    pub params_version: Option<u32>,
     pub legacy: Option<bool>,
     #[serde(rename = "legacy_uc")]
     pub legacy_uc: Option<bool>,
@@ -124,6 +140,8 @@ pub struct ImageParameters {
     pub add_original_image: Option<bool>,
     #[serde(rename = "inpaintImg2ImgStrength")]
     pub inpaint_img2_img_strength: Option<f32>,
+    #[serde(rename = "tag_hint_transparent_background")]
+    pub tag_hint_transparent_background: Option<bool>,
     #[serde(rename = "use_coords")]
     pub use_coords: Option<bool>,
     #[serde(rename = "image_format")]

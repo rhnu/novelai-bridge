@@ -11,8 +11,8 @@ use image::{
 };
 
 use crate::{
-    BridgeError, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
-    DataUrlError, GeneratedImage, InvalidRequest, inspect_generated_image_metadata,
+    BridgeError, Character, CharacterPosition, CharacterReference, DataUrlError, GeneratedImage,
+    ImageSize, InvalidRequest, inspect_generated_image_metadata,
     internal::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
     },
@@ -23,6 +23,7 @@ const GRID_COORDS: [f32; 5] = [0.1, 0.3, 0.5, 0.7, 0.9];
 const GRID_CENTER: f32 = 0.5;
 const GRID_TOLERANCE: f32 = 0.0001;
 
+/// Snaps a coordinate onto the 5x5 grid the `NovelAI` web client sends for manual placement.
 fn snap_coord_to_grid(value: f32) -> f32 {
     let clamped = value.clamp(0.0, 1.0);
     let mut best = GRID_COORDS[0];
@@ -103,12 +104,8 @@ pub struct CharacterReferenceWireParts {
 }
 
 pub fn convert_character_references(
-    refs: Option<&[CharacterReference]>,
-) -> Result<Option<CharacterReferenceWireParts>, BridgeError> {
-    let Some(refs) = refs else {
-        return Ok(None);
-    };
-
+    refs: &[CharacterReference],
+) -> Result<CharacterReferenceWireParts, BridgeError> {
     let mut images = Vec::with_capacity(refs.len());
     let mut descriptions = Vec::with_capacity(refs.len());
     let mut information_extracted = Vec::with_capacity(refs.len());
@@ -122,11 +119,7 @@ pub fn convert_character_references(
         )?);
         descriptions.push(ReferenceConditionInput {
             caption: Some(ReferenceCaption {
-                base_caption: match item.reference_type {
-                    CharacterReferenceType::Character => "character".to_owned(),
-                    CharacterReferenceType::Style => "style".to_owned(),
-                    CharacterReferenceType::CharacterAndStyle => "character&style".to_owned(),
-                },
+                base_caption: item.reference_type.as_str().to_owned(),
                 char_captions: Vec::new(),
             }),
             legacy_uc: Some(false),
@@ -136,34 +129,54 @@ pub fn convert_character_references(
         strength_values.push(item.strength);
     }
 
-    Ok(Some(CharacterReferenceWireParts {
+    Ok(CharacterReferenceWireParts {
         images,
         descriptions,
         information_extracted,
         secondary_strength_values,
         strength_values,
-    }))
+    })
 }
 
 pub fn preprocess_character_reference_image(
     field_name: &str,
     raw: &str,
 ) -> Result<String, BridgeError> {
+    let decoded = decode_image_payload(field_name, raw)?;
+    let (width, height) = image_dimensions(field_name, &decoded)?;
+    let (target_width, target_height) = pick_director_target_size(width, height);
+    let processed = fit_image_to_canvas(
+        field_name,
+        &decoded,
+        target_width,
+        target_height,
+        FilterType::CatmullRom,
+    )?;
+    Ok(STANDARD.encode(processed))
+}
+
+/// Decodes a base64 payload or image data URL into raw image bytes.
+pub fn decode_image_payload(field_name: &str, raw: &str) -> Result<Vec<u8>, BridgeError> {
     let normalized = normalize_image_payload(field_name, raw)?;
-    let decoded = STANDARD
+    STANDARD
         .decode(&normalized)
         .map_err(|source| InvalidRequest::InvalidBase64 {
             field: field_name.to_owned(),
             source,
-        })?;
-
-    let processed = preprocess_director_reference_bytes(field_name, &decoded)?;
-    Ok(STANDARD.encode(processed))
+        })
+        .map_err(Into::into)
 }
 
-fn preprocess_director_reference_bytes(
+/// Scales an image to fit a canvas, letterboxing with opaque black, and returns PNG bytes.
+///
+/// `NovelAI` requires image-to-image sources, inpaint masks and director references to match the
+/// canvas they are used with, so every caller funnels through this one routine.
+pub fn fit_image_to_canvas(
     field_name: &str,
     bytes: &[u8],
+    target_width: u32,
+    target_height: u32,
+    filter: FilterType,
 ) -> Result<Vec<u8>, BridgeError> {
     let decoded =
         image::load_from_memory(bytes).map_err(|source| InvalidRequest::UndecodableImage {
@@ -181,10 +194,9 @@ fn preprocess_director_reference_bytes(
         .into());
     }
 
-    let (target_width, target_height) = pick_director_target_size(source_width, source_height);
     let (scaled_width, scaled_height) =
         fit_within(source_width, source_height, target_width, target_height);
-    let resized = imageops::resize(&source, scaled_width, scaled_height, FilterType::CatmullRom);
+    let resized = imageops::resize(&source, scaled_width, scaled_height, filter);
 
     let mut canvas = RgbaImage::from_pixel(target_width, target_height, Rgba([0, 0, 0, 255]));
     let left = i64::from((target_width - scaled_width) / 2);
@@ -200,6 +212,70 @@ fn preprocess_director_reference_bytes(
         })?;
     Ok(output.into_inner())
 }
+
+/// Fits an encoded payload to a canvas and returns it as base64 PNG.
+pub fn fit_encoded_image_to_canvas(
+    field_name: &str,
+    raw: &str,
+    target_width: u32,
+    target_height: u32,
+    filter: FilterType,
+) -> Result<String, BridgeError> {
+    let decoded = decode_image_payload(field_name, raw)?;
+    let fitted = fit_image_to_canvas(
+        field_name,
+        &decoded,
+        target_width,
+        target_height,
+        filter,
+    )?;
+    Ok(STANDARD.encode(fitted))
+}
+
+/// Fits an image-to-image source to the requested canvas.
+pub fn fit_source_image(
+    field_name: &str,
+    raw: &str,
+    size: ImageSize,
+) -> Result<String, BridgeError> {
+    fit_encoded_image_to_canvas(
+        field_name,
+        raw,
+        size.width,
+        size.height,
+        FilterType::CatmullRom,
+    )
+}
+
+/// Fits an inpaint mask to the requested canvas.
+///
+/// Nearest-neighbour scaling keeps the mask binary; the canvas is a multiple of 64 pixels, so the
+/// result is already aligned to the 8 pixel grid `NovelAI` expects.
+pub fn fit_mask_image(field_name: &str, raw: &str, size: ImageSize) -> Result<String, BridgeError> {
+    fit_encoded_image_to_canvas(
+        field_name,
+        raw,
+        size.width,
+        size.height,
+        FilterType::Nearest,
+    )
+}
+
+fn image_dimensions(field_name: &str, bytes: &[u8]) -> Result<(u32, u32), BridgeError> {    let decoded =
+        image::load_from_memory(bytes).map_err(|source| InvalidRequest::UndecodableImage {
+            field: field_name.to_owned(),
+            source,
+        })?;
+    let (width, height) = (decoded.width(), decoded.height());
+    if width == 0 || height == 0 {
+        return Err(InvalidRequest::ZeroImageDimension {
+            field: field_name.to_owned(),
+        }
+        .into());
+    }
+    Ok((width, height))
+}
+
 
 fn pick_director_target_size(source_width: u32, source_height: u32) -> (u32, u32) {
     let mut best = DIRECTOR_TARGET_SIZES[0];
@@ -437,11 +513,10 @@ fn infer_mime_from_bytes(bytes: &[u8]) -> Option<String> {
 pub fn default_seed() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| {
+        .map_or(1, |d| {
             let seed = (d.as_millis() % 10_000_000_000) as i64;
             if seed == 0 { 1 } else { seed }
         })
-        .unwrap_or(1)
 }
 
 #[cfg(test)]
