@@ -23,22 +23,22 @@ members = ["xtask"]
 
 [dependencies]
 async-stream = "0.3.6"
-async-trait = "0.1.89"
-base64 = "0.22.1"
+async-trait = "0.1.92"
+base64 = "0.23.1"
 eventsource-stream = "0.2.3"
-futures-core = "0.3.32"
-futures-util = "0.3.32"
+futures-core = "0.3.34"
+futures-util = "0.3.34"
 httpdate = "1.0.3"
 image = "0.25.10"
 log = "0.4.33"
 png = "0.18.1"
 reqwest = { version = "0.13.4", features = ["json", "stream", "rustls"] }
 secrecy = "0.10.3"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-serde_with = { version = "3.21.0", features = ["macros"] }
-thiserror = "2.0.18"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+serde_with = { version = "3.22.0", features = ["macros"] }
+thiserror = "2.0.20"
 zip = "8.6.0"
 
 [dev-dependencies]
-tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.53.1", features = ["macros", "rt", "rt-multi-thread"] }
