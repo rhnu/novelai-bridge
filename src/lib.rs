@@ -6,14 +6,22 @@ use std::{
 use futures_core::Stream;
 pub use secrecy::SecretString;
 
+mod capability;
 mod client;
+mod credit;
 mod error;
 pub(crate) mod internal;
 mod metadata;
 mod transport;
 mod types;
 
+pub use capability::{ModelCapabilities, PromptStructure};
 pub use client::{BaseUrls, Client, ClientOptions};
+pub use credit::{
+    AnlasEstimate, AnlasEstimateInput, CreditBalance, CreditEvent, CreditObserver,
+    ObservedOperation, RequestFailure, RequestFingerprint, RequestOutcome, estimate_anlas_cost,
+    estimate_director_tool_cost,
+};
 pub use error::{
     ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,
     InvalidRequest, MetadataError, TransportError, TransportOperation,
@@ -26,10 +34,12 @@ pub use metadata::{
 pub use transport::{ReqwestTransport, Transport};
 pub use types::{
     ApiKeySource, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
-    ControlNetConfig, ControlNetInput, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
-    GenerateImageResult, GenerateImageStreamRequest, GeneratedImage, ImageFormat, ImageSize,
-    ImageStreamChunk, Img2ImgRequest, Model, NoiseSchedule, RunDirectorToolRequest, Sampler,
-    StreamMode, SubscriptionInfo, UcPreset,
+    CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
+    GenerateImageRequestBuilder, GenerateImageResult, GenerateImageStreamRequest, GeneratedImage,
+    GenerationCore, GuidanceParams, ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest,
+    Model, NoiseSchedule, OutputParams, ReferenceSet, RunDirectorToolRequest, Sampler,
+    SamplingParams, StreamMode, SubscriptionInfo, UcPreset, V5UsageStatus, VibeReference,
+    VibeTransferConfig,
 };
 
 /// Default base URL for image-generation endpoints.
