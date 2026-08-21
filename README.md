@@ -4,19 +4,23 @@
 
 Scope:
 
-- `generate`
+- `generate` (text-to-image, image-to-image and inpainting)
 - `generate_stream`
 - `encode_vibe`
 - `augment-image` director tools
 - `get_subscription`
+- model capability descriptions
+- optional credit observation and Anlas cost estimation
 - PNG metadata parsing
 - embedded vibe document extraction
 - local image payload normalization / reference preprocessing helpers
 
+Supported models: NovelAI Diffusion V5, V4.5, V4, V3 and Furry V3.
+
 Example:
 
 ```rust
-use novelai_bridge::{ApiKeySource, BaseUrls, Client, ClientOptions, GenerateImageRequest};
+use novelai_bridge::{ApiKeySource, BaseUrls, Client, ClientOptions, GenerateImageRequest, Model};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,10 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let result = client
-        .generate(GenerateImageRequest {
-            prompt: "1girl".to_owned(),
-            ..Default::default()
-        })
+        .generate(GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build())
         .await?;
 
     println!(
@@ -55,11 +56,18 @@ Disclaimer:
 Notes:
 
 - This crate does local shape/range validation, not prompt syntax parsing.
+- `Model::capabilities()` describes what a model family supports; request assembly and validation
+  are driven entirely by it, and callers can use it to gate their own UI.
+- Request fields are grouped by capability. A group the selected model does not support is
+  rejected in `strict_mode` and dropped with a `log::warn!` otherwise.
+- Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.
 - `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
 - Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request
   seed is never presented as an image seed.
 - `inspect_generated_image_metadata` provides a non-failing metadata inspection path for complete
   generated images, while `parse_png_metadata_from_bytes` remains the strict PNG parser.
+- Attaching a `CreditObserver` reports de-identified request fingerprints, local Anlas estimates
+  and sampled balances; the crate itself persists nothing.
 - The default transport uses `reqwest + rustls`.
 - This project is not affiliated with NovelAI.
 
