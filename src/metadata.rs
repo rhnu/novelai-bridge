@@ -123,7 +123,7 @@ impl PngMetadata {
 
     /// Returns whether at least one recognized generation setting was recovered.
     #[must_use]
-    pub fn has_generation_data(&self) -> bool {
+    pub const fn has_generation_data(&self) -> bool {
         self.prompt.is_some()
             || self.negative_prompt.is_some()
             || self.seed.is_some()
@@ -150,7 +150,7 @@ pub enum GeneratedImageMetadata {
     Parsed(Box<PngMetadata>),
     /// The payload is a valid PNG but contains no text metadata.
     NotPresent,
-    /// The image format does not use the supported NovelAI PNG metadata representation.
+    /// The image format does not use the supported `NovelAI` PNG metadata representation.
     UnsupportedFormat,
     /// The payload looked like PNG data but its metadata could not be decoded.
     Invalid {
