@@ -58,6 +58,29 @@ async fn encode_vibe_rejects_invalid_base64_without_transport_call() {
 }
 
 #[tokio::test]
+async fn encode_vibe_rejects_models_without_vibe_support() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+
+    let error = client
+        .encode_vibe(EncodeVibeRequest {
+            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            information_extracted: 0.7,
+            model: Model::NaiDiffusion5Full,
+            strict_mode: false,
+        })
+        .await
+        .expect_err("V5 has no vibe support");
+
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
+            if feature == "encode_vibe"
+    ));
+    assert!(transport.last_path().is_none());
+}
+
+#[tokio::test]
 async fn encode_vibe_clamps_information_extracted_when_not_strict() {
     let transport = MockTransport::default();
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
@@ -212,10 +235,48 @@ async fn get_subscription_maps_balance_and_tier() {
     assert_eq!(subscription.anlas_balance, 123);
     assert!(subscription.is_opus);
     assert_eq!(subscription.tier_name, "opus");
+    assert_eq!(subscription.v5_usage, None);
     assert_eq!(
         transport.last_path().as_deref(),
         Some("https://image.novelai.net/user/subscription")
     );
+}
+
+#[tokio::test]
+async fn get_subscription_reads_v5_free_generation_allowance() {
+    let transport = MockTransport::default();
+    transport.set_json_response(json!({
+        "tier": 3,
+        "trainingStepsLeft": { "fixedTrainingStepsLeft": 10 },
+        "usage": {
+            "isNegative": false,
+            "percent": 87.6,
+            "timeUntilNextPercent": 142
+        }
+    }));
+    let client = Client::with_transport(transport);
+
+    let subscription = client.get_subscription().await.unwrap();
+    let usage = subscription.v5_usage.expect("v5 usage");
+    assert!(!usage.is_negative);
+    assert_eq!(usage.percent, 87);
+    assert_eq!(usage.seconds_until_next_percent, 142);
+}
+
+#[tokio::test]
+async fn get_subscription_records_last_sampled_balance() {
+    let transport = MockTransport::default();
+    transport.set_json_response(json!({
+        "tier": 3,
+        "trainingStepsLeft": { "purchasedTrainingSteps": 55 }
+    }));
+    let client = Client::with_transport(transport);
+    assert!(client.last_sampled_balance().is_none());
+
+    let _ = client.get_subscription().await.unwrap();
+    let balance = client.last_sampled_balance().expect("sampled balance");
+    assert_eq!(balance.anlas, 55);
+    assert!(balance.is_opus);
 }
 
 #[tokio::test]

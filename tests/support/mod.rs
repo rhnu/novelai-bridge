@@ -34,6 +34,7 @@ struct MockTransportState {
     sse_chunks: Vec<ImageStreamChunk>,
     json_response: Value,
     json_error: Option<BridgeError>,
+    bytes_error: Option<BridgeError>,
 }
 
 impl MockTransport {
@@ -61,6 +62,11 @@ impl MockTransport {
 
     pub fn set_json_error(&self, json_error: BridgeError) {
         self.state.lock().unwrap().json_error = Some(json_error);
+    }
+
+    /// Makes the next `post_bytes` call fail with `bytes_error`.
+    pub fn set_bytes_error(&self, bytes_error: BridgeError) {
+        self.state.lock().unwrap().bytes_error = Some(bytes_error);
     }
 
     pub fn last_body(&self) -> Option<Value> {
@@ -127,6 +133,10 @@ impl Transport for MockTransport {
         state.last_body = Some(body.clone());
         state.post_history.push((path.to_owned(), body));
         state.byte_paths.push(path.to_owned());
+
+        if let Some(error) = state.bytes_error.take() {
+            return Err(error);
+        }
 
         if path.ends_with("/ai/encode-vibe") {
             Ok(state.encode_vibe_response.clone())
