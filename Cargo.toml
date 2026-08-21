@@ -15,7 +15,11 @@ exclude = [
     "/agents/**",
     "/AGENTS.md",
     "/scripts/**",
+    "/xtask/**",
 ]
+
+[workspace]
+members = ["xtask"]
 
 [dependencies]
 async-stream = "0.3.6"

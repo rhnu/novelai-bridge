@@ -31,7 +31,7 @@ pub use metadata::{
     extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
-pub use transport::{ReqwestTransport, Transport};
+pub use transport::{ReqwestTransport, Transport, TransportSseStream};
 pub use types::{
     ApiKeySource, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
     CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
