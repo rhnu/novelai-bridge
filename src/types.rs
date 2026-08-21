@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ModelCapabilities, metadata::GeneratedImageMetadata};
 
-const QUALITY_TAGS: &str = ", very aesthetic, masterpiece, no text";
+const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
+const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
 const UC_PRESET_HEAVY: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page";
 const UC_PRESET_LIGHT: &str = "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page";
 const UC_PRESET_FURRY_FOCUS: &str = "{worst quality}, distracting watermark, unfinished, bad quality, {widescreen}, upscale, {sequence}, {{grandfathered content}}, blurred foreground, chromatic aberration, sketch, everyone, [sketch background], simple, [flat colors], ych (character), outline, multiple scenes, [[horror (theme)]], comic";
@@ -239,6 +240,40 @@ impl UcPreset {
             Self::HumanFocus => UC_PRESET_HUMAN_FOCUS,
             Self::None => "",
         }
+    }
+}
+
+/// Built-in quality tag presets appended to the positive prompt.
+///
+/// V5 exposes all three; earlier families only offer the equivalent of [`QualityPreset::Standard`]
+/// and [`QualityPreset::None`], gated by [`ModelCapabilities::supports_light_quality_preset`].
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QualityPreset {
+    /// `very aesthetic, masterpiece, no text`.
+    #[default]
+    Standard,
+    /// `very aesthetic, amazing quality, no text`. V5 only.
+    Light,
+    /// No quality tags.
+    None,
+}
+
+impl QualityPreset {
+    /// Returns the tag text appended to the positive prompt.
+    #[must_use]
+    pub const fn tags(&self) -> &'static str {
+        match self {
+            Self::Standard => QUALITY_TAGS_STANDARD,
+            Self::Light => QUALITY_TAGS_LIGHT,
+            Self::None => "",
+        }
+    }
+
+    /// Returns the `qualityToggle` value that accompanies the merged prompt.
+    #[must_use]
+    pub const fn is_enabled(&self) -> bool {
+        !matches!(self, Self::None)
     }
 }
 
@@ -610,8 +645,8 @@ pub struct GenerationCore {
     pub seed: i64,
     /// Number of images to generate in the `[1, 4]` range.
     pub n_samples: u32,
-    /// Whether quality tags are appended to the positive prompt.
-    pub quality: bool,
+    /// Built-in quality tags appended to the positive prompt.
+    pub quality: QualityPreset,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
 }
@@ -630,11 +665,7 @@ impl GenerationCore {
     /// Returns the positive prompt after applying built-in quality tags.
     #[must_use]
     pub fn processed_prompt(&self) -> String {
-        if self.quality {
-            format!("{}{}", self.prompt, QUALITY_TAGS)
-        } else {
-            self.prompt.clone()
-        }
+        format!("{}{}", self.prompt, self.quality.tags())
     }
 
     /// Returns the negative prompt after merging the selected UC preset text.
@@ -662,7 +693,7 @@ impl Default for GenerationCore {
             size: ImageSize::default(),
             seed: 0,
             n_samples: 1,
-            quality: true,
+            quality: QualityPreset::default(),
             uc_preset: UcPreset::default(),
         }
     }
@@ -843,9 +874,9 @@ impl GenerateImageRequestBuilder {
         self
     }
 
-    /// Toggles the built-in quality tags.
+    /// Selects the built-in quality tags.
     #[must_use]
-    pub const fn quality(mut self, quality: bool) -> Self {
+    pub const fn quality(mut self, quality: QualityPreset) -> Self {
         self.request.core.quality = quality;
         self
     }

@@ -1,7 +1,8 @@
 use crate::{
     BridgeError, Character, CharacterSet, GenerateImageRequest, GenerateImageResult,
     GenerateImageStream, GenerateImageStreamRequest, GuidanceParams, ImageSize, Img2ImgRequest,
-    InvalidRequest, ModelCapabilities, ReferenceSet, Transport, VibeTransferConfig,
+    InvalidRequest, ModelCapabilities, QualityPreset, ReferenceSet, Transport,
+    VibeTransferConfig,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
@@ -257,7 +258,7 @@ impl<T: Transport> Client<T> {
             negative_prompt: Some(prompt.negative_prompt),
             uc: prompt.legacy_uc,
             uc_preset: Some(params.core.uc_preset.as_api_value()),
-            quality_toggle: Some(params.core.quality),
+            quality_toggle: Some(params.core.quality.is_enabled()),
             v4_prompt: prompt.v4_prompt,
             v4_negative_prompt: prompt.v4_negative_prompt,
             cfg_rescale: Some(params.sampling.cfg_rescale),
@@ -472,6 +473,17 @@ fn apply_capability_gates(
         && let Some(img2img) = params.img2img.as_mut()
     {
         img2img.mask = None;
+    }
+
+    if params.core.quality == QualityPreset::Light
+        && !require_capability(
+            capabilities.supports_light_quality_preset,
+            "quality.light",
+            "V5 models",
+            strict_mode,
+        )?
+    {
+        params.core.quality = QualityPreset::Standard;
     }
 
     gate_guidance(&mut params.guidance, capabilities, strict_mode)?;

@@ -50,6 +50,23 @@ enum Command {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Quality {
+    Standard,
+    Light,
+    None,
+}
+
+impl From<Quality> for novelai_bridge::QualityPreset {
+    fn from(value: Quality) -> Self {
+        match value {
+            Quality::Standard => Self::Standard,
+            Quality::Light => Self::Light,
+            Quality::None => Self::None,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Preset {
     /// Plain text-to-image.
     T2i,
@@ -82,6 +99,10 @@ pub struct RunArgs {
 
     #[arg(long)]
     pub negative: Option<String>,
+
+    /// Built-in quality tags. `light` is V5 only.
+    #[arg(long, value_enum, default_value = "standard")]
+    pub quality: Quality,
 
     /// Canvas as `WIDTHxHEIGHT`.
     #[arg(long, default_value = "832x1216")]

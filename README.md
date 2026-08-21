@@ -60,6 +60,8 @@ Notes:
   are driven entirely by it, and callers can use it to gate their own UI.
 - Request fields are grouped by capability. A group the selected model does not support is
   rejected in `strict_mode` and dropped with a `log::warn!` otherwise.
+- `QualityPreset::Light` is a V5-only quality tag set; on earlier models it falls back to
+  `Standard`, or is rejected in `strict_mode`.
 - Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.
 - `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
 - Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request

@@ -23,6 +23,10 @@ credit observation.
 - Add `SubscriptionInfo::v5_usage` for the free V5 generation allowance reported by
   `/user/subscription`, and `Client::last_sampled_balance()`.
 - Add `GenerateImageRequest::builder()`.
+- Add `QualityPreset` with `Standard` / `Light` / `None`, replacing the `quality: bool` toggle.
+  `Standard` is byte-identical to the old `quality: true` tags and `None` to `quality: false`.
+  `Light` swaps `masterpiece` for `amazing quality` and is V5 only, gated by
+  `ModelCapabilities::supports_light_quality_preset`.
 - Add samplers `k_dpmpp_2m_sde` and `ddim_v3`, and the `native` noise schedule. `native` is
   rewritten to `karras` for V4 and later, which reject it.
 - Add `CharacterReferenceType::Costume` and `CharacterReferenceType::Delta`.
@@ -99,6 +103,8 @@ credit observation.
   `character_references` and `vibe_transfer`.
 - `VibeReference::info_extracted` is removed. Pass the value to `encode_vibe`, which bakes it
   into the cache; generation requests carry no separate field for it.
+- `GenerationCore::quality` and the builder's `.quality()` take a `QualityPreset` instead of a
+  `bool`. Replace `true` with `QualityPreset::Standard` and `false` with `QualityPreset::None`.
 - Callers pinning `Model::NaiDiffusion3Furry` by its serialized name must update stored values
   from `nai-diffusion-3-furry` to `nai-diffusion-furry-3`.
 - Negative prompts change: the UC preset now precedes the caller's text and starts with `nsfw`.

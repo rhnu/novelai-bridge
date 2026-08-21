@@ -156,6 +156,7 @@ fn base_request(args: &RunArgs, model: Model, size: ImageSize) -> GenerateImageR
         .seed(args.seed)
         .n_samples(args.samples)
         .variety_boost(args.variety)
+        .quality(args.quality.into())
         .strict_mode(args.strict);
 
     if let Some(negative) = args.negative.as_ref() {

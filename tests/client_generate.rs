@@ -9,7 +9,8 @@ use novelai_bridge::{
     BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
     CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver, GenerateImageRequest,
     GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams, ImageFormat, ImageSize,
-    ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model, ObservedOperation, ReferenceSet,
+    ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model, ObservedOperation, QualityPreset,
+    ReferenceSet,
     RequestOutcome, UcPreset, VibeReference, VibeTransferConfig,
 };
 use serde_json::{Value, json};
@@ -1033,6 +1034,92 @@ fn uc_preset_none_keeps_the_caller_negative_prompt_verbatim() {
     params.core.negative_prompt = Some("only mine".to_owned());
     params.core.uc_preset = UcPreset::None;
     assert_eq!(params.processed_negative_prompt(), "only mine");
+}
+
+#[test]
+fn quality_presets_swap_the_appended_tags() {
+    let standard = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+        .quality(QualityPreset::Standard)
+        .build();
+    let light = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+        .quality(QualityPreset::Light)
+        .build();
+    let none = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+        .quality(QualityPreset::None)
+        .build();
+
+    assert_eq!(
+        standard.processed_prompt(),
+        "1girl, very aesthetic, masterpiece, no text"
+    );
+    // Light differs from Standard only in swapping `masterpiece` for `amazing quality`.
+    assert_eq!(
+        light.processed_prompt(),
+        "1girl, very aesthetic, amazing quality, no text"
+    );
+    assert_eq!(none.processed_prompt(), "1girl");
+
+    // Standard is what the pre-V5 quality toggle always produced.
+    assert_eq!(
+        GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
+            .build()
+            .processed_prompt(),
+        standard.processed_prompt()
+    );
+}
+
+#[tokio::test]
+async fn quality_none_still_reports_the_toggle_state() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+        .quality(QualityPreset::None)
+        .build();
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(body["parameters"]["qualityToggle"], json!(false));
+    assert_eq!(
+        body["parameters"]["v4_prompt"]["caption"]["base_caption"],
+        json!("1girl")
+    );
+}
+
+#[tokio::test]
+async fn light_quality_preset_falls_back_to_standard_off_v5() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
+        .quality(QualityPreset::Light)
+        .build();
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(
+        body["parameters"]["v4_prompt"]["caption"]["base_caption"],
+        json!("1girl, very aesthetic, masterpiece, no text")
+    );
+}
+
+#[tokio::test]
+async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
+        .quality(QualityPreset::Light)
+        .strict_mode(true)
+        .build();
+
+    let error = client.generate(params).await.unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
+            if feature == "quality.light"
+    ));
+    assert!(transport.last_path().is_none());
 }
 
 #[test]
