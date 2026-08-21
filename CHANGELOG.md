@@ -23,6 +23,9 @@ credit observation.
 - Add `SubscriptionInfo::v5_usage` for the free V5 generation allowance reported by
   `/user/subscription`, and `Client::last_sampled_balance()`.
 - Add `GenerateImageRequest::builder()`.
+- Add `GenerationCore::transparent_background`, a V5-only toggle that appends a
+  `transparent background` tag and sets `tag_hint_transparent_background` to match. Measured at
+  ~39% fully transparent pixels on a live V5 generation.
 - Add `QualityPreset` with `Standard` / `Light` / `None`, replacing the `quality: bool` toggle.
   `Standard` is byte-identical to the old `quality: true` tags and `None` to `quality: false`.
   `Light` swaps `masterpiece` for `amazing quality` and is V5 only, gated by
@@ -122,6 +125,10 @@ pixel-deterministic, so A/B runs are comparable):
 - `add_original_image: true` is correct for infill. With `true` the region outside the mask is
   pixel-identical to the source; with `false` it drifts by a mean of ~1.8/255 from a full-canvas
   VAE round trip. The masked region is unaffected either way.
+- `tag_hint_transparent_background` is inert: `true` and `false` produce pixel-identical output.
+  Transparency comes from the `transparent background` prompt tag alone, which takes ~46% of the
+  canvas to alpha 0. V5 returns RGBA either way. The field is still sent, now tracking the
+  request's actual value rather than a hardcoded `true`.
 - Request shapes accepted with HTTP 200: V5 text-to-image, V5 image-to-image, V4.5
   image-to-image, V4.5 infill, and V4.5 `encode_vibe` plus vibe-transfer generation.
 

@@ -85,11 +85,11 @@ async fn generate_builds_v5_request_shape() {
     let body = transport.last_body().expect("generate body");
     assert_eq!(body["model"], json!("nai-diffusion-5-full"));
     assert_eq!(body["parameters"]["params_version"], json!(4));
+    assert_eq!(body["parameters"]["legacy_uc"], json!(false));
     assert_eq!(
         body["parameters"]["tag_hint_transparent_background"],
-        json!(true)
+        json!(false)
     );
-    assert_eq!(body["parameters"]["legacy_uc"], json!(false));
     assert!(body["parameters"]["v4_prompt"].is_object());
     // V5 has no legacy SMEA or decrisp parameters.
     assert!(body["parameters"]["sm"].is_null());
@@ -1118,6 +1118,82 @@ async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
             if feature == "quality.light"
+    ));
+    assert!(transport.last_path().is_none());
+}
+
+#[tokio::test]
+async fn transparent_background_appends_the_tag_and_sets_the_wire_hint() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+        .transparent_background(true)
+        .build();
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    // The tag precedes the quality tags, matching the prompt the web client assembles.
+    assert_eq!(
+        body["parameters"]["v4_prompt"]["caption"]["base_caption"],
+        json!("1girl, transparent background, very aesthetic, masterpiece, no text")
+    );
+    assert_eq!(
+        body["parameters"]["tag_hint_transparent_background"],
+        json!(true)
+    );
+}
+
+#[tokio::test]
+async fn transparent_background_hint_tracks_the_request_value() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let _ = client
+        .generate(request_for("1girl", Model::NaiDiffusion5Full))
+        .await
+        .unwrap();
+
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(
+        body["parameters"]["tag_hint_transparent_background"],
+        json!(false)
+    );
+}
+
+#[tokio::test]
+async fn transparent_background_is_dropped_off_v5_when_not_strict() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
+        .transparent_background(true)
+        .build();
+
+    let _ = client.generate(params).await.unwrap();
+    let body = transport.last_body().expect("generate body");
+    assert_eq!(
+        body["parameters"]["v4_prompt"]["caption"]["base_caption"],
+        json!("1girl, very aesthetic, masterpiece, no text")
+    );
+    assert!(body["parameters"]["tag_hint_transparent_background"].is_null());
+}
+
+#[tokio::test]
+async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
+        .transparent_background(true)
+        .strict_mode(true)
+        .build();
+
+    let error = client.generate(params).await.unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
+            if feature == "transparent_background"
     ));
     assert!(transport.last_path().is_none());
 }

@@ -318,7 +318,9 @@ impl<T: Transport> Client<T> {
                     .is_none_or(|img2img| img2img.add_original_image),
             ),
             inpaint_img2_img_strength: Some(img2img.inpaint_strength.unwrap_or(1.0)),
-            tag_hint_transparent_background: capabilities.uses_v5_extensions.then_some(true),
+            tag_hint_transparent_background: capabilities
+                .supports_transparent_background
+                .then_some(params.core.transparent_background),
             use_coords: uses_v4.then_some(resolved_use_coords),
             image_format: params
                 .output
@@ -484,6 +486,17 @@ fn apply_capability_gates(
         )?
     {
         params.core.quality = QualityPreset::Standard;
+    }
+
+    if params.core.transparent_background
+        && !require_capability(
+            capabilities.supports_transparent_background,
+            "transparent_background",
+            "V5 models",
+            strict_mode,
+        )?
+    {
+        params.core.transparent_background = false;
     }
 
     gate_guidance(&mut params.guidance, capabilities, strict_mode)?;

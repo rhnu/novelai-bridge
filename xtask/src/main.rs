@@ -125,6 +125,10 @@ pub struct RunArgs {
     #[arg(long)]
     pub variety: bool,
 
+    /// Request a transparent background. V5 only.
+    #[arg(long)]
+    pub transparent: bool,
+
     /// Reject unsupported or out-of-range values instead of normalizing them.
     #[arg(long)]
     pub strict: bool,

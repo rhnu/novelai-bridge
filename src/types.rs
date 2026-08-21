@@ -5,6 +5,7 @@ use crate::{ModelCapabilities, metadata::GeneratedImageMetadata};
 
 const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
 const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
+const TRANSPARENT_BACKGROUND_TAG: &str = ", transparent background";
 const UC_PRESET_HEAVY: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page";
 const UC_PRESET_LIGHT: &str = "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page";
 const UC_PRESET_FURRY_FOCUS: &str = "{worst quality}, distracting watermark, unfinished, bad quality, {widescreen}, upscale, {sequence}, {{grandfathered content}}, blurred foreground, chromatic aberration, sketch, everyone, [sketch background], simple, [flat colors], ych (character), outline, multiple scenes, [[horror (theme)]], comic";
@@ -647,6 +648,11 @@ pub struct GenerationCore {
     pub n_samples: u32,
     /// Built-in quality tags appended to the positive prompt.
     pub quality: QualityPreset,
+    /// Requests a transparent background.
+    ///
+    /// This is a prompt-level feature: it appends a `transparent background` tag and sets the
+    /// matching wire hint. Requires [`ModelCapabilities::supports_transparent_background`].
+    pub transparent_background: bool,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
 }
@@ -662,10 +668,15 @@ impl GenerationCore {
         }
     }
 
-    /// Returns the positive prompt after applying built-in quality tags.
+    /// Returns the positive prompt after applying the transparency and quality tags.
     #[must_use]
     pub fn processed_prompt(&self) -> String {
-        format!("{}{}", self.prompt, self.quality.tags())
+        let mut prompt = self.prompt.clone();
+        if self.transparent_background {
+            prompt.push_str(TRANSPARENT_BACKGROUND_TAG);
+        }
+        prompt.push_str(self.quality.tags());
+        prompt
     }
 
     /// Returns the negative prompt after merging the selected UC preset text.
@@ -694,6 +705,7 @@ impl Default for GenerationCore {
             seed: 0,
             n_samples: 1,
             quality: QualityPreset::default(),
+            transparent_background: false,
             uc_preset: UcPreset::default(),
         }
     }
@@ -878,6 +890,13 @@ impl GenerateImageRequestBuilder {
     #[must_use]
     pub const fn quality(mut self, quality: QualityPreset) -> Self {
         self.request.core.quality = quality;
+        self
+    }
+
+    /// Requests a transparent background. V5 only.
+    #[must_use]
+    pub const fn transparent_background(mut self, enabled: bool) -> Self {
+        self.request.core.transparent_background = enabled;
         self
     }
 

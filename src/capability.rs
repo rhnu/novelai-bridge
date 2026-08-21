@@ -55,6 +55,8 @@ pub struct ModelCapabilities {
     pub uses_v5_extensions: bool,
     /// Whether [`crate::QualityPreset::Light`] is offered in addition to standard quality tags.
     pub supports_light_quality_preset: bool,
+    /// Whether transparent-background output is offered.
+    pub supports_transparent_background: bool,
     /// Base coefficient of the variety-boost sigma, when supported.
     pub variety_sigma_coefficient: Option<f32>,
     /// Prompt context limit in tokens, as reported by the `NovelAI` web client.
@@ -104,6 +106,7 @@ const V3: ModelCapabilities = ModelCapabilities {
     supports_dynamic_thresholding: true,
     uses_v5_extensions: false,
     supports_light_quality_preset: false,
+    supports_transparent_background: false,
     variety_sigma_coefficient: None,
     prompt_token_limit: 225,
 };
@@ -128,6 +131,7 @@ const V4: ModelCapabilities = ModelCapabilities {
     supports_dynamic_thresholding: false,
     uses_v5_extensions: false,
     supports_light_quality_preset: false,
+    supports_transparent_background: false,
     variety_sigma_coefficient: Some(19.0),
     prompt_token_limit: 512,
 };
@@ -151,6 +155,7 @@ const V5_FULL: ModelCapabilities = ModelCapabilities {
     supports_variety_boost: false,
     uses_v5_extensions: true,
     supports_light_quality_preset: true,
+    supports_transparent_background: true,
     variety_sigma_coefficient: None,
     prompt_token_limit: 1471,
     ..V45
