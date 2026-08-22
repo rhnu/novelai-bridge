@@ -49,6 +49,8 @@ pub struct ModelCapabilities {
     pub supports_variety_boost: bool,
     /// Whether an inpainting sibling model exists for infill requests.
     pub supports_inpainting: bool,
+    /// Whether image-generation previews can be delivered through the streaming endpoint.
+    pub supports_streaming: bool,
     /// Whether SMEA (`sm` / `sm_dyn`) parameters apply.
     pub supports_smea: bool,
     /// Whether `dynamic_thresholding` (decrisp) applies.
@@ -109,6 +111,7 @@ const V3: ModelCapabilities = ModelCapabilities {
     supports_character_reference_inpainting: false,
     supports_variety_boost: false,
     supports_inpainting: true,
+    supports_streaming: false,
     supports_smea: true,
     supports_dynamic_thresholding: true,
     uses_v5_extensions: false,
@@ -137,6 +140,7 @@ const V4: ModelCapabilities = ModelCapabilities {
     supports_character_reference_inpainting: false,
     supports_variety_boost: true,
     supports_inpainting: true,
+    supports_streaming: true,
     supports_smea: false,
     supports_dynamic_thresholding: false,
     uses_v5_extensions: false,

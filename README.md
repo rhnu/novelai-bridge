@@ -75,6 +75,8 @@ Notes:
   are driven entirely by it, and callers can use it to gate their own UI.
 - Request fields are grouped by capability. A group the selected model does not support is
   rejected in `strict_mode` and dropped with a `log::warn!` otherwise.
+- Image streaming is supported by V4, V4.5, and V5. `Client::generate_stream` always rejects
+  V3 and Furry V3 locally; it does not silently downgrade to a non-streaming request.
 - `QualityPreset::Light` and `transparent_background` are V5-only; on earlier models they fall
   back to the standard behaviour, or are rejected in `strict_mode`.
 - Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.

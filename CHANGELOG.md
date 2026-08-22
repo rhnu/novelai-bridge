@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0-rc.3
+
+### Added
+
+- Add `ModelCapabilities::supports_streaming`. NovelAI Diffusion V4, V4.5, and V5 support image
+  streaming; V3 and Furry V3 do not.
+
+### Changed
+
+- `Client::generate_stream` rejects V3 and Furry V3 locally with
+  `InvalidRequest::UnsupportedModelFeature` before any HTTP request. This capability mismatch
+  never falls back to a non-streaming request, regardless of `strict_mode`.
+
+### Migration
+
+- Add `supports_streaming` when constructing `ModelCapabilities` directly. Callers that offer a
+  stream toggle should gate it through `Model::capabilities().supports_streaming`; direct stream
+  calls must handle `UnsupportedModelFeature` for V3 models.
+
 ## 0.4.0-rc.2
 
 Breaking release candidate refining Anlas pricing and credit observation.

@@ -478,6 +478,29 @@ async fn generate_stream_uses_custom_image_base_url() {
 }
 
 #[tokio::test]
+async fn generate_stream_rejects_v3_models_before_transport() {
+    for model in [Model::NaiDiffusion3, Model::NaiDiffusion3Furry] {
+        let transport = MockTransport::default();
+        let client = Client::with_transport(transport.clone());
+        let params = GenerateImageStreamRequest {
+            base: GenerateImageRequest::builder("1girl", model).build(),
+            ..Default::default()
+        };
+
+        let error = match client.generate_stream(params).await {
+            Ok(_) => panic!("V3 models must not start a stream"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
+                if feature == "generate_stream"
+        ));
+        assert!(transport.last_path().is_none());
+    }
+}
+
+#[tokio::test]
 async fn generate_normalizes_character_reference_image_payloads() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::with_transport(transport.clone());
@@ -1235,6 +1258,7 @@ fn capabilities_describe_each_model_family() {
     assert!(!v5.supports_encoded_vibe);
     assert!(!v5.supports_character_reference);
     assert_eq!(Model::NaiDiffusion5Full.vibe_model_key(), None);
+    assert!(v5.supports_streaming);
 
     assert_eq!(Model::NaiDiffusion45Full.capabilities().params_version, 3);
     assert!(
@@ -1249,6 +1273,10 @@ fn capabilities_describe_each_model_family() {
     );
     assert!(!Model::NaiDiffusion3.capabilities().supports_characters());
     assert!(Model::NaiDiffusion3.capabilities().supports_smea);
+    assert!(!Model::NaiDiffusion3.capabilities().supports_streaming);
+    assert!(!Model::NaiDiffusion3Furry.capabilities().supports_streaming);
+    assert!(Model::NaiDiffusion4Full.capabilities().supports_streaming);
+    assert!(Model::NaiDiffusion45Full.capabilities().supports_streaming);
     assert!(!Model::NaiDiffusion45Full.capabilities().supports_smea);
 }
 
