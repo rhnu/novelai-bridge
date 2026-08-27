@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-08-27
+
+### Fixed
+
+- `SubscriptionInfo::v5_usage` no longer requires `usage.timeUntilNextPercent`. Only
+  `usage.percent` decides whether an allowance is reported; a missing recharge rate degrades to
+  `0`. Previously the whole object was discarded, which also discarded `isNegative` and therefore
+  silently restored the Opus first-image allowance for an overdrawn V5 account.
+
+### Documented
+
+- Verified the `usage` object against a live Opus account (2026-08-27), resolving the open question
+  from 0.4.0-rc.1. `docs/anlas-pricing.md` gains a "V5 Opus generation allowance" section: `percent`
+  is the remaining allowance as a whole integer, `timeUntilNextPercent` is a recharge *rate*
+  constant rather than a countdown (7888 s per percent, stable across a `percent` change), and the
+  V5 free first image draws on this allowance instead of Anlas. Twelve consecutive
+  `nai-diffusion-5-full` generations at 832×1216 / 23 steps cost 0 Anlas and moved `percent` from
+  100 to 99, so one such generation costs ~0.11%–0.12% of the meter.
+
 ## 0.4.0-rc.3
 
 ### Added
@@ -190,7 +209,7 @@ pixel-deterministic, so A/B runs are comparable):
 
 Still unverified: the `usage` object carrying the free V5 allowance never appeared on the
 account used for probing, so `SubscriptionInfo::v5_usage` is parsed from the documented field
-names but has not been seen populated.
+names but has not been seen populated. (Resolved 2026-08-27 — see 0.4.0.)
 
 ## 0.3.1
 

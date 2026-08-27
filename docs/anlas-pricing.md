@@ -125,6 +125,50 @@ $$
 The allowance reduces only the generation-image count. Character-reference and vibe-related
 surcharges are calculated separately.
 
+## V5 Opus generation allowance
+
+> Source note: measured on 2026-08-27 against a live Opus account (`tier: 3`, `active: true`).
+
+For a model with `ModelCapabilities::has_opus_usage_limit` — currently the NAI 5 family — the free
+first image is paid for out of a separate allowance rather than out of Anlas.
+`GET /user/subscription` reports it as a `usage` object:
+
+```json
+"usage": { "percent": 100, "isNegative": false, "timeUntilNextPercent": 7888 }
+```
+
+The object is absent for accounts that do not receive the allowance, which is why
+[`crate::SubscriptionInfo::v5_usage`] is optional. A free-tier account (`tier: 0`) returns no
+`usage` key at all.
+
+Measured field behaviour:
+
+- `percent` is the **remaining** allowance as an integer in `[0, 100]`, not the amount consumed.
+  The API reports whole percents.
+- `isNegative` marks the allowance as overdrawn. It is the only field the estimator reads: an
+  overdrawn allowance removes the free first image for models that carry the usage limit, which
+  is exactly the condition in the section above.
+- `timeUntilNextPercent` is a **rate constant** — the number of seconds needed to recharge one
+  percent. It is not a countdown: it held at `7888` across eight samples over ~35 minutes,
+  including across a `percent` change. At that rate one percent returns in ~2h11m and a full
+  0 → 100 recharge takes ~9.1 days. Present it as a rate, never as a deadline.
+
+Measured consumption, from twelve consecutive `nai-diffusion-5-full` generations at 832×1216 and
+23 steps with `n_samples: 1`:
+
+| Observation | Result |
+| ----------- | ------ |
+| Anlas balance | unchanged across all twelve generations |
+| `percent` | `100` until the ninth generation, then `99` for the rest |
+| `isNegative` | `false` throughout |
+| `timeUntilNextPercent` | `7888` throughout |
+
+So one such generation costs roughly 0.11%–0.12% of the allowance — about 8–9 generations per
+percent, or on the order of 800–900 free generations at a full meter. The crate does not model
+this drawdown: a caller pricing several requests in one run gets one free image per request, which
+holds until the allowance is exhausted. Callers that batch heavily should read `percent` and warn
+when the allowance is nearly spent.
+
 ## Additional charges
 
 The generation component is:

@@ -79,6 +79,11 @@ fn map_subscription_response(raw: &Value) -> SubscriptionInfo {
 }
 
 /// Reads the free V5 generation allowance from the `usage` object, when present.
+///
+/// Only `percent` decides whether an allowance is reported. `timeUntilNextPercent` is a recharge
+/// rate the caller may not need, so a missing value degrades to `0` instead of discarding the
+/// whole object — dropping it would also discard `isNegative`, which gates the Opus first-image
+/// allowance in [`crate::estimate_anlas_cost`].
 fn read_v5_usage(raw: &Value) -> Option<V5UsageStatus> {
     let usage = raw.get("usage")?;
     let percent = read_truncated_i64(usage.get("percent"))?;
@@ -86,7 +91,8 @@ fn read_v5_usage(raw: &Value) -> Option<V5UsageStatus> {
         usage
             .get("timeUntilNextPercent")
             .or_else(|| usage.get("time_until_next_percent")),
-    )?;
+    )
+    .unwrap_or(0);
     let is_negative = usage
         .get("isNegative")
         .or_else(|| usage.get("is_negative"))

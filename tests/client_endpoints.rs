@@ -305,6 +305,69 @@ async fn get_subscription_reads_v5_free_generation_allowance() {
     assert_eq!(usage.seconds_until_next_percent, 142);
 }
 
+/// Mirrors a live Opus response captured on 2026-08-27: integer `percent`, and a
+/// `timeUntilNextPercent` that is a recharge rate rather than a countdown.
+#[tokio::test]
+async fn get_subscription_maps_a_live_opus_response() {
+    let transport = MockTransport::default();
+    transport.set_json_response(json!({
+        "tier": 3,
+        "active": true,
+        "accountType": 0,
+        "isGracePeriod": false,
+        "expiresAt": 1_790_345_896_i64,
+        "perks": {
+            "maxPriorityActions": 1000,
+            "startPriority": 10,
+            "unlimitedMaxPriority": true,
+            "moduleTrainingSteps": 10_000
+        },
+        "trainingStepsLeft": {
+            "fixedTrainingStepsLeft": 10_000,
+            "purchasedTrainingSteps": 0
+        },
+        "usage": {
+            "percent": 100,
+            "isNegative": false,
+            "timeUntilNextPercent": 7888
+        }
+    }));
+    let client = Client::with_transport(transport);
+
+    let subscription = client.get_subscription().await.unwrap();
+    assert_eq!(subscription.anlas_balance, 10_000);
+    assert!(subscription.is_opus);
+    assert!(subscription.subscription_active);
+    assert_eq!(subscription.expires_at_ms, Some(1_790_345_896_000));
+
+    let usage = subscription.v5_usage.expect("v5 usage");
+    assert!(!usage.is_negative);
+    assert_eq!(usage.percent, 100);
+    assert_eq!(usage.seconds_until_next_percent, 7888);
+}
+
+/// A missing recharge rate must not discard the whole allowance: that would also discard
+/// `isNegative` and silently restore the Opus first-image allowance for V5.
+#[tokio::test]
+async fn get_subscription_keeps_the_allowance_without_a_recharge_rate() {
+    let transport = MockTransport::default();
+    transport.set_json_response(json!({
+        "tier": 3,
+        "trainingStepsLeft": { "fixedTrainingStepsLeft": 10 },
+        "usage": {
+            "isNegative": true,
+            "percent": 0
+        }
+    }));
+    let client = Client::with_transport(transport);
+
+    let subscription = client.get_subscription().await.unwrap();
+    let usage = subscription.v5_usage.expect("v5 usage");
+    assert!(usage.is_negative);
+    assert_eq!(usage.percent, 0);
+    assert_eq!(usage.seconds_until_next_percent, 0);
+}
+
 #[tokio::test]
 async fn get_subscription_records_last_sampled_balance() {
     let transport = MockTransport::default();

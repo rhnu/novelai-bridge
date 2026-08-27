@@ -1078,6 +1078,10 @@ pub struct ImageStreamChunk {
 }
 
 /// Free V5 generation allowance reported by `/user/subscription`.
+///
+/// Only accounts that receive the allowance report it; the `usage` object is absent for accounts
+/// that do not, which is why [`SubscriptionInfo::v5_usage`] is optional. See
+/// `docs/anlas-pricing.md` for the measured behaviour of each field.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct V5UsageStatus {
     /// Whether the allowance is currently overdrawn.
@@ -1085,6 +1089,10 @@ pub struct V5UsageStatus {
     /// Remaining allowance as an integer percentage in the `[0, 100]` range.
     pub percent: u32,
     /// Seconds required to recharge one percent.
+    ///
+    /// This is a rate constant, not a countdown: it does not decrease as time passes and does not
+    /// change when `percent` does. Present it as a recharge rate rather than as a deadline.
+    /// Defaults to `0` when the API omits the field.
     pub seconds_until_next_percent: u64,
 }
 
