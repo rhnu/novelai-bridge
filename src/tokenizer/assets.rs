@@ -186,7 +186,7 @@ impl Tokenizers {
     /// Returns the encoder a model's capabilities select, if loaded.
     #[must_use]
     pub fn for_model(&self, model: Model) -> Option<&ImageTokenizer> {
-        self.get(model.capabilities().tokenizer)
+        self.get(model.descriptor().prompt().tokenizer)
     }
 
     /// Returns the encoder a model needs, or reports which one is missing.
@@ -195,7 +195,7 @@ impl Tokenizers {
     ///
     /// Returns [`TokenizerError::TokenizerNotLoaded`] when the model's encoder is absent.
     pub fn require_for_model(&self, model: Model) -> Result<&ImageTokenizer, TokenizerError> {
-        let kind = model.capabilities().tokenizer;
+        let kind = model.descriptor().prompt().tokenizer;
         self.get(kind)
             .ok_or(TokenizerError::TokenizerNotLoaded { kind })
     }

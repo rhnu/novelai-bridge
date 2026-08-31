@@ -129,8 +129,8 @@ surcharges are calculated separately.
 
 > Source note: measured on 2026-08-27 against a live Opus account (`tier: 3`, `active: true`).
 
-For a model with `ModelCapabilities::has_opus_usage_limit` — currently the NAI 5 family — the free
-first image is paid for out of a separate allowance rather than out of Anlas.
+For a model whose `descriptor().pricing().opus_allowance` is `OpusAllowance::Metered` — currently
+the NAI 5 family — the free first image is paid for out of a separate allowance rather than Anlas.
 `GET /user/subscription` reports it as a `usage` object:
 
 ```json

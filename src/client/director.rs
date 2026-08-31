@@ -23,7 +23,7 @@ impl<T: Transport> Client<T> {
     /// Returns [`BridgeError`] when local request validation, image normalization, transport, or
     /// response decoding fails.
     pub async fn encode_vibe(&self, req: EncodeVibeRequest) -> Result<String, BridgeError> {
-        if !req.model.capabilities().supports_encoded_vibe {
+        if !req.model.descriptor().can_encode_vibe() {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "encode_vibe".to_owned(),
                 required_model: "V4 and V4.5 models".to_owned(),

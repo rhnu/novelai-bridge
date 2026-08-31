@@ -23,11 +23,28 @@ impl CreditObserver for Observer {
 }
 
 #[test]
-#[ignore = "model descriptor: V5 inherits incompatible reference-inpainting support"]
 fn reference_inpainting_requires_reference_support() {
     for model in [Model::NaiDiffusion5Full, Model::NaiDiffusion5Curated] {
-        let caps = model.capabilities();
-        assert!(!caps.supports_character_reference_inpainting || caps.supports_character_reference);
+        let caps = model.descriptor();
+        assert!(caps.support().character_reference.is_none());
+        for mode in [
+            novelai_bridge::GenerationMode::TextToImage,
+            novelai_bridge::GenerationMode::ImageToImage,
+            novelai_bridge::GenerationMode::Inpainting,
+        ] {
+            assert!(
+                !caps
+                    .resolve_references(
+                        mode,
+                        novelai_bridge::ReferenceIntent {
+                            vibe: false,
+                            character: true,
+                        }
+                    )
+                    .character
+                    .is_available()
+            );
+        }
     }
 }
 

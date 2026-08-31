@@ -6,6 +6,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- Read-only `ModelDescriptor` profiles for identity, support, constraints, defaults, prompt,
+  sampling, wire and pricing. Registry entries explicitly compose profiles without model inheritance.
+- `GenerationMode`, `ReferenceIntent` and shared `resolve_references` decisions for model/mode
+  support, unimplemented input paths and reference conflicts.
 - Immutable `NormalizedGeneration`, explicit `NormalizationPolicy` and structured normalization
   diagnostics. Planning is independent of transport, image pixel decoding and seed resolution.
 - `PreparedGeneration` and prepared ordinary/streaming send methods reuse validated input and a
@@ -21,13 +25,20 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
+- Change the default model from V4.5 Full to V5 Full; default sampling now uses guidance scale 7.
+- Remove `ModelCapabilities` and `capabilities()` in favor of registry-owned descriptors.
+  Optional reference profiles eliminate V5's contradictory reference-inpainting flag.
+- Bind inpainting support to its sibling ID and expose `inpainting_id()` as `Option<&str>`.
+  Distinguish V3's provider-only legacy vibe path from implemented encoded-vibe input.
+- Move noise-schedule support/fallback to sampling, and derive protocol version/extensions from
+  `WireProfile`. Default values and validation bounds now come from descriptor profiles.
 - Normalize once and share cached conditioning text between wire construction, token counting
   and observation, including quality, transparency and UC presets.
 - Raw request prompt, token and cost helpers are fallible and use the same effective fields as
   sending. Normalized cost projections no longer repeat capability and reference conflict rules.
 - Skip disabled character validation; non-strict overflow disables characters after the model's
   enabled-character limit while preserving original indices. Strict overflow remains an error.
-- Mark error enums, `ModelCapabilities`, `PromptStructure` and new tokenizer public types
+- Mark error enums, descriptor profile structs, `PromptStructure` and new tokenizer public types
   `#[non_exhaustive]`. UI selection enums and request structs retain exhaustive matching and
   struct-literal construction.
 - Reject unsupported tokenizer configurations explicitly. CLIP still omits full `ftfy` repair;
@@ -35,6 +46,14 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+- Select `Model::NaiDiffusion45Full` explicitly to retain the previous default model, and use
+  its builder or `SamplingParams::for_model` to retain its sampling defaults.
+- Replace `model.capabilities()` / `request.capabilities()` with `descriptor()` and the relevant
+  profile getter. Replace `noise_schedule.resolve_for(...)` with
+  `descriptor.sampling().resolve_noise_schedule(noise_schedule)`; handle optional inpainting IDs.
+  See [model descriptor migration](docs/model-descriptors.md) for field-by-field replacements.
+- Persist the serializable `Model` enum, not writable capability snapshots. Descriptors cannot
+  be constructed or deserialized externally; detached profile copies do not modify the registry.
 - Replace `GenerationCore` / `GenerateImageRequest` `processed_prompt*` calls with
   `request.resolve_prompts()?.prompt` / `.negative_prompt`. The returned text includes presets.
 - Handle normalization errors from request/client cost estimates and request token counting;

@@ -22,9 +22,9 @@ fn model_capabilities_select_the_documented_encoder_and_limit() {
     ];
 
     for (model, tokenizer, limit) in expected {
-        let capabilities = model.capabilities();
-        assert_eq!(capabilities.tokenizer, tokenizer, "{model:?}");
-        assert_eq!(capabilities.prompt_token_limit, limit, "{model:?}");
+        let capabilities = model.descriptor();
+        assert_eq!(capabilities.prompt().tokenizer, tokenizer, "{model:?}");
+        assert_eq!(capabilities.prompt().token_limit, limit, "{model:?}");
     }
 }
 

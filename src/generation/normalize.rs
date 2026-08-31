@@ -2,32 +2,26 @@ use super::{
     NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
 };
 use crate::{
-    BridgeError, Character, CharacterSet, GenerateImageRequest, GuidanceParams, ImageSize,
-    Img2ImgRequest, InvalidRequest, ModelCapabilities, QualityPreset, ReferenceSet,
-    VibeTransferConfig,
+    BridgeError, Character, CharacterSet, GenerateImageRequest, GenerationConstraints,
+    GuidanceParams, ImageSize, Img2ImgRequest, InvalidRequest, ModelDescriptor, QualityPreset,
+    ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeTransferConfig,
     internal::request_helpers::{is_center_position, snap_coord_to_grid},
 };
-
-/// Largest canvas area accepted by `NovelAI` image generation.
-const MAX_IMAGE_PIXELS: u64 = 3_145_728;
-const IMAGE_DIMENSION_MIN: u32 = 64;
-const IMAGE_DIMENSION_MAX: u32 = 1600;
-const IMAGE_DIMENSION_MULTIPLE: u32 = 64;
 
 pub(super) fn normalize(
     mut request: GenerateImageRequest,
     policy: NormalizationPolicy,
 ) -> Result<NormalizedGeneration, BridgeError> {
     request.strict_mode = policy == NormalizationPolicy::Reject;
+    let descriptor = request.descriptor();
     let mut normalizer = Normalizer {
+        constraints: *descriptor.constraints(),
         reject: request.strict_mode,
         diagnostics: Vec::new(),
     };
     validate_prompt(&request)?;
-    let caps = request.capabilities();
     normalizer.normalize_base_fields(&mut request)?;
-    normalizer.apply_capability_gates(&mut request, &caps)?;
-    normalizer.validate_feature_combinations(&mut request)?;
+    normalizer.apply_capability_gates(&mut request, descriptor)?;
     if let Some(characters) = request.characters.as_mut() {
         normalizer.validate_character_inputs(&characters.characters)?;
         normalizer.normalize_character_positions(characters)?;
@@ -37,7 +31,9 @@ pub(super) fn normalize(
         normalizer.normalize_vibe_transfer(references.vibe_transfer.as_mut())?;
     }
     normalizer.normalize_img2img(request.img2img.as_mut())?;
-    let schedule = request.sampling.noise_schedule.resolve_for(&caps);
+    let schedule = descriptor
+        .sampling()
+        .resolve_noise_schedule(request.sampling.noise_schedule);
     if schedule != request.sampling.noise_schedule {
         normalizer.record(
             "sampling.noise_schedule".to_owned(),
@@ -54,6 +50,7 @@ pub(super) fn normalize(
 }
 
 struct Normalizer {
+    constraints: GenerationConstraints,
     reject: bool,
     diagnostics: Vec<NormalizationDiagnostic>,
 }
@@ -75,13 +72,31 @@ impl Normalizer {
         &mut self,
         params: &mut GenerateImageRequest,
     ) -> Result<(), BridgeError> {
-        params.sampling.steps = self.normalize_u32_range("steps", params.sampling.steps, 1, 50)?;
-        params.sampling.scale =
-            self.normalize_f32_range("scale", params.sampling.scale, 0.0, 10.0)?;
-        params.core.n_samples =
-            self.normalize_u32_range("n_samples", params.core.n_samples, 1, 4)?;
-        params.sampling.cfg_rescale =
-            self.normalize_f32_range("cfg_rescale", params.sampling.cfg_rescale, 0.0, 1.0)?;
+        let limits = self.constraints;
+        params.sampling.steps = self.normalize_u32_range(
+            "steps",
+            params.sampling.steps,
+            limits.steps.min,
+            limits.steps.max,
+        )?;
+        params.sampling.scale = self.normalize_f32_range(
+            "scale",
+            params.sampling.scale,
+            limits.scale.min,
+            limits.scale.max,
+        )?;
+        params.core.n_samples = self.normalize_u32_range(
+            "n_samples",
+            params.core.n_samples,
+            limits.samples.min,
+            limits.samples.max,
+        )?;
+        params.sampling.cfg_rescale = self.normalize_f32_range(
+            "cfg_rescale",
+            params.sampling.cfg_rescale,
+            limits.cfg_rescale.min,
+            limits.cfg_rescale.max,
+        )?;
         params.core.size.width =
             self.normalize_image_dimension("size.width", params.core.size.width)?;
         params.core.size.height =
@@ -94,55 +109,27 @@ impl Normalizer {
     fn apply_capability_gates(
         &mut self,
         params: &mut GenerateImageRequest,
-        capabilities: &ModelCapabilities,
+        descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
-        self.gate_characters(params, capabilities)?;
-
-        let has_inpaint_mask = params
-            .img2img
-            .as_ref()
-            .is_some_and(Img2ImgRequest::is_infill)
-            && capabilities.supports_inpainting;
-        if let Some(references) = params.references.as_mut() {
-            self.gate_character_references(references, capabilities, has_inpaint_mask)?;
-
-            if references
-                .vibe_transfer
-                .as_ref()
-                .is_some_and(|vibe| !vibe.references.is_empty())
-                && !self.require_capability(
-                    capabilities.supports_encoded_vibe,
-                    "vibe_transfer",
-                    "V4 and V4.5 models",
-                    NormalizationChange::Unsupported,
-                )?
-            {
-                references.vibe_transfer = None;
-            }
-
-            if references.is_empty() {
-                params.references = None;
-            }
-        }
-
+        self.gate_characters(params, descriptor)?;
         if params
             .img2img
             .as_ref()
             .is_some_and(Img2ImgRequest::is_infill)
             && !self.require_capability(
-                capabilities.supports_inpainting,
+                descriptor.support().inpainting.is_some(),
                 "img2img.mask",
                 "models with an inpainting variant",
                 NormalizationChange::Unsupported,
             )?
-            && let Some(img2img) = params.img2img.as_mut()
+            && let Some(input) = params.img2img.as_mut()
         {
-            img2img.mask = None;
+            input.mask = None;
         }
-
+        self.normalize_references(params, descriptor)?;
         if params.core.quality == QualityPreset::Light
             && !self.require_capability(
-                capabilities.supports_light_quality_preset,
+                descriptor.prompt().quality.supports(params.core.quality),
                 "quality.light",
                 "V5 models",
                 NormalizationChange::Fallback,
@@ -150,10 +137,9 @@ impl Normalizer {
         {
             params.core.quality = QualityPreset::Standard;
         }
-
         if params.core.transparent_background
             && !self.require_capability(
-                capabilities.supports_transparent_background,
+                descriptor.prompt().transparent_background,
                 "transparent_background",
                 "V5 models",
                 NormalizationChange::Unsupported,
@@ -161,22 +147,21 @@ impl Normalizer {
         {
             params.core.transparent_background = false;
         }
-
-        self.gate_guidance(&mut params.guidance, capabilities)?;
+        self.gate_guidance(&mut params.guidance, descriptor)?;
         Ok(())
     }
 
     fn gate_characters(
         &mut self,
         params: &mut GenerateImageRequest,
-        capabilities: &ModelCapabilities,
+        descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
         if params
             .characters
             .as_ref()
             .is_some_and(|set| set.enabled_count() > 0)
             && !self.require_capability(
-                capabilities.supports_characters(),
+                descriptor.prompt().characters.is_some(),
                 "characters",
                 "V4 and later models",
                 NormalizationChange::Unsupported,
@@ -186,13 +171,13 @@ impl Normalizer {
         }
 
         if let Some(set) = params.characters.as_mut() {
-            let limit = capabilities.max_characters as usize;
+            let limit = descriptor.prompt().max_characters() as usize;
             if set.enabled_count() > limit && self.reject {
                 return Err(InvalidRequest::NumericOutOfRange {
                     field: "characters".to_owned(),
                     value: f64::from(u32::try_from(set.enabled_count()).unwrap_or(u32::MAX)),
                     min: 0.0,
-                    max: f64::from(capabilities.max_characters),
+                    max: f64::from(descriptor.prompt().max_characters()),
                 }
                 .into());
             }
@@ -208,7 +193,7 @@ impl Normalizer {
                     format!("characters[{index}]"),
                     NormalizationChange::CharacterLimit {
                         index,
-                        limit: capabilities.max_characters,
+                        limit: descriptor.prompt().max_characters(),
                     },
                 );
             }
@@ -216,45 +201,93 @@ impl Normalizer {
         Ok(())
     }
 
-    fn gate_character_references(
+    fn normalize_references(
         &mut self,
-        references: &mut ReferenceSet,
-        capabilities: &ModelCapabilities,
-        has_inpaint_mask: bool,
+        params: &mut GenerateImageRequest,
+        descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
-        if !references.character_references.is_empty()
-            && !self.require_capability(
-                capabilities.supports_character_reference,
-                "character_references",
-                "V4.5 models",
-                NormalizationChange::Unsupported,
-            )?
+        let mode = params.mode();
+        let Some(references) = params.references.as_mut() else {
+            return Ok(());
+        };
+        let intent = ReferenceIntent {
+            character: !references.character_references.is_empty(),
+            vibe: references
+                .vibe_transfer
+                .as_ref()
+                .is_some_and(|vibe| !vibe.references.is_empty()),
+        };
+        let resolution = descriptor.resolve_references(mode, intent);
+        if intent.character
+            && !self.reference_allowed("character_references", resolution.character)?
         {
             references.character_references.clear();
         }
+        if intent.vibe && !self.reference_allowed("vibe_transfer", resolution.vibe)? {
+            references.vibe_transfer = None;
+        }
+        if references.is_empty() {
+            params.references = None;
+        }
+        Ok(())
+    }
 
-        if !references.character_references.is_empty()
-            && has_inpaint_mask
-            && !self.require_capability(
-                capabilities.supports_character_reference_inpainting,
+    // The descriptor owns support and precedence; this boundary only maps decisions to errors
+    // or diagnostics, preserving the caller's Reject/Normalize policy.
+    fn reference_allowed(
+        &mut self,
+        field: &str,
+        availability: ReferenceAvailability,
+    ) -> Result<bool, BridgeError> {
+        match availability {
+            ReferenceAvailability::Available => Ok(true),
+            ReferenceAvailability::NotRequested => Ok(false),
+            ReferenceAvailability::Unsupported | ReferenceAvailability::InputNotImplemented => {
+                let required = if field == "character_references" {
+                    "V4.5 models"
+                } else {
+                    "V4 and V4.5 models"
+                };
+                self.require_capability(false, field, required, NormalizationChange::Unsupported)
+            }
+            ReferenceAvailability::UnsupportedMode if field == "vibe_transfer" => {
+                self.reference_conflict("img2img.mask")
+            }
+            ReferenceAvailability::UnsupportedMode => self.require_capability(
+                false,
                 "character_references with img2img.mask",
                 "models with character-reference inpainting",
                 NormalizationChange::Unsupported,
-            )?
-        {
-            references.character_references.clear();
+            ),
+            ReferenceAvailability::ConflictWithCharacterReference => {
+                self.reference_conflict("character_references")
+            }
         }
-        Ok(())
+    }
+
+    fn reference_conflict(&mut self, retained_field: &'static str) -> Result<bool, BridgeError> {
+        if self.reject {
+            return Err(InvalidRequest::UnsupportedFieldCombination {
+                left: "vibe_transfer".to_owned(),
+                right: retained_field.to_owned(),
+            }
+            .into());
+        }
+        self.record(
+            "vibe_transfer".to_owned(),
+            NormalizationChange::Conflict { retained_field },
+        );
+        Ok(false)
     }
 
     fn gate_guidance(
         &mut self,
         guidance: &mut GuidanceParams,
-        capabilities: &ModelCapabilities,
+        descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
         if guidance.variety_boost
             && !self.require_capability(
-                capabilities.supports_variety_boost,
+                descriptor.sampling().variety.is_some(),
                 "guidance.variety_boost",
                 "V4 and V4.5 models",
                 NormalizationChange::Unsupported,
@@ -265,7 +298,7 @@ impl Normalizer {
 
         if guidance.decrisp
             && !self.require_capability(
-                capabilities.supports_dynamic_thresholding,
+                descriptor.sampling().dynamic_thresholding,
                 "guidance.decrisp",
                 "V3 models",
                 NormalizationChange::Unsupported,
@@ -276,7 +309,7 @@ impl Normalizer {
 
         if (guidance.smea || guidance.smea_dyn)
             && !self.require_capability(
-                capabilities.supports_smea,
+                descriptor.sampling().smea,
                 "guidance.smea",
                 "V3 models",
                 NormalizationChange::Unsupported,
@@ -286,64 +319,6 @@ impl Normalizer {
             guidance.smea_dyn = false;
         }
 
-        Ok(())
-    }
-
-    /// Rejects or drops field combinations `NovelAI` does not accept together.
-    fn validate_feature_combinations(
-        &mut self,
-        params: &mut GenerateImageRequest,
-    ) -> Result<(), BridgeError> {
-        let Some(references) = params.references.as_mut() else {
-            return Ok(());
-        };
-
-        let has_vibe = references
-            .vibe_transfer
-            .as_ref()
-            .is_some_and(|vibe| !vibe.references.is_empty());
-
-        if has_vibe && !references.character_references.is_empty() {
-            if self.reject {
-                return Err(InvalidRequest::UnsupportedFieldCombination {
-                    left: "vibe_transfer".to_owned(),
-                    right: "character_references".to_owned(),
-                }
-                .into());
-            }
-            self.record(
-                "vibe_transfer".to_owned(),
-                NormalizationChange::Conflict {
-                    retained_field: "character_references",
-                },
-            );
-            references.vibe_transfer = None;
-        } else if has_vibe
-            && params
-                .img2img
-                .as_ref()
-                .is_some_and(Img2ImgRequest::is_infill)
-        {
-            // NovelAI returns a server error when an infill request also carries a vibe payload.
-            if self.reject {
-                return Err(InvalidRequest::UnsupportedFieldCombination {
-                    left: "vibe_transfer".to_owned(),
-                    right: "img2img.mask".to_owned(),
-                }
-                .into());
-            }
-            self.record(
-                "vibe_transfer".to_owned(),
-                NormalizationChange::Conflict {
-                    retained_field: "img2img.mask",
-                },
-            );
-            references.vibe_transfer = None;
-        }
-
-        if references.is_empty() {
-            params.references = None;
-        }
         Ok(())
     }
 
@@ -476,9 +451,19 @@ impl Normalizer {
             return Ok(());
         };
 
-        img2img.strength =
-            self.normalize_f32_range("img2img.strength", img2img.strength, 0.01, 0.99)?;
-        img2img.noise = self.normalize_f32_range("img2img.noise", img2img.noise, 0.0, 0.99)?;
+        let limits = self.constraints;
+        img2img.strength = self.normalize_f32_range(
+            "img2img.strength",
+            img2img.strength,
+            limits.img2img_strength.min,
+            limits.img2img_strength.max,
+        )?;
+        img2img.noise = self.normalize_f32_range(
+            "img2img.noise",
+            img2img.noise,
+            limits.img2img_noise.min,
+            limits.img2img_noise.max,
+        )?;
         Ok(())
     }
 
@@ -571,52 +556,53 @@ impl Normalizer {
         field_name: &str,
         value: u32,
     ) -> Result<u32, BridgeError> {
+        let limits = self.constraints.canvas;
         if self.reject
-            && (!(IMAGE_DIMENSION_MIN..=IMAGE_DIMENSION_MAX).contains(&value)
-                || !value.is_multiple_of(IMAGE_DIMENSION_MULTIPLE))
+            && (!(limits.dimension.min..=limits.dimension.max).contains(&value)
+                || !value.is_multiple_of(limits.multiple))
         {
             return Err(InvalidRequest::InvalidImageDimension {
                 field: field_name.to_owned(),
                 value,
-                min: IMAGE_DIMENSION_MIN,
-                max: IMAGE_DIMENSION_MAX,
-                multiple_of: IMAGE_DIMENSION_MULTIPLE,
+                min: limits.dimension.min,
+                max: limits.dimension.max,
+                multiple_of: limits.multiple,
             }
             .into());
         }
 
-        let clamped = value.clamp(IMAGE_DIMENSION_MIN, IMAGE_DIMENSION_MAX);
-        let snapped = ((clamped + (IMAGE_DIMENSION_MULTIPLE / 2)) / IMAGE_DIMENSION_MULTIPLE)
-            * IMAGE_DIMENSION_MULTIPLE;
-        let effective = snapped.clamp(IMAGE_DIMENSION_MIN, IMAGE_DIMENSION_MAX);
+        let clamped = value.clamp(limits.dimension.min, limits.dimension.max);
+        let snapped = ((clamped + (limits.multiple / 2)) / limits.multiple) * limits.multiple;
+        let effective = snapped.clamp(limits.dimension.min, limits.dimension.max);
         self.adjusted(field_name, f64::from(value), f64::from(effective));
         Ok(effective)
     }
 
     /// Shrinks a canvas that exceeds the API pixel budget, keeping the 64 pixel grid.
     fn normalize_canvas_area(&mut self, size: ImageSize) -> Result<ImageSize, BridgeError> {
-        if size.pixels() <= MAX_IMAGE_PIXELS {
+        let limits = self.constraints.canvas;
+        if size.pixels() <= limits.max_pixels {
             return Ok(size);
         }
         if self.reject {
             return Err(InvalidRequest::InvalidImageDimension {
                 field: "size".to_owned(),
                 value: size.width,
-                min: IMAGE_DIMENSION_MIN,
-                max: IMAGE_DIMENSION_MAX,
-                multiple_of: IMAGE_DIMENSION_MULTIPLE,
+                min: limits.dimension.min,
+                max: limits.dimension.max,
+                multiple_of: limits.multiple,
             }
             .into());
         }
 
         let mut shrunk = size;
-        while shrunk.pixels() > MAX_IMAGE_PIXELS {
-            if (shrunk.width >= shrunk.height && shrunk.width > IMAGE_DIMENSION_MIN)
-                || shrunk.height == IMAGE_DIMENSION_MIN
+        while shrunk.pixels() > limits.max_pixels {
+            if (shrunk.width >= shrunk.height && shrunk.width > limits.dimension.min)
+                || shrunk.height == limits.dimension.min
             {
-                shrunk.width -= IMAGE_DIMENSION_MULTIPLE;
+                shrunk.width -= limits.multiple;
             } else {
-                shrunk.height -= IMAGE_DIMENSION_MULTIPLE;
+                shrunk.height -= limits.multiple;
             }
         }
         self.adjusted("size.width", f64::from(size.width), f64::from(shrunk.width));

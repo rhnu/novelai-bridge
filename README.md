@@ -17,6 +17,35 @@ Scope:
 
 Supported models: NovelAI Diffusion V5, V4.5, V4, V3 and Furry V3.
 
+The default model is `Model::NaiDiffusion5Full` (`nai-diffusion-5-full`), with guidance scale 7.
+
+## Model descriptors
+
+`Model::descriptor()` returns a read-only registry entry with separate identity, support,
+constraints, defaults, prompt, sampling, wire and pricing profiles. Builders, normalization,
+tokenization, pricing and sending all consume these profiles.
+
+```rust
+use novelai_bridge::{GenerationMode, Model, ReferenceIntent};
+
+let descriptor = Model::NaiDiffusion45Full.descriptor();
+assert_eq!(descriptor.prompt().token_limit, 512);
+let references = descriptor.resolve_references(
+    GenerationMode::ImageToImage,
+    ReferenceIntent { vibe: true, character: true },
+);
+assert!(references.character.is_available());
+assert!(!references.vibe.is_available());
+```
+
+Optional profiles bind capability and parameters together: an inpainting sibling supplies its
+model ID, a character-reference profile supplies its allowed modes, and variety boost supplies
+its sigma coefficient. V5 has no reference profiles. V3's provider-only legacy vibe path remains
+inspectable but cannot be encoded or sent by this bridge.
+
+`ModelCapabilities` and `capabilities()` have been removed. See
+[model descriptors and migration](docs/model-descriptors.md) for replacements and design decisions.
+
 ## Local prompt token counts
 
 The default `tokenizer` feature provides CLIP, T5 and Qwen encoders. Disable default features to
@@ -136,8 +165,8 @@ Disclaimer:
 
 Notes:
 
-- `Model::capabilities()` describes what a model family supports; request assembly and validation
-  are driven entirely by it, and callers can use it to gate their own UI.
+- `Model::descriptor()` describes static model knowledge; `resolve_references(mode, intent)`
+  answers request-specific reference availability using the same rules as normalization.
 - Request fields are grouped by capability. A group the selected model does not support is
   rejected in `strict_mode` and dropped with a normalization diagnostic otherwise. Inspect a plan
   before sending when these decisions need to be displayed; they are no longer only log warnings.

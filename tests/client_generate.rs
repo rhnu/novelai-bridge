@@ -1240,7 +1240,7 @@ async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
 }
 
 #[test]
-fn sampling_defaults_follow_model_capabilities() {
+fn sampling_defaults_follow_model_descriptors() {
     let v5 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build();
     let v45 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full).build();
     let v4 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full).build();
@@ -1254,36 +1254,31 @@ fn sampling_defaults_follow_model_capabilities() {
 }
 
 #[test]
-fn capabilities_describe_each_model_family() {
-    let v5 = Model::NaiDiffusion5Full.capabilities();
-    assert!(v5.uses_v5_extensions);
-    assert_eq!(v5.params_version, 4);
-    // V5 drops variety boost, vibe transfer and character reference entirely.
-    assert!(!v5.supports_variety_boost);
-    assert!(!v5.supports_vibe_transfer);
-    assert!(!v5.supports_encoded_vibe);
-    assert!(!v5.supports_character_reference);
+fn descriptors_describe_each_model_family() {
+    let v5 = Model::NaiDiffusion5Full.descriptor();
+    assert!(v5.wire().uses_v5_extensions());
+    assert_eq!(v5.wire().params_version(), 4);
+    assert!(v5.sampling().variety.is_none());
+    assert!(v5.support().vibe.is_none());
+    assert!(!v5.can_encode_vibe());
+    assert!(v5.support().character_reference.is_none());
     assert_eq!(Model::NaiDiffusion5Full.vibe_model_key(), None);
-    assert!(v5.supports_streaming);
-
-    assert_eq!(Model::NaiDiffusion45Full.capabilities().params_version, 3);
+    assert!(v5.support().streaming);
+    let v45 = Model::NaiDiffusion45Full.descriptor();
+    assert_eq!(v45.wire().params_version(), 3);
+    assert!(v45.support().character_reference.is_some());
+    assert!(!v45.sampling().smea);
     assert!(
-        Model::NaiDiffusion45Full
-            .capabilities()
-            .supports_character_reference
+        Model::NaiDiffusion4Full
+            .descriptor()
+            .support()
+            .character_reference
+            .is_none()
     );
-    assert!(
-        !Model::NaiDiffusion4Full
-            .capabilities()
-            .supports_character_reference
-    );
-    assert!(!Model::NaiDiffusion3.capabilities().supports_characters());
-    assert!(Model::NaiDiffusion3.capabilities().supports_smea);
-    assert!(!Model::NaiDiffusion3.capabilities().supports_streaming);
-    assert!(!Model::NaiDiffusion3Furry.capabilities().supports_streaming);
-    assert!(Model::NaiDiffusion4Full.capabilities().supports_streaming);
-    assert!(Model::NaiDiffusion45Full.capabilities().supports_streaming);
-    assert!(!Model::NaiDiffusion45Full.capabilities().supports_smea);
+    let v3 = Model::NaiDiffusion3.descriptor();
+    assert!(v3.prompt().characters.is_none());
+    assert!(v3.sampling().smea);
+    assert!(!v3.support().streaming);
 }
 
 #[test]
@@ -1432,8 +1427,8 @@ fn request_with_every_prompt_source(model: Model) -> GenerateImageRequest {
         .quality(QualityPreset::Standard)
         .uc_preset(UcPreset::Heavy)
         .build();
-    params.core.transparent_background = model.capabilities().supports_transparent_background;
-    if model.capabilities().supports_characters() {
+    params.core.transparent_background = model.descriptor().prompt().transparent_background;
+    if model.descriptor().prompt().characters.is_some() {
         params.characters = Some(CharacterSet::new(vec![
             Character {
                 prompt: "girl, blue hair".to_owned(),
@@ -1477,7 +1472,7 @@ async fn resolved_prompts_match_the_wire_payload_verbatim() {
             "{model:?} negative_prompt"
         );
 
-        if model.capabilities().uses_v4_prompt() {
+        if model.descriptor().wire().uses_structured_prompt() {
             assert_eq!(
                 parameters["v4_prompt"]["caption"]["base_caption"],
                 json!(resolved.prompt),

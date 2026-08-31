@@ -6,8 +6,8 @@ prompt weights or multiprompt syntax.
 
 ## Model selection
 
-`Model::capabilities()` supplies both the encoder kind and the limit for each conditioning field.
-These capabilities remain available without the `tokenizer` feature.
+`Model::descriptor().prompt()` supplies the encoder kind and an independent `token_limit` for
+each conditioning field. Descriptors remain available without the `tokenizer` feature.
 
 | Model family | Encoder | Tokens per field |
 | ------------ | ------- | ---------------: |
@@ -16,7 +16,7 @@ These capabilities remain available without the `tokenizer` feature.
 | NAI 5 Full | Qwen | 1471 |
 | NAI 5 Curated | Qwen | 703 |
 
-Inpainting uses the base model's capabilities. The limit is neither the vocabulary size nor a
+Inpainting uses the base model's prompt profile. The limit is neither the vocabulary size nor a
 combined budget for positive, negative and character prompts.
 
 ## Encoding

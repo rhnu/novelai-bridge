@@ -149,7 +149,7 @@ impl<T: Transport> Client<T> {
             self.tokenizers
                 .as_ref()
                 .ok_or_else(|| crate::TokenizerError::TokenizerNotLoaded {
-                    kind: request.capabilities().tokenizer,
+                    kind: request.descriptor().prompt().tokenizer,
                 })?;
         request.count_tokens(tokenizers)
     }

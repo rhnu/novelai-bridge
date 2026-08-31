@@ -6,19 +6,18 @@ use std::{
 use futures_core::Stream;
 pub use secrecy::SecretString;
 
-mod capability;
 mod client;
 mod credit;
 mod error;
 mod generation;
 pub(crate) mod internal;
 mod metadata;
+mod model;
 #[cfg(feature = "tokenizer")]
 mod tokenizer;
 mod transport;
 mod types;
 
-pub use capability::{ImageTokenizerKind, ModelCapabilities, PromptStructure};
 pub use client::{BaseUrls, Client, ClientOptions};
 pub use credit::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, CreditBalance,
@@ -38,6 +37,14 @@ pub use metadata::{
     extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
+pub use model::{
+    CanvasConstraints, CharacterPromptProfile, GenerationConstraints, GenerationMode,
+    ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
+    ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
+    PromptProfile, PromptStructure, QualitySupport, ReferenceAvailability, ReferenceIntent,
+    ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile, VarietyBoostProfile,
+    VibeInputPath, VibeProfile, WireProfile,
+};
 #[cfg(feature = "tokenizer")]
 pub use tokenizer::{
     CharacterTokenUsage, ClipTokenizer, FramingPolicy, ImageTokenizer, PromptField,
@@ -50,7 +57,7 @@ pub use types::{
     CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
     GenerateImageRequestBuilder, GenerateImageResult, GenerateImageStreamRequest, GeneratedImage,
     GenerationCore, GuidanceParams, ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest,
-    Model, NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, ResolvedCharacterPrompt,
+    NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, ResolvedCharacterPrompt,
     ResolvedPrompts, RunDirectorToolRequest, Sampler, SamplingParams, StreamMode, SubscriptionInfo,
     UcPreset, V5UsageStatus, VibeReference, VibeTransferConfig,
 };

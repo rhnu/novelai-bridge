@@ -82,7 +82,7 @@ impl<T: Transport> Client<T> {
         &self,
         params: GenerateImageStreamRequest,
     ) -> Result<GenerateImageStream, BridgeError> {
-        if !params.base.core.model.capabilities().supports_streaming {
+        if !params.base.core.model.descriptor().support().streaming {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "generate_stream".to_owned(),
                 required_model: "V4 and later image models".to_owned(),
@@ -109,8 +109,9 @@ impl<T: Transport> Client<T> {
         if !prepared
             .normalized()
             .request()
-            .capabilities()
-            .supports_streaming
+            .descriptor()
+            .support()
+            .streaming
         {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "generate_stream".to_owned(),

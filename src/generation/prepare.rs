@@ -1,7 +1,7 @@
 use super::NormalizedGeneration;
 use crate::{
-    BridgeError, GenerateImageRequest, InvalidRequest, ModelCapabilities, ResolvedPrompts,
-    VibeTransferConfig,
+    BridgeError, GenerateImageRequest, GenerationMode, InvalidRequest, ModelDescriptor,
+    ResolvedPrompts, VibeTransferConfig,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
@@ -54,32 +54,6 @@ pub(super) fn prepare(normalized: NormalizedGeneration) -> Result<PreparedGenera
     })
 }
 
-/// Wire `action` selected from the request shape.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum GenerationAction {
-    Generate,
-    Img2Img,
-    Infill,
-}
-
-impl GenerationAction {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Generate => "generate",
-            Self::Img2Img => "img2img",
-            Self::Infill => "infill",
-        }
-    }
-
-    const fn of(params: &GenerateImageRequest) -> Self {
-        match params.img2img.as_ref() {
-            None => Self::Generate,
-            Some(img2img) if img2img.is_infill() => Self::Infill,
-            Some(_) => Self::Img2Img,
-        }
-    }
-}
-
 struct VibeWireParts {
     images: Vec<String>,
     strengths: Vec<f32>,
@@ -112,16 +86,24 @@ fn build_generate_request(
     resolved_seed: i64,
 ) -> Result<ImageGenerationRequestBody, BridgeError> {
     let params = normalized.request();
-    let action = GenerationAction::of(params);
-    let model = if action == GenerationAction::Infill {
-        params.core.model.inpainting_id()
-    } else {
-        params.core.model.as_str()
-    };
+    let action = params.mode();
+    let model = normalized
+        .request()
+        .descriptor()
+        .model_id_for(action)
+        .ok_or_else(|| InvalidRequest::UnsupportedModelFeature {
+            feature: "img2img.mask".to_owned(),
+            required_model: "models with an inpainting variant".to_owned(),
+        })?;
     let image_parameters = build_image_parameters(normalized, action, resolved_seed)?;
 
     Ok(ImageGenerationRequestBody {
-        action: action.as_str().to_owned(),
+        action: match action {
+            GenerationMode::TextToImage => "generate",
+            GenerationMode::ImageToImage => "img2img",
+            GenerationMode::Inpainting => "infill",
+        }
+        .to_owned(),
         input: params.core.prompt.clone(),
         model: model.to_owned(),
         use_new_shared_trial: true,
@@ -132,12 +114,12 @@ fn build_generate_request(
 #[allow(clippy::too_many_lines)]
 fn build_image_parameters(
     normalized: &NormalizedGeneration,
-    action: GenerationAction,
+    action: GenerationMode,
     resolved_seed: i64,
 ) -> Result<ImageParameters, BridgeError> {
     let params = normalized.request();
-    let capabilities = params.core.model.capabilities();
-    let uses_v4 = capabilities.uses_v4_prompt();
+    let descriptor = params.core.model.descriptor();
+    let uses_v4 = descriptor.wire().uses_structured_prompt();
     let resolved_use_coords = params
         .characters
         .as_ref()
@@ -146,7 +128,7 @@ fn build_image_parameters(
     let prompt = build_prompt_wire_parts(
         params,
         normalized.resolved_prompts(),
-        &capabilities,
+        descriptor,
         resolved_use_coords,
     );
     let img2img = build_img2img_wire_parts(params, action, resolved_seed)?;
@@ -165,11 +147,15 @@ fn build_image_parameters(
     let variety_sigma = params
         .guidance
         .variety_boost
-        .then(|| capabilities.variety_sigma(params.core.size.width, params.core.size.height))
+        .then(|| {
+            descriptor
+                .sampling()
+                .variety_sigma(params.core.size.width, params.core.size.height)
+        })
         .flatten();
 
     Ok(ImageParameters {
-        params_version: Some(capabilities.params_version),
+        params_version: Some(descriptor.wire().params_version()),
         width: Some(params.core.size.width),
         height: Some(params.core.size.height),
         steps: Some(params.sampling.steps),
@@ -215,17 +201,19 @@ fn build_image_parameters(
             .map(|value| value.strength_values.clone()),
         character_prompts: prompt.character_prompts,
         legacy: Some(false),
-        legacy_uc: capabilities.uses_v5_extensions.then_some(false),
+        legacy_uc: descriptor.wire().uses_v5_extensions().then_some(false),
         legacy_v3_extend: Some(false),
         deliberate_euler_ancestral_bug: Some(false),
         prefer_brownian: Some(true),
         auto_smea: Some(false),
-        sm: capabilities.supports_smea.then_some(params.guidance.smea),
-        sm_dyn: capabilities
-            .supports_smea
+        sm: descriptor.sampling().smea.then_some(params.guidance.smea),
+        sm_dyn: descriptor
+            .sampling()
+            .smea
             .then_some(params.guidance.smea_dyn),
-        dynamic_thresholding: capabilities
-            .supports_dynamic_thresholding
+        dynamic_thresholding: descriptor
+            .sampling()
+            .dynamic_thresholding
             .then_some(params.guidance.decrisp),
         add_original_image: Some(
             params
@@ -234,8 +222,9 @@ fn build_image_parameters(
                 .is_none_or(|img2img| img2img.add_original_image),
         ),
         inpaint_img2_img_strength: Some(img2img.inpaint_strength.unwrap_or(1.0)),
-        tag_hint_transparent_background: capabilities
-            .supports_transparent_background
+        tag_hint_transparent_background: descriptor
+            .prompt()
+            .transparent_background
             .then_some(params.core.transparent_background),
         use_coords: uses_v4.then_some(resolved_use_coords),
         image_format: params
@@ -268,7 +257,7 @@ fn encode_vibe_references(vibe: &VibeTransferConfig) -> Result<VibeWireParts, Br
 fn build_prompt_wire_parts(
     params: &GenerateImageRequest,
     resolved: &ResolvedPrompts,
-    capabilities: &ModelCapabilities,
+    descriptor: &ModelDescriptor,
     resolved_use_coords: bool,
 ) -> PromptWireParts {
     let characters = params
@@ -277,7 +266,7 @@ fn build_prompt_wire_parts(
         .map(|set| set.characters.as_slice())
         .unwrap_or_default();
 
-    if capabilities.uses_v4_prompt() {
+    if descriptor.wire().uses_structured_prompt() {
         let char_prompts = build_v4_character_captions(
             characters,
             &resolved.characters,
@@ -333,7 +322,7 @@ fn build_prompt_wire_parts(
 
 fn build_img2img_wire_parts(
     params: &GenerateImageRequest,
-    action: GenerationAction,
+    action: GenerationMode,
     resolved_seed: i64,
 ) -> Result<Img2ImgWireParts, BridgeError> {
     let Some(img2img) = params.img2img.as_ref() else {
@@ -342,7 +331,7 @@ fn build_img2img_wire_parts(
 
     let image = fit_source_image("img2img.image", &img2img.image, params.core.size)?;
 
-    if action == GenerationAction::Infill {
+    if action == GenerationMode::Inpainting {
         let mask = img2img
             .mask
             .as_ref()

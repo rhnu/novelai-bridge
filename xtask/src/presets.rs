@@ -14,42 +14,39 @@ use crate::{Preset, RunArgs, render};
 
 /// Prints the capability registry for every model the crate knows about.
 pub fn print_capabilities() {
-    const MODELS: [Model; 8] = [
-        Model::NaiDiffusion5Full,
-        Model::NaiDiffusion5Curated,
-        Model::NaiDiffusion45Full,
-        Model::NaiDiffusion45Curated,
-        Model::NaiDiffusion4Full,
-        Model::NaiDiffusion4Curated,
-        Model::NaiDiffusion3,
-        Model::NaiDiffusion3Furry,
-    ];
-
-    for model in MODELS {
-        let caps = model.capabilities();
+    for model in Model::ALL {
+        let descriptor = model.descriptor();
         println!("{}", model.as_str());
-        println!("  inpainting id       {}", model.inpainting_id());
-        println!("  vibe metadata key   {:?}", model.vibe_model_key());
-        println!("  prompt structure    {:?}", caps.prompt_structure);
-        println!("  params_version      {}", caps.params_version);
+        println!("  inpainting id       {:?}", model.inpainting_id());
+        println!("  vibe profile        {:?}", descriptor.support().vibe);
+        println!("  can encode vibe     {}", descriptor.can_encode_vibe());
+        println!(
+            "  character reference {:?}",
+            descriptor.support().character_reference
+        );
+        println!("  wire profile        {:?}", descriptor.wire());
+        println!(
+            "  params_version      {}",
+            descriptor.wire().params_version()
+        );
+        let defaults = descriptor.defaults();
         println!(
             "  factory sampling    steps {} / scale {}",
-            caps.default_steps, caps.default_scale
+            defaults.sampling.steps, defaults.sampling.scale
         );
-        println!("  max characters      {}", caps.max_characters);
-        println!("  prompt tokens       {}", caps.prompt_token_limit);
-        println!("  tokenizer           {}", caps.tokenizer.as_str());
         println!(
-            "  supports            vibe={} encoded_vibe={} charref={} variety={} inpaint={} smea={} decrisp={}",
-            caps.supports_vibe_transfer,
-            caps.supports_encoded_vibe,
-            caps.supports_character_reference,
-            caps.supports_variety_boost,
-            caps.supports_inpainting,
-            caps.supports_smea,
-            caps.supports_dynamic_thresholding,
+            "  max characters      {}",
+            descriptor.prompt().max_characters()
         );
-        if let Some(sigma) = caps.variety_sigma(832, 1216) {
+        println!("  prompt tokens       {}", descriptor.prompt().token_limit);
+        println!(
+            "  tokenizer           {}",
+            descriptor.prompt().tokenizer.as_str()
+        );
+        println!("  sampling support    {:?}", descriptor.sampling());
+        println!("  pricing profile     {:?}", descriptor.pricing());
+        println!("  streaming           {}", descriptor.support().streaming);
+        if let Some(sigma) = descriptor.sampling().variety_sigma(832, 1216) {
             println!("  variety sigma @832x1216  {sigma}");
         }
         println!();

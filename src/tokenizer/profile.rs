@@ -40,7 +40,7 @@ impl FramingPolicy {
 pub struct TokenCount {
     /// Number of tokens the encoded text produced under the selected framing policy.
     pub used: u32,
-    /// The selected model's [`crate::ModelCapabilities::prompt_token_limit`].
+    /// The selected model's [`crate::PromptProfile::token_limit`].
     pub limit: u32,
 }
 

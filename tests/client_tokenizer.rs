@@ -127,7 +127,7 @@ async fn strict_limits_reject_each_field_before_transport() {
             assert!(
                 matches!(client.generate(params).await, Err(BridgeError::InvalidRequest(
                 InvalidRequest::PromptTokenLimitExceeded { field, used, limit }
-            )) if field == expected && used > limit && limit == model.capabilities().prompt_token_limit)
+            )) if field == expected && used > limit && limit == model.descriptor().prompt().token_limit)
             );
             assert!(transport.last_body().is_none());
         }
@@ -285,7 +285,7 @@ async fn non_strict_normalization_and_tokenizer_injection_do_not_change_wire() {
             .unwrap();
         assert_eq!(with.last_body(), without.last_body());
         let body = with.last_body().unwrap();
-        let prompt = if model.capabilities().uses_v4_prompt() {
+        let prompt = if model.descriptor().wire().uses_structured_prompt() {
             &body["parameters"]["v4_prompt"]["caption"]["base_caption"]
         } else {
             &body["parameters"]["prompt"]

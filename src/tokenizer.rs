@@ -89,7 +89,7 @@ pub struct CharacterTokenUsage {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PromptTokenUsage {
-    /// Encoder the model's capabilities selected.
+    /// Encoder the model's descriptor selected.
     pub tokenizer: ImageTokenizerKind,
     /// The model's prompt token limit, repeated on every [`TokenCount`] for convenience.
     pub limit: u32,
@@ -223,16 +223,16 @@ impl crate::NormalizedGeneration {
         tokenizers: &Tokenizers,
         framing: FramingPolicy,
     ) -> Result<PromptTokenUsage, TokenizerError> {
-        let capabilities = self.request().capabilities();
+        let descriptor = self.request().descriptor();
         let encoder = tokenizers.require_for_model(self.request().core.model)?;
         let resolved = self.resolved_prompts();
-        let limit = capabilities.prompt_token_limit;
+        let limit = descriptor.prompt().token_limit;
         let count = |text: &str| -> Result<TokenCount, TokenizerError> {
             Ok(TokenCount::new(encoder.count(text, framing)?, limit))
         };
 
         Ok(PromptTokenUsage {
-            tokenizer: capabilities.tokenizer,
+            tokenizer: descriptor.prompt().tokenizer,
             limit,
             prompt: count(&resolved.prompt)?,
             negative_prompt: count(&resolved.negative_prompt)?,

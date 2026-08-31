@@ -1,7 +1,7 @@
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::{ModelCapabilities, metadata::GeneratedImageMetadata};
+use crate::{GenerationMode, Model, ModelDescriptor, metadata::GeneratedImageMetadata};
 
 const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
 const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
@@ -18,87 +18,6 @@ pub enum ApiKeySource {
     Environment,
     /// Use an explicitly provided API key value.
     Inline { value: SecretString },
-}
-
-/// Supported `NovelAI` image models.
-///
-/// Inpainting siblings are not separate variants; they are derived from the base model through
-/// [`Model::inpainting_id`] when a request carries an inpaint mask.
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Model {
-    /// `nai-diffusion-5-full`
-    #[serde(rename = "nai-diffusion-5-full")]
-    NaiDiffusion5Full,
-    /// `nai-diffusion-5-curated`
-    #[serde(rename = "nai-diffusion-5-curated")]
-    NaiDiffusion5Curated,
-    /// `nai-diffusion-4-5-full`
-    #[serde(rename = "nai-diffusion-4-5-full")]
-    #[default]
-    NaiDiffusion45Full,
-    /// `nai-diffusion-4-5-curated`
-    #[serde(rename = "nai-diffusion-4-5-curated")]
-    NaiDiffusion45Curated,
-    /// `nai-diffusion-4-full`
-    #[serde(rename = "nai-diffusion-4-full")]
-    NaiDiffusion4Full,
-    /// `nai-diffusion-4-curated`
-    #[serde(rename = "nai-diffusion-4-curated")]
-    NaiDiffusion4Curated,
-    /// `nai-diffusion-3`
-    #[serde(rename = "nai-diffusion-3")]
-    NaiDiffusion3,
-    /// `nai-diffusion-furry-3`
-    #[serde(rename = "nai-diffusion-furry-3")]
-    NaiDiffusion3Furry,
-}
-
-impl Model {
-    /// Returns the API model identifier.
-    #[must_use]
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::NaiDiffusion5Full => "nai-diffusion-5-full",
-            Self::NaiDiffusion5Curated => "nai-diffusion-5-curated",
-            Self::NaiDiffusion45Full => "nai-diffusion-4-5-full",
-            Self::NaiDiffusion45Curated => "nai-diffusion-4-5-curated",
-            Self::NaiDiffusion4Full => "nai-diffusion-4-full",
-            Self::NaiDiffusion4Curated => "nai-diffusion-4-curated",
-            Self::NaiDiffusion3 => "nai-diffusion-3",
-            Self::NaiDiffusion3Furry => "nai-diffusion-furry-3",
-        }
-    }
-
-    /// Returns the API identifier of the inpainting sibling used by infill requests.
-    #[must_use]
-    pub const fn inpainting_id(&self) -> &'static str {
-        match self {
-            Self::NaiDiffusion5Full => "nai-diffusion-5-full-inpainting",
-            Self::NaiDiffusion5Curated => "nai-diffusion-5-curated-inpainting",
-            Self::NaiDiffusion45Full => "nai-diffusion-4-5-full-inpainting",
-            Self::NaiDiffusion45Curated => "nai-diffusion-4-5-curated-inpainting",
-            Self::NaiDiffusion4Full => "nai-diffusion-4-full-inpainting",
-            Self::NaiDiffusion4Curated => "nai-diffusion-4-curated-inpainting",
-            Self::NaiDiffusion3 => "nai-diffusion-3-inpainting",
-            Self::NaiDiffusion3Furry => "nai-diffusion-furry-3-inpainting",
-        }
-    }
-
-    /// Returns the model key used by vibe metadata payloads.
-    ///
-    /// Returns `None` for model families that do not support vibe transfer at all.
-    #[must_use]
-    pub const fn vibe_model_key(&self) -> Option<&'static str> {
-        match self {
-            Self::NaiDiffusion5Full | Self::NaiDiffusion5Curated => None,
-            Self::NaiDiffusion45Full => Some("v4-5full"),
-            Self::NaiDiffusion45Curated => Some("v4-5curated"),
-            Self::NaiDiffusion4Full => Some("v4full"),
-            Self::NaiDiffusion4Curated => Some("v4curated"),
-            Self::NaiDiffusion3 => Some("v3"),
-            Self::NaiDiffusion3Furry => Some("v3furry"),
-        }
-    }
 }
 
 /// Supported image samplers.
@@ -185,18 +104,6 @@ impl NoiseSchedule {
             Self::Polyexponential => "polyexponential",
         }
     }
-
-    /// Returns the schedule actually accepted by a model family.
-    ///
-    /// V4 and later reject `native`; the `NovelAI` web client sends `karras` instead.
-    #[must_use]
-    pub const fn resolve_for(self, capabilities: &ModelCapabilities) -> Self {
-        if capabilities.uses_v4_prompt() && matches!(self, Self::Native) {
-            Self::Karras
-        } else {
-            self
-        }
-    }
 }
 
 /// Built-in UC presets supported by `NovelAI`.
@@ -247,7 +154,7 @@ impl UcPreset {
 /// Built-in quality tag presets appended to the positive prompt.
 ///
 /// V5 exposes all three; earlier families only offer the equivalent of [`QualityPreset::Standard`]
-/// and [`QualityPreset::None`], gated by [`ModelCapabilities::supports_light_quality_preset`].
+/// and [`QualityPreset::None`], gated by [`crate::PromptProfile::quality`].
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QualityPreset {
@@ -651,7 +558,7 @@ pub struct GenerationCore {
     /// Requests a transparent background.
     ///
     /// This is a prompt-level feature: it appends a `transparent background` tag and sets the
-    /// matching wire hint. Requires [`ModelCapabilities::supports_transparent_background`].
+    /// matching wire hint. Requires [`crate::PromptProfile::transparent_background`].
     pub transparent_background: bool,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
@@ -661,10 +568,17 @@ impl GenerationCore {
     /// Creates the core fields for a prompt and model, using the canvas and seed defaults.
     #[must_use]
     pub fn new(prompt: impl Into<String>, model: Model) -> Self {
+        let defaults = model.descriptor().defaults();
         Self {
             prompt: prompt.into(),
+            negative_prompt: None,
             model,
-            ..Self::default()
+            size: defaults.size,
+            seed: 0,
+            n_samples: defaults.n_samples,
+            quality: defaults.quality,
+            transparent_background: false,
+            uc_preset: defaults.uc_preset,
         }
     }
 
@@ -731,17 +645,7 @@ pub struct ResolvedCharacterPrompt {
 
 impl Default for GenerationCore {
     fn default() -> Self {
-        Self {
-            prompt: String::new(),
-            negative_prompt: None,
-            model: Model::default(),
-            size: ImageSize::default(),
-            seed: 0,
-            n_samples: 1,
-            quality: QualityPreset::default(),
-            transparent_background: false,
-            uc_preset: UcPreset::default(),
-        }
+        Self::new(String::new(), Model::default())
     }
 }
 
@@ -763,26 +667,14 @@ pub struct SamplingParams {
 impl SamplingParams {
     /// Returns the factory defaults registered for a model.
     #[must_use]
-    pub fn for_model(model: Model) -> Self {
-        let capabilities = model.capabilities();
-        Self {
-            steps: capabilities.default_steps,
-            scale: capabilities.default_scale,
-            ..Self::default()
-        }
+    pub const fn for_model(model: Model) -> Self {
+        model.descriptor().defaults().sampling
     }
 }
 
 impl Default for SamplingParams {
     fn default() -> Self {
-        let capabilities = Model::default().capabilities();
-        Self {
-            steps: capabilities.default_steps,
-            scale: capabilities.default_scale,
-            sampler: Sampler::default(),
-            noise_schedule: NoiseSchedule::default(),
-            cfg_rescale: 0.0,
-        }
+        Self::for_model(Model::default())
     }
 }
 
@@ -792,19 +684,19 @@ impl Default for SamplingParams {
 pub struct GuidanceParams {
     /// Enables `NovelAI`'s variety boost (`skip_cfg_above_sigma`).
     ///
-    /// Requires [`ModelCapabilities::supports_variety_boost`].
+    /// Requires [`crate::SamplingProfile::variety`].
     pub variety_boost: bool,
     /// Enables decrisp (`dynamic_thresholding`).
     ///
-    /// Requires [`ModelCapabilities::supports_dynamic_thresholding`].
+    /// Requires [`crate::SamplingProfile::dynamic_thresholding`].
     pub decrisp: bool,
     /// Enables SMEA.
     ///
-    /// Requires [`ModelCapabilities::supports_smea`].
+    /// Requires [`crate::SamplingProfile::smea`].
     pub smea: bool,
     /// Enables dynamic SMEA.
     ///
-    /// Requires [`ModelCapabilities::supports_smea`].
+    /// Requires [`crate::SamplingProfile::smea`].
     pub smea_dyn: bool,
 }
 
@@ -826,7 +718,7 @@ pub struct OutputParams {
 /// Request used by [`crate::Client::generate`].
 ///
 /// Fields are grouped by capability: an optional group is only accepted when
-/// [`Model::capabilities`] reports support for it.
+/// [`Model::descriptor`] reports support for it.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct GenerateImageRequest {
     /// Prompt, model, canvas and seed.
@@ -854,10 +746,20 @@ impl GenerateImageRequest {
         GenerateImageRequestBuilder::new(prompt, model)
     }
 
-    /// Returns the capabilities of the selected model.
+    /// Returns the read-only descriptor of the selected model.
     #[must_use]
-    pub const fn capabilities(&self) -> ModelCapabilities {
-        self.core.model.capabilities()
+    pub const fn descriptor(&self) -> &'static ModelDescriptor {
+        self.core.model.descriptor()
+    }
+
+    /// Returns the generation mode represented by the raw request shape.
+    #[must_use]
+    pub const fn mode(&self) -> GenerationMode {
+        match self.img2img.as_ref() {
+            None => GenerationMode::TextToImage,
+            Some(input) if input.is_infill() => GenerationMode::Inpainting,
+            Some(_) => GenerationMode::ImageToImage,
+        }
     }
 
     /// Assembles already-normalized input; callers must use the generation boundary.

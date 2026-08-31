@@ -22,13 +22,11 @@ const FREE_VIBE_REFERENCE_COUNT: u32 = 4;
 const OPUS_FREE_PIXELS: u64 = 1024 * 1024;
 /// Opus free-generation step ceiling.
 const OPUS_FREE_STEPS: u32 = 28;
-/// Maximum number of images accepted by the generation request API.
-const MAX_REQUEST_SAMPLES: u32 = 4;
 /// Maximum number of images in the pricing formula's resolution table.
 ///
 /// The formula documents an 8-image cap for very small canvases, but the current generation API
 /// accepts only 1–4 in `n_samples`. The effective cap exposed by the estimator is therefore the
-/// smaller of this table value and [`MAX_REQUEST_SAMPLES`].
+/// smaller of this table value and the model's request sample constraint.
 const MAX_PRICING_SAMPLES: u32 = 8;
 /// Highest per-image price accepted by the web client.
 const MAX_PER_IMAGE_COST: u32 = 140;
@@ -315,14 +313,16 @@ pub struct AnlasEstimateInput {
 
 impl Default for AnlasEstimateInput {
     fn default() -> Self {
+        let model = Model::default();
+        let defaults = model.descriptor().defaults();
         Self {
-            model: Model::default(),
-            size: ImageSize::default(),
-            steps: 23,
-            sampler: Sampler::default(),
+            model,
+            size: defaults.size,
+            steps: defaults.sampling.steps,
+            sampler: defaults.sampling.sampler,
             smea: false,
             smea_dyn: false,
-            n_samples: 1,
+            n_samples: defaults.n_samples,
             img2img_strength: None,
             inpaint_img2img_strength: None,
             has_inpaint_mask: false,
@@ -465,8 +465,8 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     } else {
         1.0
     };
-    let capabilities = input.model.capabilities();
-    let base_cost = base * smea_multiplier * capabilities.anlas_cost_multiplier;
+    let descriptor = input.model.descriptor();
+    let base_cost = base * smea_multiplier * descriptor.pricing().multiplier;
     let strength = effective_strength(&input);
     let per_image = saturating_u32((base_cost * strength).ceil()).max(2);
     let status = if per_image > MAX_PER_IMAGE_COST {
@@ -476,19 +476,20 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     };
 
     let requested_samples = input.n_samples;
-    let api_samples = requested_samples.clamp(1, MAX_REQUEST_SAMPLES);
-    let sample_limit = pricing_sample_limit(pixels).min(MAX_REQUEST_SAMPLES);
+    let sample_range = descriptor.constraints().samples;
+    let api_samples = requested_samples.clamp(sample_range.min, sample_range.max);
+    let sample_limit = pricing_sample_limit(pixels).min(sample_range.max);
     let priced_samples = api_samples.min(sample_limit);
     let character_reference_count = chargeable_character_reference_count(&input);
     let character_reference = character_reference_count
         .saturating_mul(CHARACTER_REFERENCE_COST)
         .saturating_mul(priced_samples);
-    let vibe_encoding = if capabilities.supports_encoded_vibe {
+    let vibe_encoding = if descriptor.can_encode_vibe() {
         input.pending_vibe_encodes.saturating_mul(VIBE_ENCODE_COST)
     } else {
         0
     };
-    let vibe_reference_overage = if capabilities.supports_encoded_vibe {
+    let vibe_reference_overage = if descriptor.can_encode_vibe() {
         input
             .vibe_reference_count
             .saturating_sub(FREE_VIBE_REFERENCE_COUNT)
@@ -588,9 +589,24 @@ pub const fn estimate_director_tool_cost(size: ImageSize, context: AnlasPricingC
 }
 
 const fn chargeable_character_reference_count(input: &AnlasEstimateInput) -> u32 {
-    let capabilities = input.model.capabilities();
-    let references_allowed = capabilities.supports_character_reference
-        && (!input.has_inpaint_mask || capabilities.supports_character_reference_inpainting);
+    let descriptor = input.model.descriptor();
+    let mode = if input.has_inpaint_mask {
+        crate::GenerationMode::Inpainting
+    } else if input.img2img_strength.is_some() {
+        crate::GenerationMode::ImageToImage
+    } else {
+        crate::GenerationMode::TextToImage
+    };
+    let references_allowed = descriptor
+        .resolve_references(
+            mode,
+            crate::ReferenceIntent {
+                vibe: false,
+                character: true,
+            },
+        )
+        .character
+        .is_available();
     if references_allowed {
         input.character_reference_count
     } else {
@@ -604,14 +620,17 @@ const fn is_free_first_image_eligible(
     character_reference_count: u32,
     capped_samples: u32,
 ) -> bool {
-    let capabilities = input.model.capabilities();
+    let descriptor = input.model.descriptor();
     input.context.tier >= 3
         && input.context.subscription_active
         && !input.context.free_first_image_used
         && character_reference_count == 0
         && pixels <= OPUS_FREE_PIXELS
         && input.steps <= OPUS_FREE_STEPS
-        && !(capabilities.has_opus_usage_limit && input.context.v5_usage_is_negative)
+        && !(matches!(
+            descriptor.pricing().opus_allowance,
+            crate::OpusAllowance::Metered
+        ) && input.context.v5_usage_is_negative)
         && capped_samples > 0
 }
 

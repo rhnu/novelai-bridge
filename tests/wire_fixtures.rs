@@ -27,7 +27,7 @@ async fn valid_generation_payloads_match_reviewed_fixtures() {
             format!("{}/generate", model.as_str()),
             transport.last_body().unwrap(),
         );
-        if model.capabilities().supports_streaming {
+        if model.descriptor().support().streaming {
             let _stream = client
                 .generate_stream(GenerateImageStreamRequest {
                     base: request,
