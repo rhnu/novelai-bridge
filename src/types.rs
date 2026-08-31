@@ -668,23 +668,28 @@ impl GenerationCore {
         }
     }
 
-    /// Returns the positive prompt after applying the transparency and quality tags.
-    #[must_use]
-    pub fn processed_prompt(&self) -> String {
+    /// Assembles the positive prompt from every contributing source.
+    fn assemble_prompt(&self) -> String {
         let mut prompt = self.prompt.clone();
-        if self.transparent_background {
+        let caps = self.model.capabilities();
+        if self.transparent_background && caps.supports_transparent_background {
             prompt.push_str(TRANSPARENT_BACKGROUND_TAG);
         }
-        prompt.push_str(self.quality.tags());
+        let quality = if self.quality == QualityPreset::Light && !caps.supports_light_quality_preset
+        {
+            QualityPreset::Standard
+        } else {
+            self.quality
+        };
+        prompt.push_str(quality.tags());
         prompt
     }
 
-    /// Returns the negative prompt after merging the selected UC preset text.
+    /// Assembles the negative prompt from every contributing source.
     ///
-    /// The preset text is placed before the caller's negative prompt, matching the `NovelAI`
+    /// The UC preset text is placed before the caller's negative prompt, matching the `NovelAI`
     /// web client.
-    #[must_use]
-    pub fn processed_negative_prompt(&self) -> String {
+    fn assemble_negative_prompt(&self) -> String {
         let preset = self.uc_preset.preset_text();
         let negative = self.negative_prompt.as_deref().unwrap_or_default();
         match (preset.is_empty(), negative.is_empty()) {
@@ -693,6 +698,42 @@ impl GenerationCore {
             (false, false) => format!("{preset}, {negative}"),
         }
     }
+}
+
+/// Final conditioning text a request will actually send, per field.
+///
+/// A prompt is contributed to by several sources: the caller's text, the transparent-background
+/// tag, [`QualityPreset`] tags and the [`UcPreset`] text. Anything that inspects prompt text —
+/// most importantly token counting — must look at the assembled result rather than at
+/// [`GenerationCore::prompt`], or it will under-report. Request building and token counting both
+/// read this one type, so the counted text cannot drift from the sent text.
+///
+/// Obtain a value through [`GenerateImageRequest::resolve_prompts`].
+#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResolvedPrompts {
+    /// Positive prompt including the transparency and quality tags.
+    pub prompt: String,
+    /// Negative prompt including the UC preset text.
+    pub negative_prompt: String,
+    /// Character prompts in request order, empty when the model has no character support.
+    ///
+    /// Disabled characters are omitted; original indices are preserved.
+    pub characters: Vec<ResolvedCharacterPrompt>,
+}
+
+/// Final conditioning text for one character prompt.
+///
+/// Character prompts receive neither quality tags nor UC preset text; they are sent as written.
+#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResolvedCharacterPrompt {
+    /// Index in the originating [`CharacterSet::characters`].
+    pub index: usize,
+    /// Positive character prompt.
+    pub prompt: String,
+    /// Negative character prompt, empty when unset.
+    pub negative_prompt: String,
 }
 
 impl Default for GenerationCore {
@@ -826,16 +867,38 @@ impl GenerateImageRequest {
         self.core.model.capabilities()
     }
 
-    /// Returns the positive prompt after applying built-in quality tags.
+    /// Returns the final conditioning text this request will send, per field.
+    ///
+    /// This is the single prompt-assembly entry point: it merges the transparency tag, quality
+    /// tags and UC preset text into the caller's prompts. Request building and token counting
+    /// both consume it, so the text that is counted is by construction the text that is sent.
     #[must_use]
-    pub fn processed_prompt(&self) -> String {
-        self.core.processed_prompt()
-    }
+    pub fn resolve_prompts(&self) -> ResolvedPrompts {
+        let characters = if self.capabilities().supports_characters() {
+            self.characters
+                .as_ref()
+                .map(|set| {
+                    set.characters
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, character)| character.enabled)
+                        .map(|(index, character)| ResolvedCharacterPrompt {
+                            index,
+                            prompt: character.prompt.clone(),
+                            negative_prompt: character.negative_prompt.clone().unwrap_or_default(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
-    /// Returns the negative prompt after merging the selected UC preset text.
-    #[must_use]
-    pub fn processed_negative_prompt(&self) -> String {
-        self.core.processed_negative_prompt()
+        ResolvedPrompts {
+            prompt: self.core.assemble_prompt(),
+            negative_prompt: self.core.assemble_negative_prompt(),
+            characters,
+        }
     }
 }
 

@@ -72,6 +72,8 @@ impl Default for BaseUrls {
 /// normalization, but it intentionally does not parse or reject prompt syntax locally.
 #[derive(Clone)]
 pub struct Client<T: Transport> {
+    #[cfg(feature = "tokenizer")]
+    pub(super) tokenizers: Option<Arc<crate::Tokenizers>>,
     pub(super) transport: Arc<T>,
     pub(super) base_urls: BaseUrls,
     pub(super) credit_observer: Option<Arc<dyn CreditObserver>>,
@@ -110,6 +112,8 @@ impl<T: Transport> Client<T> {
     pub fn with_transport_and_base_urls(transport: T, base_urls: BaseUrls) -> Self {
         Self {
             transport: Arc::new(transport),
+            #[cfg(feature = "tokenizer")]
+            tokenizers: None,
             base_urls,
             credit_observer: None,
             request_counter: Arc::new(AtomicU64::new(1)),
@@ -122,6 +126,32 @@ impl<T: Transport> Client<T> {
     pub fn with_credit_observer(mut self, observer: Arc<dyn CreditObserver>) -> Self {
         self.credit_observer = Some(observer);
         self
+    }
+
+    /// Attaches shared local tokenizers. Generation checks each resolved prompt before transport.
+    #[cfg(feature = "tokenizer")]
+    #[must_use]
+    pub fn with_tokenizers(mut self, tokenizers: Arc<crate::Tokenizers>) -> Self {
+        self.tokenizers = Some(tokenizers);
+        self
+    }
+
+    /// Counts final conditioning fields locally using model-input framing.
+    ///
+    /// # Errors
+    /// Returns a tokenizer error if an encoder is missing or encoding fails.
+    #[cfg(feature = "tokenizer")]
+    pub fn count_tokens(
+        &self,
+        request: &GenerateImageRequest,
+    ) -> Result<crate::PromptTokenUsage, BridgeError> {
+        let tokenizers =
+            self.tokenizers
+                .as_ref()
+                .ok_or_else(|| crate::TokenizerError::TokenizerNotLoaded {
+                    kind: request.capabilities().tokenizer,
+                })?;
+        Ok(request.count_tokens(tokenizers)?)
     }
 
     /// Returns the most recently sampled account balance, if [`Client::get_subscription`] has run.

@@ -119,6 +119,8 @@ impl RequestFailure {
     #[must_use]
     pub const fn from_error(error: &BridgeError) -> Self {
         match error {
+            #[cfg(feature = "tokenizer")]
+            BridgeError::Tokenizer(_) => Self::InvalidRequest,
             BridgeError::InvalidRequest(_) => Self::InvalidRequest,
             BridgeError::Api(api) => Self::Api { status: api.status },
             BridgeError::Transport(_) => Self::Transport,

@@ -46,8 +46,9 @@ async fn generate_builds_baseline_text2img_request_shape() {
 
     let mut params = request_for("1girl", Model::NaiDiffusion3);
     params.core.seed = 42;
-    let expected_prompt = params.processed_prompt();
-    let expected_negative_prompt = params.processed_negative_prompt();
+    let resolved = params.resolve_prompts();
+    let expected_prompt = resolved.prompt.clone();
+    let expected_negative_prompt = resolved.negative_prompt.clone();
 
     let result = client.generate(params).await.unwrap();
     assert_eq!(result.images.len(), 1);
@@ -487,9 +488,8 @@ async fn generate_stream_rejects_v3_models_before_transport() {
             ..Default::default()
         };
 
-        let error = match client.generate_stream(params).await {
-            Ok(_) => panic!("V3 models must not start a stream"),
-            Err(error) => error,
+        let Err(error) = client.generate_stream(params).await else {
+            panic!("V3 models must not start a stream");
         };
         assert!(matches!(
             error,
@@ -1058,7 +1058,7 @@ fn uc_preset_text_is_merged_before_the_caller_negative_prompt() {
     params.core.negative_prompt = Some("extra tags".to_owned());
     params.core.uc_preset = UcPreset::Heavy;
 
-    let negative = params.processed_negative_prompt();
+    let negative = params.resolve_prompts().negative_prompt;
     assert!(negative.starts_with("nsfw, lowres,"), "{negative}");
     assert!(negative.ends_with(", extra tags"), "{negative}");
 }
@@ -1068,7 +1068,7 @@ fn uc_preset_none_keeps_the_caller_negative_prompt_verbatim() {
     let mut params = request("1girl");
     params.core.negative_prompt = Some("only mine".to_owned());
     params.core.uc_preset = UcPreset::None;
-    assert_eq!(params.processed_negative_prompt(), "only mine");
+    assert_eq!(params.resolve_prompts().negative_prompt, "only mine");
 }
 
 #[test]
@@ -1084,22 +1084,23 @@ fn quality_presets_swap_the_appended_tags() {
         .build();
 
     assert_eq!(
-        standard.processed_prompt(),
+        standard.resolve_prompts().prompt,
         "1girl, very aesthetic, masterpiece, no text"
     );
     // Light differs from Standard only in swapping `masterpiece` for `amazing quality`.
     assert_eq!(
-        light.processed_prompt(),
+        light.resolve_prompts().prompt,
         "1girl, very aesthetic, amazing quality, no text"
     );
-    assert_eq!(none.processed_prompt(), "1girl");
+    assert_eq!(none.resolve_prompts().prompt, "1girl");
 
     // Standard is what the pre-V5 quality toggle always produced.
     assert_eq!(
         GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
             .build()
-            .processed_prompt(),
-        standard.processed_prompt()
+            .resolve_prompts()
+            .prompt,
+        standard.resolve_prompts().prompt
     );
 }
 
@@ -1416,4 +1417,140 @@ async fn credit_observer_reports_transport_failures() {
             ..
         }
     ));
+}
+
+/// Builds a request whose every prompt source contributes text, so a wire field that re-derives
+/// prompt text instead of reading `resolve_prompts()` cannot match by accident.
+fn request_with_every_prompt_source(model: Model) -> GenerateImageRequest {
+    let mut params = GenerateImageRequest::builder("1girl", model)
+        .negative_prompt("extra tags")
+        .quality(QualityPreset::Standard)
+        .uc_preset(UcPreset::Heavy)
+        .build();
+    params.core.transparent_background = model.capabilities().supports_transparent_background;
+    if model.capabilities().supports_characters() {
+        params.characters = Some(CharacterSet::new(vec![
+            Character {
+                prompt: "girl, blue hair".to_owned(),
+                negative_prompt: Some("bad hands".to_owned()),
+                position: CharacterPosition { x: 0.1, y: 0.9 },
+                enabled: true,
+            },
+            Character {
+                prompt: "boy, red hair".to_owned(),
+                negative_prompt: None,
+                position: CharacterPosition::default(),
+                enabled: false,
+            },
+        ]));
+    }
+    params
+}
+
+/// Guards the single prompt-assembly source: whatever `resolve_prompts` reports must be byte-for-
+/// byte what the request sends. If these ever diverge, token counting silently under-reports.
+#[tokio::test]
+async fn resolved_prompts_match_the_wire_payload_verbatim() {
+    for model in [
+        Model::NaiDiffusion3,
+        Model::NaiDiffusion45Full,
+        Model::NaiDiffusion5Full,
+    ] {
+        let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+        let client = Client::with_transport(transport.clone());
+
+        let params = request_with_every_prompt_source(model);
+        let resolved = params.resolve_prompts();
+        client.generate(params).await.unwrap();
+
+        let body = transport.last_body().expect("generate body");
+        let parameters = &body["parameters"];
+
+        assert_eq!(
+            parameters["negative_prompt"],
+            json!(resolved.negative_prompt),
+            "{model:?} negative_prompt"
+        );
+
+        if model.capabilities().uses_v4_prompt() {
+            assert_eq!(
+                parameters["v4_prompt"]["caption"]["base_caption"],
+                json!(resolved.prompt),
+                "{model:?} v4 base caption"
+            );
+            assert_eq!(
+                parameters["v4_negative_prompt"]["caption"]["base_caption"],
+                json!(resolved.negative_prompt),
+                "{model:?} v4 negative base caption"
+            );
+
+            // Both wire representations carry only enabled characters.
+            let wire_characters = parameters["characterPrompts"]
+                .as_array()
+                .expect("characterPrompts");
+            assert_eq!(wire_characters.len(), resolved.characters.len());
+            for (wire, resolved) in wire_characters.iter().zip(&resolved.characters) {
+                assert_eq!(wire["prompt"], json!(resolved.prompt));
+                assert_eq!(wire["uc"], json!(resolved.negative_prompt));
+                assert_eq!(wire["enabled"], json!(true));
+            }
+
+            let enabled: Vec<_> = resolved.characters.iter().collect();
+            let captions = parameters["v4_prompt"]["caption"]["char_captions"]
+                .as_array()
+                .expect("char_captions");
+            assert_eq!(captions.len(), enabled.len());
+            for (caption, resolved) in captions.iter().zip(&enabled) {
+                assert_eq!(caption["char_caption"], json!(resolved.prompt));
+            }
+            let negative_captions = parameters["v4_negative_prompt"]["caption"]["char_captions"]
+                .as_array()
+                .expect("negative char_captions");
+            for (caption, resolved) in negative_captions.iter().zip(&enabled) {
+                assert_eq!(caption["char_caption"], json!(resolved.negative_prompt));
+            }
+        } else {
+            assert_eq!(
+                parameters["prompt"],
+                json!(resolved.prompt),
+                "{model:?} prompt"
+            );
+            assert_eq!(
+                parameters["uc"],
+                json!(resolved.negative_prompt),
+                "{model:?} uc"
+            );
+            assert!(
+                resolved.characters.is_empty(),
+                "{model:?} has no character support"
+            );
+        }
+    }
+}
+
+/// The assembled prompt must be strictly longer than the caller's raw text whenever a preset
+/// contributes, which is exactly the case token counting would otherwise under-report.
+#[test]
+fn resolved_prompts_include_every_preset_contribution() {
+    let params = request_with_every_prompt_source(Model::NaiDiffusion5Full);
+    let resolved = params.resolve_prompts();
+
+    assert_eq!(
+        resolved.prompt,
+        "1girl, transparent background, very aesthetic, masterpiece, no text"
+    );
+    assert!(resolved.prompt.len() > params.core.prompt.len());
+
+    let raw_negative = params.core.negative_prompt.unwrap();
+    assert!(resolved.negative_prompt.ends_with(", extra tags"));
+    assert!(
+        resolved.negative_prompt.len() > raw_negative.len() + 100,
+        "the Heavy UC preset contributes hundreds of characters: {}",
+        resolved.negative_prompt
+    );
+
+    // Character prompts get neither quality tags nor UC preset text.
+    assert_eq!(resolved.characters[0].prompt, "girl, blue hair");
+    assert_eq!(resolved.characters[0].negative_prompt, "bad hands");
+    assert_eq!(resolved.characters.len(), 1);
 }

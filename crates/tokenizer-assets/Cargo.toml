@@ -1,0 +1,27 @@
+[package]
+name = "novelai-bridge-tokenizer-assets"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 AND MIT"
+description = "Pinned CLIP, T5 and Qwen tokenizer assets for novelai-bridge."
+documentation = "https://docs.rs/novelai-bridge-tokenizer-assets"
+homepage = "https://github.com/RhNu/novelai-bridge"
+repository = "https://github.com/RhNu/novelai-bridge"
+readme = "README.md"
+keywords = ["novelai", "tokenizer", "clip", "t5", "qwen"]
+categories = ["encoding", "text-processing"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/assets/*.gz",
+    "/assets/SOURCES.toml",
+    "/assets/LICENSE-CLIP",
+    "/LICENSE",
+    "/README.md",
+    "/CHANGELOG.md",
+]
+
+[dev-dependencies]
+flate2.workspace = true
+sha2.workspace = true
+toml.workspace = true

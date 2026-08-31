@@ -91,6 +91,8 @@ impl<T: Transport> Client<T> {
         params: GenerateImageRequest,
     ) -> Result<GenerateImageResult, BridgeError> {
         let params = Self::normalize_generate_request(params)?;
+        #[cfg(feature = "tokenizer")]
+        self.check_prompt_tokens(&params)?;
         let resolved_seed = Self::resolve_seed(params.core.seed);
         let request = Self::build_generate_request(&params, resolved_seed)?;
         let endpoint = self.image_endpoint("/ai/generate-image");
@@ -139,6 +141,8 @@ impl<T: Transport> Client<T> {
             stream: params.stream,
         };
         let resolved_seed = Self::resolve_seed(params.base.core.seed);
+        #[cfg(feature = "tokenizer")]
+        self.check_prompt_tokens(&params.base)?;
         let request = Self::build_stream_request(&params, resolved_seed)?;
         let endpoint = self.image_endpoint("/ai/generate-image-stream");
 
@@ -158,6 +162,25 @@ impl<T: Transport> Client<T> {
                 Err(error)
             }
         }
+    }
+
+    #[cfg(feature = "tokenizer")]
+    fn check_prompt_tokens(&self, params: &GenerateImageRequest) -> Result<(), BridgeError> {
+        let Some(tokenizers) = &self.tokenizers else {
+            return Ok(());
+        };
+        for (field, count) in params.count_tokens(tokenizers)?.over_limit() {
+            let error = InvalidRequest::PromptTokenLimitExceeded {
+                field: field.label(),
+                used: count.used,
+                limit: count.limit,
+            };
+            if params.strict_mode {
+                return Err(error.into());
+            }
+            log::warn!("{error}");
+        }
+        Ok(())
     }
 
     fn normalize_generate_request(
@@ -783,24 +806,33 @@ fn build_prompt_wire_parts(
     capabilities: &ModelCapabilities,
     resolved_use_coords: bool,
 ) -> PromptWireParts {
-    let processed_prompt = params.processed_prompt();
-    let negative_prompt = params.processed_negative_prompt();
+    let resolved = params.resolve_prompts();
     let characters = params
         .characters
         .as_ref()
-        .map(|set| set.characters.as_slice());
+        .map(|set| set.characters.as_slice())
+        .unwrap_or_default();
 
     if capabilities.uses_v4_prompt() {
-        let char_prompts = build_v4_character_captions(characters, false, resolved_use_coords);
-        let char_negative_prompts =
-            build_v4_character_captions(characters, true, resolved_use_coords);
+        let char_prompts = build_v4_character_captions(
+            characters,
+            &resolved.characters,
+            false,
+            resolved_use_coords,
+        );
+        let char_negative_prompts = build_v4_character_captions(
+            characters,
+            &resolved.characters,
+            true,
+            resolved_use_coords,
+        );
 
         return PromptWireParts {
             prompt_field: None,
             legacy_uc: None,
             v4_prompt: Some(V4ConditionInput {
                 caption: Some(V4Caption {
-                    base_caption: Some(processed_prompt),
+                    base_caption: Some(resolved.prompt),
                     char_captions: Some(char_prompts),
                 }),
                 legacy_uc: None,
@@ -809,26 +841,26 @@ fn build_prompt_wire_parts(
             }),
             v4_negative_prompt: Some(V4ConditionInput {
                 caption: Some(V4Caption {
-                    base_caption: Some(negative_prompt.clone()),
+                    base_caption: Some(resolved.negative_prompt.clone()),
                     char_captions: Some(char_negative_prompts),
                 }),
                 legacy_uc: None,
                 use_coords: None,
                 use_order: None,
             }),
-            negative_prompt,
-            character_prompts: Some(
-                characters
-                    .map(|characters| convert_character_prompts(characters, resolved_use_coords))
-                    .unwrap_or_default(),
-            ),
+            negative_prompt: resolved.negative_prompt,
+            character_prompts: Some(convert_character_prompts(
+                characters,
+                &resolved.characters,
+                resolved_use_coords,
+            )),
         };
     }
 
     PromptWireParts {
-        prompt_field: Some(processed_prompt),
-        legacy_uc: Some(negative_prompt.clone()),
-        negative_prompt,
+        prompt_field: Some(resolved.prompt),
+        legacy_uc: Some(resolved.negative_prompt.clone()),
+        negative_prompt: resolved.negative_prompt,
         v4_prompt: None,
         v4_negative_prompt: None,
         character_prompts: None,

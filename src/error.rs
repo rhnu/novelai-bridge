@@ -4,7 +4,12 @@ use thiserror::Error;
 
 /// Unified error type returned by this crate.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BridgeError {
+    /// Local tokenizer loading or encoding failed.
+    #[cfg(feature = "tokenizer")]
+    #[error(transparent)]
+    Tokenizer(#[from] crate::TokenizerError),
     /// The request failed local validation.
     #[error(transparent)]
     InvalidRequest(#[from] InvalidRequest),
@@ -24,7 +29,15 @@ pub enum BridgeError {
 
 /// Strongly typed local request validation failures.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum InvalidRequest {
+    /// A final conditioning text exceeds the selected model's token limit.
+    #[error("{field} uses {used} tokens but the model limit is {limit}")]
+    PromptTokenLimitExceeded {
+        field: String,
+        used: u32,
+        limit: u32,
+    },
     /// A required field was blank after trimming.
     #[error("{field} cannot be empty")]
     EmptyField { field: String },
@@ -97,6 +110,7 @@ pub enum InvalidRequest {
 
 /// Specific data URL validation failure.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DataUrlError {
     /// The URL did not contain the metadata/payload separator.
     MissingPayloadSeparator,
@@ -119,6 +133,7 @@ impl fmt::Display for DataUrlError {
 
 /// Non-success response returned by the `NovelAI` API.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct ApiError {
     /// Category derived from the HTTP status code.
     pub kind: ApiErrorKind,
@@ -130,6 +145,20 @@ pub struct ApiError {
     pub server_reason: Option<ApiErrorReason>,
     /// Raw response body text when present.
     pub raw_body: Option<String>,
+}
+
+impl ApiError {
+    /// Constructs an API failure; optional response details may be assigned through public fields.
+    #[must_use]
+    pub fn new(kind: ApiErrorKind, status: u16, endpoint: impl Into<String>) -> Self {
+        Self {
+            kind,
+            status,
+            endpoint: endpoint.into(),
+            server_reason: None,
+            raw_body: None,
+        }
+    }
 }
 
 impl fmt::Display for ApiError {
@@ -153,6 +182,7 @@ impl StdError for ApiError {}
 
 /// API error category derived from HTTP status and headers.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ApiErrorKind {
     /// HTTP 400.
     InvalidRequest,
@@ -194,6 +224,7 @@ impl fmt::Display for ApiErrorKind {
 
 /// Parsed reason extracted from a known API error body field.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ApiErrorReason {
     /// Top-level `message`.
     Message(String),
@@ -222,6 +253,7 @@ impl fmt::Display for ApiErrorReason {
 /// Transport operation failure.
 #[derive(Debug, Error)]
 #[error("{operation} failed")]
+#[non_exhaustive]
 pub struct TransportError {
     /// Transport operation being performed.
     pub operation: TransportOperation,
@@ -232,8 +264,25 @@ pub struct TransportError {
     pub source: Box<dyn StdError + Send + Sync + 'static>,
 }
 
+impl TransportError {
+    /// Constructs a transport failure while retaining the original error chain.
+    #[must_use]
+    pub fn new(
+        operation: TransportOperation,
+        endpoint: Option<String>,
+        source: Box<dyn StdError + Send + Sync + 'static>,
+    ) -> Self {
+        Self {
+            operation,
+            endpoint,
+            source,
+        }
+    }
+}
+
 /// Transport operation labels used by [`TransportError`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TransportOperation {
     /// Constructing an HTTP client.
     BuildClient,
@@ -263,6 +312,7 @@ impl fmt::Display for TransportOperation {
 /// Decode failure for response and stream payloads.
 #[derive(Debug, Error)]
 #[error("decode {target} failed")]
+#[non_exhaustive]
 pub struct DecodeError {
     /// Payload target being decoded.
     pub target: DecodeTarget,
@@ -271,8 +321,17 @@ pub struct DecodeError {
     pub source: Box<dyn StdError + Send + Sync + 'static>,
 }
 
+impl DecodeError {
+    /// Constructs a decode failure while retaining the original error chain.
+    #[must_use]
+    pub fn new(target: DecodeTarget, source: Box<dyn StdError + Send + Sync + 'static>) -> Self {
+        Self { target, source }
+    }
+}
+
 /// Decode target labels used by [`DecodeError`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DecodeTarget {
     /// HTTP JSON response body.
     JsonResponse,
@@ -292,6 +351,7 @@ impl fmt::Display for DecodeTarget {
 
 /// Metadata helper failures.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum MetadataError {
     /// Raw bytes were not a valid PNG payload.
     #[error("{field} must be valid PNG payload")]

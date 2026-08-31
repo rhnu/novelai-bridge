@@ -33,6 +33,7 @@ impl<T: Transport> Client<T> {
             .characters
             .as_ref()
             .map_or(0, crate::CharacterSet::enabled_count);
+        let resolved = params.resolve_prompts();
 
         let fingerprint = RequestFingerprint {
             request_id: self.next_request_id(),
@@ -53,10 +54,8 @@ impl<T: Transport> Client<T> {
             vibe_reference_count: truncate_count(vibe_reference_count),
             character_reference_count: truncate_count(character_reference_count),
             character_count: truncate_count(character_count),
-            prompt_len_chars: truncate_count(params.processed_prompt().chars().count()),
-            negative_prompt_len_chars: truncate_count(
-                params.processed_negative_prompt().chars().count(),
-            ),
+            prompt_len_chars: truncate_count(resolved.prompt.chars().count()),
+            negative_prompt_len_chars: truncate_count(resolved.negative_prompt.chars().count()),
         };
 
         let estimate = self.estimate_anlas_cost(params);

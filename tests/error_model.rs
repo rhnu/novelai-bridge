@@ -21,15 +21,16 @@ fn invalid_request_payload_is_matchable_and_self_describing() {
 
 #[test]
 fn api_rate_limit_payload_uses_duration() {
-    let error = BridgeError::Api(ApiError {
-        kind: ApiErrorKind::RateLimited {
+    let mut api = ApiError::new(
+        ApiErrorKind::RateLimited {
             retry_after: Some(Duration::from_secs(5)),
         },
-        status: 429,
-        endpoint: "https://image.novelai.net/ai/generate-image".to_owned(),
-        server_reason: Some(ApiErrorReason::Message("limit".to_owned())),
-        raw_body: Some("limit".to_owned()),
-    });
+        429,
+        "https://image.novelai.net/ai/generate-image",
+    );
+    api.server_reason = Some(ApiErrorReason::Message("limit".to_owned()));
+    api.raw_body = Some("limit".to_owned());
+    let error = BridgeError::Api(api);
 
     assert!(matches!(
         error,
@@ -45,13 +46,14 @@ fn api_rate_limit_payload_uses_duration() {
 
 #[test]
 fn api_error_display_includes_server_reason() {
-    let error = BridgeError::Api(ApiError {
-        kind: ApiErrorKind::InvalidRequest,
-        status: 400,
-        endpoint: "https://image.novelai.net/ai/generate-image".to_owned(),
-        server_reason: Some(ApiErrorReason::Message("bad request shape".to_owned())),
-        raw_body: Some("{\"message\":\"bad request shape\"}".to_owned()),
-    });
+    let mut api = ApiError::new(
+        ApiErrorKind::InvalidRequest,
+        400,
+        "https://image.novelai.net/ai/generate-image",
+    );
+    api.server_reason = Some(ApiErrorReason::Message("bad request shape".to_owned()));
+    api.raw_body = Some("{\"message\":\"bad request shape\"}".to_owned());
+    let error = BridgeError::Api(api);
 
     let display = error.to_string();
     assert!(display.contains("bad request shape"));
@@ -61,11 +63,7 @@ fn api_error_display_includes_server_reason() {
 #[test]
 fn wrapped_decode_error_exposes_source_chain() {
     let source = serde_json::from_str::<serde_json::Value>("not json").unwrap_err();
-    let error: BridgeError = DecodeError {
-        target: DecodeTarget::JsonResponse,
-        source: Box::new(source),
-    }
-    .into();
+    let error: BridgeError = DecodeError::new(DecodeTarget::JsonResponse, Box::new(source)).into();
 
     let source = error.source().expect("decode source");
     assert!(source.to_string().contains("expected ident"));

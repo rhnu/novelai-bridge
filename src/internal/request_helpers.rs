@@ -12,7 +12,7 @@ use image::{
 
 use crate::{
     BridgeError, Character, CharacterPosition, CharacterReference, DataUrlError, GeneratedImage,
-    ImageSize, InvalidRequest, inspect_generated_image_metadata,
+    ImageSize, InvalidRequest, ResolvedCharacterPrompt, inspect_generated_image_metadata,
     internal::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
     },
@@ -56,23 +56,27 @@ pub fn is_center_position(value: f32) -> bool {
     (value - GRID_CENTER).abs() <= GRID_TOLERANCE
 }
 
+/// Builds the V4 character captions from already-resolved prompt text.
+///
+/// Text comes exclusively from [`ResolvedCharacterPrompt`]; this helper only decides geometry and
+/// which characters take part. Re-deriving text from [`Character`] here would reintroduce a second
+/// prompt-assembly path.
 pub fn build_v4_character_captions(
-    characters: Option<&[Character]>,
+    characters: &[Character],
+    resolved: &[ResolvedCharacterPrompt],
     negative: bool,
     use_coords: bool,
 ) -> Vec<V4CharacterCaption> {
     let mut out = Vec::new();
-    for ch in characters.unwrap_or_default() {
-        if !ch.enabled {
-            continue;
-        }
+    for resolved in resolved {
+        let character = &characters[resolved.index];
 
         out.push(V4CharacterCaption {
-            centers: Some(vec![center_point(ch.position, use_coords)]),
+            centers: Some(vec![center_point(character.position, use_coords)]),
             char_caption: Some(if negative {
-                ch.negative_prompt.clone().unwrap_or_default()
+                resolved.negative_prompt.clone()
             } else {
-                ch.prompt.clone()
+                resolved.prompt.clone()
             }),
         });
     }
@@ -80,17 +84,21 @@ pub fn build_v4_character_captions(
     out
 }
 
+/// Builds the `characterPrompts` wire entries from already-resolved prompt text.
+///
+/// Only enabled, resolved characters are sent.
 pub fn convert_character_prompts(
     characters: &[Character],
+    resolved: &[ResolvedCharacterPrompt],
     use_coords: bool,
 ) -> Vec<CharacterPrompt> {
-    characters
+    resolved
         .iter()
-        .map(|ch| CharacterPrompt {
-            prompt: ch.prompt.clone(),
-            uc: ch.negative_prompt.clone().unwrap_or_default(),
-            center: center_point(ch.position, use_coords),
-            enabled: ch.enabled,
+        .map(|resolved| CharacterPrompt {
+            prompt: resolved.prompt.clone(),
+            uc: resolved.negative_prompt.clone(),
+            center: center_point(characters[resolved.index].position, use_coords),
+            enabled: true,
         })
         .collect()
 }

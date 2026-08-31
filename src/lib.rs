@@ -12,10 +12,12 @@ mod credit;
 mod error;
 pub(crate) mod internal;
 mod metadata;
+#[cfg(feature = "tokenizer")]
+mod tokenizer;
 mod transport;
 mod types;
 
-pub use capability::{ModelCapabilities, PromptStructure};
+pub use capability::{ImageTokenizerKind, ModelCapabilities, PromptStructure};
 pub use client::{BaseUrls, Client, ClientOptions};
 pub use credit::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, CreditBalance,
@@ -31,15 +33,21 @@ pub use metadata::{
     extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
+#[cfg(feature = "tokenizer")]
+pub use tokenizer::{
+    CharacterTokenUsage, ClipTokenizer, FramingPolicy, ImageTokenizer, PromptField,
+    PromptTokenUsage, QwenTokenizer, T5Tokenizer, TokenCount, TokenId, TokenizerAsset,
+    TokenizerError, Tokenizers,
+};
 pub use transport::{ReqwestTransport, Transport, TransportSseStream};
 pub use types::{
     ApiKeySource, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
     CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
     GenerateImageRequestBuilder, GenerateImageResult, GenerateImageStreamRequest, GeneratedImage,
     GenerationCore, GuidanceParams, ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest,
-    Model, NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, RunDirectorToolRequest,
-    Sampler, SamplingParams, StreamMode, SubscriptionInfo, UcPreset, V5UsageStatus, VibeReference,
-    VibeTransferConfig,
+    Model, NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, ResolvedCharacterPrompt,
+    ResolvedPrompts, RunDirectorToolRequest, Sampler, SamplingParams, StreamMode, SubscriptionInfo,
+    UcPreset, V5UsageStatus, VibeReference, VibeTransferConfig,
 };
 
 /// Default base URL for image-generation endpoints.

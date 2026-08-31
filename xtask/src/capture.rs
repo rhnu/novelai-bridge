@@ -44,10 +44,12 @@ impl CaptureTransport {
     }
 
     fn prepare<TReq: Serialize>(&self, endpoint: &str, body: &TReq) -> Result<Value, BridgeError> {
-        let mut value = serde_json::to_value(body).map_err(|source| TransportError {
-            operation: TransportOperation::SendRequest,
-            endpoint: Some(endpoint.to_owned()),
-            source: Box::new(source),
+        let mut value = serde_json::to_value(body).map_err(|source| {
+            TransportError::new(
+                TransportOperation::SendRequest,
+                Some(endpoint.to_owned()),
+                Box::new(source),
+            )
         })?;
 
         for (path, replacement) in &self.overrides {
@@ -67,11 +69,11 @@ impl CaptureTransport {
     }
 
     fn dry_run_error(endpoint: &str) -> BridgeError {
-        TransportError {
-            operation: TransportOperation::SendRequest,
-            endpoint: Some(endpoint.to_owned()),
-            source: "dry run: request was assembled but not sent".into(),
-        }
+        TransportError::new(
+            TransportOperation::SendRequest,
+            Some(endpoint.to_owned()),
+            "dry run: request was assembled but not sent".into(),
+        )
         .into()
     }
 }

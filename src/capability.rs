@@ -11,6 +11,7 @@ use crate::Model;
 /// Prompt payload shape expected by a model family.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PromptStructure {
     /// V3 and earlier: top-level `prompt`, `uc`, `sm`, `sm_dyn`.
     Legacy,
@@ -21,11 +22,44 @@ pub enum PromptStructure {
 /// Reference canvas area used to scale the variety-boost sigma.
 const VARIETY_REFERENCE_PIXELS: u32 = 832 * 1216;
 
+/// Prompt tokenizer used by a model family.
+///
+/// This selects an encoder implementation and its compatible upstream asset format. It says
+/// nothing about how long a prompt may be — that is [`ModelCapabilities::prompt_token_limit`],
+/// which varies between model variants that share one tokenizer.
+///
+/// The variant is always available; the encoder implementations behind it require the `tokenizer`
+/// feature.
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageTokenizerKind {
+    /// `OpenAI` CLIP byte-level BPE. Used by the V3 family.
+    Clip,
+    /// T5 `SentencePiece` Unigram. Used by the V4 and V4.5 families.
+    T5,
+    /// Qwen byte-level BPE driven by `tokenizer.json`. Used by the V5 family.
+    Qwen,
+}
+
+impl ImageTokenizerKind {
+    /// Returns a stable lowercase identifier for logs and diagnostics.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Clip => "clip",
+            Self::T5 => "t5",
+            Self::Qwen => "qwen",
+        }
+    }
+}
+
 /// Static description of what one `NovelAI` model family supports.
 ///
 /// Obtain a value through [`Model::capabilities`].
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct ModelCapabilities {
     /// Prompt payload shape used by this model.
     pub prompt_structure: PromptStructure,
@@ -68,7 +102,12 @@ pub struct ModelCapabilities {
     /// Base coefficient of the variety-boost sigma, when supported.
     pub variety_sigma_coefficient: Option<f32>,
     /// Prompt context limit in tokens, as reported by the `NovelAI` web client.
+    ///
+    /// This is the maximum total token count for one conditioning text. It is not the vocabulary
+    /// size, the largest token ID, or a property of the tokenizer asset.
     pub prompt_token_limit: u32,
+    /// Tokenizer used to encode this model's prompts.
+    pub tokenizer: ImageTokenizerKind,
 }
 
 impl ModelCapabilities {
@@ -121,6 +160,7 @@ const V3: ModelCapabilities = ModelCapabilities {
     supports_transparent_background: false,
     variety_sigma_coefficient: None,
     prompt_token_limit: 225,
+    tokenizer: ImageTokenizerKind::Clip,
 };
 
 const V3_FURRY: ModelCapabilities = ModelCapabilities {
@@ -150,6 +190,7 @@ const V4: ModelCapabilities = ModelCapabilities {
     supports_transparent_background: false,
     variety_sigma_coefficient: Some(19.0),
     prompt_token_limit: 512,
+    tokenizer: ImageTokenizerKind::T5,
 };
 
 const V45: ModelCapabilities = ModelCapabilities {
@@ -177,6 +218,7 @@ const V5_FULL: ModelCapabilities = ModelCapabilities {
     supports_transparent_background: true,
     variety_sigma_coefficient: None,
     prompt_token_limit: 1471,
+    tokenizer: ImageTokenizerKind::Qwen,
     ..V45
 };
 

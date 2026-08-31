@@ -18,6 +18,7 @@
 mod capture;
 mod presets;
 mod render;
+mod tokenizer_assets;
 
 use std::path::PathBuf;
 
@@ -41,6 +42,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Download pinned tokenizer assets, verify SHA-256 and store deterministic gzip files.
+    FetchTokenizerAssets,
     /// Print the model capability registry. Offline.
     Capabilities,
     /// Assemble a request and print the wire body without sending it. Offline.
@@ -167,6 +170,7 @@ pub struct RunArgs {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
+        Command::FetchTokenizerAssets => tokenizer_assets::fetch().await,
         Command::Capabilities => {
             presets::print_capabilities();
             Ok(())

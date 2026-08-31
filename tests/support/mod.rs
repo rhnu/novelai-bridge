@@ -108,10 +108,7 @@ impl Transport for MockTransport {
         drop(state);
 
         serde_json::from_value(payload)
-            .map_err(|source| DecodeError {
-                target: DecodeTarget::JsonResponse,
-                source: Box::new(source),
-            })
+            .map_err(|source| DecodeError::new(DecodeTarget::JsonResponse, Box::new(source)))
             .map_err(Into::into)
     }
 
@@ -121,10 +118,12 @@ impl Transport for MockTransport {
         body: &TReq,
     ) -> Result<Vec<u8>, BridgeError> {
         let body = serde_json::to_value(body)
-            .map_err(|source| TransportError {
-                operation: TransportOperation::SendRequest,
-                endpoint: Some(path.to_owned()),
-                source: Box::new(source),
+            .map_err(|source| {
+                TransportError::new(
+                    TransportOperation::SendRequest,
+                    Some(path.to_owned()),
+                    Box::new(source),
+                )
             })
             .map_err(BridgeError::from)?;
 
@@ -154,10 +153,12 @@ impl Transport for MockTransport {
         BridgeError,
     > {
         let body = serde_json::to_value(body)
-            .map_err(|source| TransportError {
-                operation: TransportOperation::SendRequest,
-                endpoint: Some(path.to_owned()),
-                source: Box::new(source),
+            .map_err(|source| {
+                TransportError::new(
+                    TransportOperation::SendRequest,
+                    Some(path.to_owned()),
+                    Box::new(source),
+                )
             })
             .map_err(BridgeError::from)?;
 

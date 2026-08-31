@@ -1,0 +1,4 @@
+# Expanded working copies are not distributed. fetch-tokenizer-assets writes the gzip forms.
+/spiece.model
+/tokenizer.json
+/tokenizer_config.json

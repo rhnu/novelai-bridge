@@ -1,0 +1,39 @@
+# Downloaded/verified 2026-08-31. Hashes are of the upstream bytes before local gzip wrapping.
+# Refresh code, fixtures and this manifest together; never replace a revision implicitly.
+
+[[asset]]
+name = "clip"
+url = "https://raw.githubusercontent.com/openai/CLIP/d05afc436d78f1c48dc0dbf8e5980a9d471f35f6/clip/bpe_simple_vocab_16e6.txt.gz"
+revision = "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6"
+sha256 = "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a"
+download_date = "2026-08-31"
+license = "MIT"
+output = "bpe_simple_vocab_16e6.txt.gz"
+upstream_gzip = true
+
+[[asset]]
+name = "t5"
+url = "https://huggingface.co/google-t5/t5-base/resolve/a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1/spiece.model"
+revision = "a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1"
+sha256 = "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86"
+download_date = "2026-08-31"
+license = "Apache-2.0"
+output = "spiece.model.gz"
+
+[[asset]]
+name = "qwen"
+url = "https://huggingface.co/Qwen/Qwen3.5-35B-A3B/resolve/59d61f3ce65a6d9863b86d2e96597125219dc754/tokenizer.json"
+revision = "59d61f3ce65a6d9863b86d2e96597125219dc754"
+sha256 = "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+download_date = "2026-08-31"
+license = "Apache-2.0"
+output = "tokenizer.json.gz"
+
+[[asset]]
+name = "qwen-config"
+url = "https://huggingface.co/Qwen/Qwen3.5-35B-A3B/resolve/59d61f3ce65a6d9863b86d2e96597125219dc754/tokenizer_config.json"
+revision = "59d61f3ce65a6d9863b86d2e96597125219dc754"
+sha256 = "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"
+download_date = "2026-08-31"
+license = "Apache-2.0"
+output = "tokenizer_config.json.gz"

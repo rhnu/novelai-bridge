@@ -38,6 +38,7 @@ pub fn print_capabilities() {
         );
         println!("  max characters      {}", caps.max_characters);
         println!("  prompt tokens       {}", caps.prompt_token_limit);
+        println!("  tokenizer           {}", caps.tokenizer.as_str());
         println!(
             "  supports            vibe={} encoded_vibe={} charref={} variety={} inpaint={} smea={} decrisp={}",
             caps.supports_vibe_transfer,
@@ -264,10 +265,12 @@ fn save_input(args: &RunArgs, name: &str, data_url: String) -> String {
 }
 
 fn read_as_data_url(path: &Path) -> Result<String, BridgeError> {
-    let bytes = std::fs::read(path).map_err(|source| novelai_bridge::TransportError {
-        operation: novelai_bridge::TransportOperation::SendRequest,
-        endpoint: Some(path.display().to_string()),
-        source: Box::new(source),
+    let bytes = std::fs::read(path).map_err(|source| {
+        novelai_bridge::TransportError::new(
+            novelai_bridge::TransportOperation::SendRequest,
+            Some(path.display().to_string()),
+            Box::new(source),
+        )
     })?;
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(&bytes)))
 }
