@@ -46,7 +46,7 @@ async fn generate_builds_baseline_text2img_request_shape() {
 
     let mut params = request_for("1girl", Model::NaiDiffusion3);
     params.core.seed = 42;
-    let resolved = params.resolve_prompts();
+    let resolved = params.resolve_prompts().unwrap();
     let expected_prompt = resolved.prompt.clone();
     let expected_negative_prompt = resolved.negative_prompt.clone();
 
@@ -1059,7 +1059,7 @@ fn uc_preset_text_is_merged_before_the_caller_negative_prompt() {
     params.core.negative_prompt = Some("extra tags".to_owned());
     params.core.uc_preset = UcPreset::Heavy;
 
-    let negative = params.resolve_prompts().negative_prompt;
+    let negative = params.resolve_prompts().unwrap().negative_prompt;
     assert!(negative.starts_with("nsfw, lowres,"), "{negative}");
     assert!(negative.ends_with(", extra tags"), "{negative}");
 }
@@ -1069,7 +1069,10 @@ fn uc_preset_none_keeps_the_caller_negative_prompt_verbatim() {
     let mut params = request("1girl");
     params.core.negative_prompt = Some("only mine".to_owned());
     params.core.uc_preset = UcPreset::None;
-    assert_eq!(params.resolve_prompts().negative_prompt, "only mine");
+    assert_eq!(
+        params.resolve_prompts().unwrap().negative_prompt,
+        "only mine"
+    );
 }
 
 #[test]
@@ -1085,23 +1088,24 @@ fn quality_presets_swap_the_appended_tags() {
         .build();
 
     assert_eq!(
-        standard.resolve_prompts().prompt,
+        standard.resolve_prompts().unwrap().prompt,
         "1girl, very aesthetic, masterpiece, no text"
     );
     // Light differs from Standard only in swapping `masterpiece` for `amazing quality`.
     assert_eq!(
-        light.resolve_prompts().prompt,
+        light.resolve_prompts().unwrap().prompt,
         "1girl, very aesthetic, amazing quality, no text"
     );
-    assert_eq!(none.resolve_prompts().prompt, "1girl");
+    assert_eq!(none.resolve_prompts().unwrap().prompt, "1girl");
 
     // Standard is what the pre-V5 quality toggle always produced.
     assert_eq!(
         GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
             .build()
             .resolve_prompts()
+            .unwrap()
             .prompt,
-        standard.resolve_prompts().prompt
+        standard.resolve_prompts().unwrap().prompt
     );
 }
 
@@ -1461,7 +1465,7 @@ async fn resolved_prompts_match_the_wire_payload_verbatim() {
         let client = Client::with_transport(transport.clone());
 
         let params = request_with_every_prompt_source(model);
-        let resolved = params.resolve_prompts();
+        let resolved = params.resolve_prompts().unwrap();
         client.generate(params).await.unwrap();
 
         let body = transport.last_body().expect("generate body");
@@ -1534,7 +1538,7 @@ async fn resolved_prompts_match_the_wire_payload_verbatim() {
 #[test]
 fn resolved_prompts_include_every_preset_contribution() {
     let params = request_with_every_prompt_source(Model::NaiDiffusion5Full);
-    let resolved = params.resolve_prompts();
+    let resolved = params.resolve_prompts().unwrap();
 
     assert_eq!(
         resolved.prompt,

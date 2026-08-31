@@ -53,7 +53,7 @@ fn all_counting_entry_points_include_presets_and_use_the_same_framing() {
                 .unwrap()
     );
     assert!(usage.negative_prompt.used > encoder.count("bad", FramingPolicy::ModelInput).unwrap());
-    let resolved = params.resolve_prompts();
+    let resolved = params.resolve_prompts().unwrap();
     assert_eq!(
         usage.prompt.used,
         encoder
@@ -190,7 +190,7 @@ async fn enabled_characters_preserve_original_indices_and_positions() {
             },
         ],
     });
-    let resolved = params.resolve_prompts();
+    let resolved = params.resolve_prompts().unwrap();
     assert_eq!(resolved.characters.len(), 1);
     assert_eq!(resolved.characters[0].index, 1);
     let usage = params.count_tokens(&TOKENIZERS).unwrap();
@@ -271,7 +271,7 @@ async fn non_strict_normalization_and_tokenizer_injection_do_not_change_wire() {
         let mut params = request(model);
         params.core.quality = QualityPreset::Light;
         params.core.transparent_background = true;
-        let expected = params.resolve_prompts();
+        let expected = params.resolve_prompts().unwrap();
         let with = MockTransport::default();
         let without = MockTransport::default();
         Client::with_transport(with.clone())
@@ -300,4 +300,53 @@ fn token_count_limits_are_inclusive_and_saturating() {
     assert!(TokenCount::new(704, 703).is_over_limit());
     assert_eq!(TokenCount::new(704, 703).remaining(), 0);
     assert_eq!(TokenCount::new(700, 703).remaining(), 3);
+}
+
+#[tokio::test]
+async fn normalized_counts_and_prepared_send_share_the_effective_character_set() {
+    let mut raw = request(Model::NaiDiffusion45Full);
+    raw.characters = Some(CharacterSet::new(
+        (0..9)
+            .map(|index| Character {
+                prompt: if index == 0 {
+                    String::new()
+                } else {
+                    format!("hello {index}")
+                },
+                negative_prompt: Some("bad".to_owned()),
+                position: novelai_bridge::CharacterPosition::default(),
+                enabled: index != 0,
+            })
+            .collect(),
+    ));
+    let normalized = raw.clone().normalize().unwrap();
+    let usage = normalized.count_tokens(&TOKENIZERS).unwrap();
+    assert_eq!(usage, raw.count_tokens(&TOKENIZERS).unwrap());
+    assert_eq!(
+        usage.characters.iter().map(|c| c.index).collect::<Vec<_>>(),
+        [1, 2, 3, 4, 5, 6]
+    );
+    let transport = MockTransport::default();
+    Client::with_transport(transport.clone())
+        .with_tokenizers(TOKENIZERS.clone())
+        .generate_prepared(normalized.prepare().unwrap())
+        .await
+        .unwrap();
+    let body = transport.last_body().unwrap();
+    let captions = body["parameters"]["v4_prompt"]["caption"]["char_captions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(captions.len(), usage.characters.len());
+    let encoder = TOKENIZERS.for_model(raw.core.model).unwrap();
+    for (caption, count) in captions.iter().zip(&usage.characters) {
+        assert_eq!(
+            encoder
+                .count(
+                    caption["char_caption"].as_str().unwrap(),
+                    FramingPolicy::ModelInput
+                )
+                .unwrap(),
+            count.prompt.used
+        );
+    }
 }

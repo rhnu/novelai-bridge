@@ -168,25 +168,6 @@ impl<T: Transport> Client<T> {
             }
         }
     }
-
-    pub(super) fn resolve_vibe_data_cache(value: &str) -> Result<String, BridgeError> {
-        let compact: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
-        if compact.is_empty() {
-            return Err(InvalidRequest::EmptyField {
-                field: "vibe_data_cache".to_owned(),
-            }
-            .into());
-        }
-
-        STANDARD
-            .decode(compact.as_bytes())
-            .map_err(|source| InvalidRequest::InvalidBase64 {
-                field: "vibe_data_cache".to_owned(),
-                source,
-            })?;
-
-        Ok(compact)
-    }
 }
 
 fn normalize_f32_range(

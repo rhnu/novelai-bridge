@@ -24,7 +24,7 @@ const GRID_CENTER: f32 = 0.5;
 const GRID_TOLERANCE: f32 = 0.0001;
 
 /// Snaps a coordinate onto the 5x5 grid the `NovelAI` web client sends for manual placement.
-fn snap_coord_to_grid(value: f32) -> f32 {
+pub fn snap_coord_to_grid(value: f32) -> f32 {
     let clamped = value.clamp(0.0, 1.0);
     let mut best = GRID_COORDS[0];
     let mut best_distance = (best - clamped).abs();

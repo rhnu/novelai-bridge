@@ -2,8 +2,8 @@
 
 `generation.json` captures valid default requests at `8fd7675` (`0.5.0-rc.1`).
 The offline mock transport records eight ordinary requests and six supported streaming requests.
-All use prompt `1girl` and fixed seed `42`. JSON object ordering is insignificant; every field,
-omission, value and array order is checked. Do not automatically regenerate this file when a test
+All use prompt `1girl` and fixed seed `42`. Object keys use deterministic serde_json ordering;
+every field, omission, value and array order is checked. Do not regenerate this file when a test
 fails. Review intended protocol changes separately. Existing generation tests cover img2img,
 inpainting, character positioning and reference payloads with real generated image fixtures.
 
@@ -31,3 +31,8 @@ from the client's normalization. Base64 normalization decodes once to validate a
 bytes; character-reference preparation fully decodes once for dimensions and again for fitting.
 Wire assembly clones prepared reference arrays. Subsequent work should verify these paths rather
 than claiming zero-copy or performance gains from file moves alone.
+
+After the normalization refactor, a generation call assembles conditioning text once in
+`NormalizedGeneration`; counting, wire construction and observation borrow that cached result.
+Pricing projects effective fields without repeating capability rules. Payload decoding and
+reference-array cloning remain unchanged; no allocation or timing improvement is claimed here.

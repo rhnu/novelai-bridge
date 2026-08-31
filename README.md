@@ -82,19 +82,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 When using `ApiKeySource::Environment`, set `NOVELAI_API_KEY` before constructing the client.
 
-Cost estimates are available both as a standalone calculator and from an assembled request. They
-share the same input mapping and formula:
+### Effective generation plans
+
+`GenerateImageRequest` remains editable input. `normalize()` follows its `strict_mode`;
+`normalize_with(NormalizationPolicy::Reject | Normalize)` overrides that policy explicitly.
+The resulting `NormalizedGeneration` has immutable effective fields, cached conditioning text,
+and structured diagnostics describing clamps, fallbacks, conflicts and dropped features.
+
+Normalize once when a caller needs both prompt inspection and pricing:
 
 ```rust
 use novelai_bridge::{AnlasPricingContext, GenerateImageRequest, Model};
 
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
 let request = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Curated).build();
-let estimate = request.estimate_anlas_cost(AnlasPricingContext::default());
-let client_estimate = client.estimate_anlas_cost(&request);
-assert_eq!(estimate, client_estimate);
+let plan = request.normalize()?;
+let context = AnlasPricingContext::default();
+let estimate = plan.estimate_anlas_cost(context);
+println!("{} Anlas; {:?}", estimate.total, plan.diagnostics());
+println!("conditioning: {}", plan.resolved_prompts().prompt);
+let prepared = plan.prepare()?;
+// client.generate_prepared(prepared).await?;
+// Or: client.generate_stream_prepared(prepared, StreamMode::default()).await?;
+# Ok(())
+# }
 ```
 
-`estimate_anlas_cost(AnlasEstimateInput { .. })` is the independent entry point. The calculator
+Normalization and estimates do not decode image pixels, resolve random seeds or access the
+network. `prepare()` decodes/fits payloads and resolves the seed once; the client can send that
+`PreparedGeneration` without repeating these steps. A plan is not proof that its image payloads
+are valid. Normal `generate` and `generate_stream` perform these steps automatically.
+
+Disabled characters do not participate in validation, counting or wire arrays. Normalize policy
+keeps the first model-limit enabled characters and disables the rest, preserving original indices;
+Reject policy errors on overflow. Coordinates use the existing five-by-five wire grid, including
+in Reject mode. Native noise scheduling on V4+ retains the existing Karras fallback and reports it.
+
+Raw-request `resolve_prompts`, `count_tokens`, `anlas_estimate_input` and `estimate_anlas_cost`
+now return `Result` because they normalize first. Repeated calls clone the raw input; reuse a plan
+to avoid copying image payloads and rebuilding prompts. Normalized token counting still returns
+`TokenizerError`. The client estimate uses its most recently sampled account context; estimates
+agree for the same effective request and context, but later account samples may change pricing.
+
+`estimate_anlas_cost(AnlasEstimateInput { .. })` is the independent mathematical entry point:
+it does not normalize or guarantee that its input is sendable. The calculator
 implements the NAI 3, 4, 4.5, 5 branch only; older and unrelated model price tables are intentionally out
 of scope. Check `AnlasEstimate::is_too_expensive()` for the web client's over-140 state.
 
@@ -108,7 +139,8 @@ Notes:
 - `Model::capabilities()` describes what a model family supports; request assembly and validation
   are driven entirely by it, and callers can use it to gate their own UI.
 - Request fields are grouped by capability. A group the selected model does not support is
-  rejected in `strict_mode` and dropped with a `log::warn!` otherwise.
+  rejected in `strict_mode` and dropped with a normalization diagnostic otherwise. Inspect a plan
+  before sending when these decisions need to be displayed; they are no longer only log warnings.
 - Image streaming is supported by V4, V4.5, and V5. `Client::generate_stream` always rejects
   V3 and Furry V3 locally; it does not silently downgrade to a non-streaming request.
 - `QualityPreset::Light` and `transparent_background` are V5-only; on earlier models they fall

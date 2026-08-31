@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use crate::{
-    BridgeError, CreditBalance, CreditEvent, GenerateImageRequest, ObservedOperation,
+    BridgeError, CreditBalance, CreditEvent, NormalizedGeneration, ObservedOperation,
     RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome, SubscriptionInfo,
     Transport,
 };
@@ -19,11 +19,13 @@ impl<T: Transport> Client<T> {
     /// Returns `None` when no observer is attached, so fingerprint construction is skipped.
     pub(super) async fn begin_generation_observation(
         &self,
-        params: &GenerateImageRequest,
+        normalized: &NormalizedGeneration,
         operation: ObservedOperation,
     ) -> Option<PendingObservation> {
         let observer = self.credit_observer.as_ref()?;
 
+        let params = normalized.request();
+        let context = self.last_pricing_context();
         let references = params.references.as_ref();
         let vibe_reference_count = references
             .and_then(|set| set.vibe_transfer.as_ref())
@@ -33,7 +35,7 @@ impl<T: Transport> Client<T> {
             .characters
             .as_ref()
             .map_or(0, crate::CharacterSet::enabled_count);
-        let resolved = params.resolve_prompts();
+        let resolved = normalized.resolved_prompts();
 
         let fingerprint = RequestFingerprint {
             request_id: self.next_request_id(),
@@ -58,7 +60,7 @@ impl<T: Transport> Client<T> {
             negative_prompt_len_chars: truncate_count(resolved.negative_prompt.chars().count()),
         };
 
-        let estimate = self.estimate_anlas_cost(params);
+        let estimate = normalized.estimate_anlas_cost(context);
 
         observer
             .observe(CreditEvent::RequestPlanned {

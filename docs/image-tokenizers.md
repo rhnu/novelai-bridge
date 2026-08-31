@@ -70,13 +70,18 @@ Request counting defaults to `ModelInput`; `count_tokens_with` accepts an explic
 
 ## Conditioning text and limits
 
-`GenerateImageRequest::resolve_prompts()` assembles the text used by both wire conditioning and
-token counting:
+`GenerateImageRequest::normalize()` assembles effective text once. Wire conditioning, token
+counting and observation share `NormalizedGeneration::resolved_prompts()`:
 
 1. Positive prompt: caller text, supported transparency tag, then quality tags.
 2. Negative prompt: UC preset followed by caller text.
-3. Characters: supported, enabled characters only, without quality or UC presets. Each keeps its
-   index in the original character list.
+3. Characters: supported, enabled characters within the model limit, without quality or UC
+   presets. Each keeps its index in the original character list. Disabled fields are not validated.
+
+`GenerateImageRequest::resolve_prompts()` is a fallible convenience wrapper around normalization.
+Raw request and stream-request counting now return `BridgeError`, including normalization errors;
+counting a normalized plan returns `TokenizerError`. Reuse the plan for repeated queries to avoid
+cloning input payloads or rebuilding conditioning text. Normalization does not decode images.
 
 The top-level wire `input` retains the caller's original prompt; conditioning uses the resolved
 legacy prompt/UC fields or V4/V5 captions.

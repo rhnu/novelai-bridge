@@ -151,7 +151,7 @@ impl<T: Transport> Client<T> {
                 .ok_or_else(|| crate::TokenizerError::TokenizerNotLoaded {
                     kind: request.capabilities().tokenizer,
                 })?;
-        Ok(request.count_tokens(tokenizers)?)
+        request.count_tokens(tokenizers)
     }
 
     /// Returns the most recently sampled account balance, if [`Client::get_subscription`] has run.
@@ -165,8 +165,14 @@ impl<T: Transport> Client<T> {
     /// This is the client-facing counterpart of [`GenerateImageRequest::estimate_anlas_cost`].
     /// It never performs network I/O; when no subscription has been sampled, the estimate assumes
     /// a non-Opus account.
-    #[must_use]
-    pub fn estimate_anlas_cost(&self, request: &GenerateImageRequest) -> AnlasEstimate {
+    ///
+    /// # Errors
+    ///
+    /// Returns local normalization errors.
+    pub fn estimate_anlas_cost(
+        &self,
+        request: &GenerateImageRequest,
+    ) -> Result<AnlasEstimate, BridgeError> {
         request.estimate_anlas_cost(self.last_pricing_context())
     }
 

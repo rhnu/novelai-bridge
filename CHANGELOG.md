@@ -6,6 +6,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- Immutable `NormalizedGeneration`, explicit `NormalizationPolicy` and structured normalization
+  diagnostics. Planning is independent of transport, image pixel decoding and seed resolution.
+- `PreparedGeneration` and prepared ordinary/streaming send methods reuse validated input and a
+  seed resolved once during image preparation.
 - Local CLIP, T5 and Qwen encoders behind the default `tokenizer` feature, with token IDs,
   explicit framing, model selection and per-field counts on requests, stream requests and clients.
 - Optional `Client::with_tokenizers` injection: strict requests reject overflow before transport;
@@ -17,8 +21,12 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
-- Share `resolve_prompts()` between wire conditioning and token counting, including quality,
-  transparency and UC presets. Disabled characters no longer enter conditioning arrays.
+- Normalize once and share cached conditioning text between wire construction, token counting
+  and observation, including quality, transparency and UC presets.
+- Raw request prompt, token and cost helpers are fallible and use the same effective fields as
+  sending. Normalized cost projections no longer repeat capability and reference conflict rules.
+- Skip disabled character validation; non-strict overflow disables characters after the model's
+  enabled-character limit while preserving original indices. Strict overflow remains an error.
 - Mark error enums, `ModelCapabilities`, `PromptStructure` and new tokenizer public types
   `#[non_exhaustive]`. UI selection enums and request structs retain exhaustive matching and
   struct-literal construction.
@@ -28,7 +36,13 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 ### Migration
 
 - Replace `GenerationCore` / `GenerateImageRequest` `processed_prompt*` calls with
-  `request.resolve_prompts().prompt` / `.negative_prompt`. The returned text includes presets.
+  `request.resolve_prompts()?.prompt` / `.negative_prompt`. The returned text includes presets.
+- Handle normalization errors from request/client cost estimates and request token counting;
+  `AnlasEstimateInput::for_request` also returns `Result`. For repeated queries, use
+  `request.normalize()?` and its cached prompts, token counting and direct pricing projection.
+- To inspect diagnostics before sending, use `plan.prepare()?` followed by
+  `client.generate_prepared(...)` or `generate_stream_prepared(..., mode)`. Editing requires
+  `plan.into_request()` and another normalization pass; plans cannot be deserialized or mutated.
 - Use original character-list indices from `ResolvedCharacterPrompt::index` and
   `CharacterTokenUsage::index`; disabled characters are absent from these lists.
 - Add fallback arms when matching non-exhaustive enums and `..` when matching their structs.

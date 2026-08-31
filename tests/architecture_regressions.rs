@@ -32,7 +32,6 @@ fn reference_inpainting_requires_reference_support() {
 }
 
 #[tokio::test]
-#[ignore = "normalization: public estimate must match the effective request"]
 async fn public_estimate_matches_planned_estimate_after_size_normalization() {
     let transport = MockTransport::default();
     let observer = Arc::new(Observer::default());
@@ -43,7 +42,7 @@ async fn public_estimate_matches_planned_estimate_after_size_normalization() {
             height: 2048,
         })
         .build();
-    let estimate = client.estimate_anlas_cost(&request);
+    let estimate = client.estimate_anlas_cost(&request).unwrap();
     client.generate(request).await.unwrap();
     let events = observer.0.lock().unwrap();
     let planned = events
@@ -56,10 +55,10 @@ async fn public_estimate_matches_planned_estimate_after_size_normalization() {
     drop(events);
     assert_eq!(transport.last_body().unwrap()["parameters"]["width"], 1600);
     assert_eq!(estimate.total, planned);
+    assert_eq!(planned, 42);
 }
 
 #[tokio::test]
-#[ignore = "normalization: disabled character fields must not reject generation"]
 async fn disabled_empty_characters_do_not_participate_in_validation() {
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full)
         .characters(vec![Character {
@@ -81,7 +80,6 @@ async fn disabled_empty_characters_do_not_participate_in_validation() {
 }
 
 #[tokio::test]
-#[ignore = "normalization: only the first max_characters enabled entries may be sent"]
 async fn normalized_characters_respect_the_model_limit() {
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full)
         .characters(
@@ -156,4 +154,77 @@ async fn non_image_response_is_rejected() {
         Client::with_transport(MockTransport::with_bytes_response(b"not an image".to_vec()));
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build();
     assert!(client.generate(request).await.is_err());
+}
+
+#[tokio::test]
+async fn ordinary_and_stream_observation_share_effective_cost_fields() {
+    for streaming in [false, true] {
+        let transport = MockTransport::default();
+        let observer = Arc::new(Observer::default());
+        let client =
+            Client::with_transport(transport.clone()).with_credit_observer(observer.clone());
+        let mut request =
+            GenerateImageRequest::builder("private prompt", Model::NaiDiffusion45Full)
+                .size(ImageSize {
+                    width: 2048,
+                    height: 2048,
+                })
+                .steps(100)
+                .n_samples(9)
+                .build();
+        request.guidance.smea = true;
+        let plan = request.normalize().unwrap();
+        let context = novelai_bridge::AnlasPricingContext::default();
+        let cost = plan.anlas_estimate_input(context);
+        let estimate = plan.estimate_anlas_cost(context);
+        assert_eq!(
+            client.estimate_anlas_cost(plan.request()).unwrap(),
+            estimate
+        );
+        let expected_prompt_len = plan.resolved_prompts().prompt.chars().count();
+        if streaming {
+            let _stream = client
+                .generate_stream_prepared(
+                    plan.prepare().unwrap(),
+                    novelai_bridge::StreamMode::default(),
+                )
+                .await
+                .unwrap();
+        } else {
+            client
+                .generate_prepared(plan.prepare().unwrap())
+                .await
+                .unwrap();
+        }
+        let body = transport.last_body().unwrap();
+        assert_eq!(body["parameters"]["width"], cost.size.width);
+        assert_eq!(body["parameters"]["height"], cost.size.height);
+        assert_eq!(body["parameters"]["steps"], cost.steps);
+        assert_eq!(body["parameters"]["n_samples"], cost.n_samples);
+        assert!(!cost.smea);
+        let events = observer.0.lock().unwrap();
+        let (fingerprint, planned_cost) = events
+            .iter()
+            .find_map(|event| match event {
+                CreditEvent::RequestPlanned {
+                    fingerprint,
+                    estimate,
+                } => Some((fingerprint, estimate)),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(fingerprint.size, Some(cost.size));
+        assert_eq!(fingerprint.steps, Some(cost.steps));
+        assert_eq!(fingerprint.n_samples, cost.n_samples);
+        assert_eq!(fingerprint.smea, cost.smea);
+        assert_eq!(
+            usize::try_from(fingerprint.prompt_len_chars).unwrap(),
+            expected_prompt_len
+        );
+        assert_eq!(
+            *planned_cost,
+            novelai_bridge::RequestCostEstimate::Generation(estimate)
+        );
+        drop(events);
+    }
 }

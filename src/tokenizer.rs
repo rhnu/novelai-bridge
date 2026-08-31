@@ -161,11 +161,41 @@ impl PromptField {
 }
 
 impl GenerateImageRequest {
+    /// Normalizes and counts effective prompts using model-input framing.
+    ///
+    /// # Errors
+    ///
+    /// Returns normalization or tokenizer errors.
+    pub fn count_tokens(
+        &self,
+        tokenizers: &Tokenizers,
+    ) -> Result<PromptTokenUsage, crate::BridgeError> {
+        self.count_tokens_with(tokenizers, FramingPolicy::ModelInput)
+    }
+
+    /// Normalizes and counts effective prompts using explicit framing.
+    ///
+    /// # Errors
+    ///
+    /// Returns normalization or tokenizer errors.
+    pub fn count_tokens_with(
+        &self,
+        tokenizers: &Tokenizers,
+        framing: FramingPolicy,
+    ) -> Result<PromptTokenUsage, crate::BridgeError> {
+        Ok(self
+            .clone()
+            .normalize()?
+            .count_tokens_with(tokenizers, framing)?)
+    }
+}
+
+impl crate::NormalizedGeneration {
     /// Counts the tokens of every prompt field this request will send.
     ///
     /// Counting uses [`FramingPolicy::ModelInput`], matching what the model consumes and therefore
     /// what the prompt limit is measured against. The counted text comes from
-    /// [`GenerateImageRequest::resolve_prompts`], so quality tags, the transparency tag and the UC
+    /// [`crate::NormalizedGeneration::resolved_prompts`], so quality tags, the transparency tag and the UC
     /// preset are all included; counting the raw prompt fields instead would under-report.
     ///
     /// # Errors
@@ -193,9 +223,9 @@ impl GenerateImageRequest {
         tokenizers: &Tokenizers,
         framing: FramingPolicy,
     ) -> Result<PromptTokenUsage, TokenizerError> {
-        let capabilities = self.capabilities();
-        let encoder = tokenizers.require_for_model(self.core.model)?;
-        let resolved = self.resolve_prompts();
+        let capabilities = self.request().capabilities();
+        let encoder = tokenizers.require_for_model(self.request().core.model)?;
+        let resolved = self.resolved_prompts();
         let limit = capabilities.prompt_token_limit;
         let count = |text: &str| -> Result<TokenCount, TokenizerError> {
             Ok(TokenCount::new(encoder.count(text, framing)?, limit))
@@ -226,12 +256,11 @@ impl GenerateImageStreamRequest {
     ///
     /// # Errors
     ///
-    /// Returns [`TokenizerError::TokenizerNotLoaded`] when the registry has no encoder for the
-    /// selected model.
+    /// Returns normalization errors or tokenizer errors, including a missing encoder.
     pub fn count_tokens(
         &self,
         tokenizers: &Tokenizers,
-    ) -> Result<PromptTokenUsage, TokenizerError> {
+    ) -> Result<PromptTokenUsage, crate::BridgeError> {
         self.base.count_tokens(tokenizers)
     }
 
@@ -239,13 +268,12 @@ impl GenerateImageStreamRequest {
     ///
     /// # Errors
     ///
-    /// Returns [`TokenizerError::TokenizerNotLoaded`] when the registry has no encoder for the
-    /// selected model.
+    /// Returns normalization errors or tokenizer errors, including a missing encoder.
     pub fn count_tokens_with(
         &self,
         tokenizers: &Tokenizers,
         framing: FramingPolicy,
-    ) -> Result<PromptTokenUsage, TokenizerError> {
+    ) -> Result<PromptTokenUsage, crate::BridgeError> {
         self.base.count_tokens_with(tokenizers, framing)
     }
 }

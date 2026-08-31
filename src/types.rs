@@ -671,17 +671,10 @@ impl GenerationCore {
     /// Assembles the positive prompt from every contributing source.
     fn assemble_prompt(&self) -> String {
         let mut prompt = self.prompt.clone();
-        let caps = self.model.capabilities();
-        if self.transparent_background && caps.supports_transparent_background {
+        if self.transparent_background {
             prompt.push_str(TRANSPARENT_BACKGROUND_TAG);
         }
-        let quality = if self.quality == QualityPreset::Light && !caps.supports_light_quality_preset
-        {
-            QualityPreset::Standard
-        } else {
-            self.quality
-        };
-        prompt.push_str(quality.tags());
+        prompt.push_str(self.quality.tags());
         prompt
     }
 
@@ -867,32 +860,24 @@ impl GenerateImageRequest {
         self.core.model.capabilities()
     }
 
-    /// Returns the final conditioning text this request will send, per field.
-    ///
-    /// This is the single prompt-assembly entry point: it merges the transparency tag, quality
-    /// tags and UC preset text into the caller's prompts. Request building and token counting
-    /// both consume it, so the text that is counted is by construction the text that is sent.
-    #[must_use]
-    pub fn resolve_prompts(&self) -> ResolvedPrompts {
-        let characters = if self.capabilities().supports_characters() {
-            self.characters
-                .as_ref()
-                .map(|set| {
-                    set.characters
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, character)| character.enabled)
-                        .map(|(index, character)| ResolvedCharacterPrompt {
-                            index,
-                            prompt: character.prompt.clone(),
-                            negative_prompt: character.negative_prompt.clone().unwrap_or_default(),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+    /// Assembles already-normalized input; callers must use the generation boundary.
+    pub(crate) fn assemble_prompts(&self) -> ResolvedPrompts {
+        let characters = self
+            .characters
+            .as_ref()
+            .map(|set| {
+                set.characters
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, character)| character.enabled)
+                    .map(|(index, character)| ResolvedCharacterPrompt {
+                        index,
+                        prompt: character.prompt.clone(),
+                        negative_prompt: character.negative_prompt.clone().unwrap_or_default(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         ResolvedPrompts {
             prompt: self.core.assemble_prompt(),

@@ -335,61 +335,65 @@ impl Default for AnlasEstimateInput {
 }
 
 impl AnlasEstimateInput {
-    /// Builds pricing input from an assembled generation request.
+    /// Normalizes a request and projects its effective pricing fields without decoding images.
+    ///
+    /// # Errors
+    ///
+    /// Returns local normalization errors.
+    pub fn for_request(
+        request: &GenerateImageRequest,
+        context: AnlasPricingContext,
+    ) -> Result<Self, BridgeError> {
+        request.anlas_estimate_input(context)
+    }
+}
+
+impl crate::NormalizedGeneration {
+    /// Projects effective pricing fields without cloning image payloads or assembling prompts.
     #[must_use]
-    pub fn for_request(request: &GenerateImageRequest, context: AnlasPricingContext) -> Self {
-        let capabilities = request.core.model.capabilities();
+    pub fn anlas_estimate_input(&self, context: AnlasPricingContext) -> AnlasEstimateInput {
+        let request = self.request();
         let references = request.references.as_ref();
         let has_inpaint_mask = request
             .img2img
             .as_ref()
-            .is_some_and(crate::Img2ImgRequest::is_infill)
-            && capabilities.supports_inpainting;
-        let character_references_supported = capabilities.supports_character_reference
-            && (!has_inpaint_mask || capabilities.supports_character_reference_inpainting);
-        let character_reference_count = if character_references_supported {
-            references.map_or(0, |set| {
-                u32::try_from(set.character_references.len()).unwrap_or(u32::MAX)
-            })
-        } else {
-            0
-        };
-        let vibe_references_supported = capabilities.supports_encoded_vibe
-            && !has_inpaint_mask
-            && character_reference_count == 0;
-
-        Self {
+            .is_some_and(crate::Img2ImgRequest::is_infill);
+        AnlasEstimateInput {
             model: request.core.model,
             size: request.core.size,
             steps: request.sampling.steps,
             sampler: request.sampling.sampler,
-            smea: capabilities.supports_smea && request.guidance.smea,
-            smea_dyn: capabilities.supports_smea && request.guidance.smea_dyn,
+            smea: request.guidance.smea,
+            smea_dyn: request.guidance.smea_dyn,
             n_samples: request.core.n_samples,
             img2img_strength: request
                 .img2img
                 .as_ref()
                 .filter(|_| !has_inpaint_mask)
-                .map(|img2img| img2img.strength),
+                .map(|value| value.strength),
             inpaint_img2img_strength: request
                 .img2img
                 .as_ref()
                 .filter(|_| has_inpaint_mask)
-                .map(|img2img| img2img.strength),
+                .map(|value| value.strength),
             has_inpaint_mask,
-            character_reference_count,
-            vibe_reference_count: if vibe_references_supported {
-                references
-                    .and_then(|set| set.vibe_transfer.as_ref())
-                    .map_or(0, |vibe| {
-                        u32::try_from(vibe.references.len()).unwrap_or(u32::MAX)
-                    })
-            } else {
-                0
-            },
+            character_reference_count: references.map_or(0, |set| {
+                u32::try_from(set.character_references.len()).unwrap_or(u32::MAX)
+            }),
+            vibe_reference_count: references
+                .and_then(|set| set.vibe_transfer.as_ref())
+                .map_or(0, |vibe| {
+                    u32::try_from(vibe.references.len()).unwrap_or(u32::MAX)
+                }),
             pending_vibe_encodes: 0,
             context,
         }
+    }
+
+    /// Estimates the effective request using an explicit account-context snapshot.
+    #[must_use]
+    pub fn estimate_anlas_cost(&self, context: AnlasPricingContext) -> AnlasEstimate {
+        estimate_anlas_cost(self.anlas_estimate_input(context))
     }
 }
 
@@ -518,23 +522,44 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
 }
 
 impl GenerateImageRequest {
-    /// Returns the unified pricing input represented by this request.
-    #[must_use]
-    pub fn anlas_estimate_input(&self, context: AnlasPricingContext) -> AnlasEstimateInput {
-        AnlasEstimateInput::for_request(self, context)
+    /// Normalizes and returns effective pricing fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns local normalization errors.
+    pub fn anlas_estimate_input(
+        &self,
+        context: AnlasPricingContext,
+    ) -> Result<AnlasEstimateInput, BridgeError> {
+        Ok(self.clone().normalize()?.anlas_estimate_input(context))
     }
 
-    /// Estimates this assembled request with the supplied account context.
-    #[must_use]
-    pub fn estimate_anlas_cost(&self, context: AnlasPricingContext) -> AnlasEstimate {
-        estimate_anlas_cost(self.anlas_estimate_input(context))
+    /// Estimates the effective request without network I/O or image pixel decoding.
+    ///
+    /// Unlike the independent formula, this validates the request's shape and policy.
+    /// Reuse a normalized plan to avoid cloning payloads on repeated estimates.
+    ///
+    /// # Errors
+    ///
+    /// Returns local normalization errors.
+    pub fn estimate_anlas_cost(
+        &self,
+        context: AnlasPricingContext,
+    ) -> Result<AnlasEstimate, BridgeError> {
+        Ok(estimate_anlas_cost(self.anlas_estimate_input(context)?))
     }
 }
 
 impl GenerateImageStreamRequest {
-    /// Estimates the generation represented by this stream request.
-    #[must_use]
-    pub fn estimate_anlas_cost(&self, context: AnlasPricingContext) -> AnlasEstimate {
+    /// Normalizes and estimates the base request.
+    ///
+    /// # Errors
+    ///
+    /// Returns local normalization errors. Streaming support is checked when sending.
+    pub fn estimate_anlas_cost(
+        &self,
+        context: AnlasPricingContext,
+    ) -> Result<AnlasEstimate, BridgeError> {
         self.base.estimate_anlas_cost(context)
     }
 }

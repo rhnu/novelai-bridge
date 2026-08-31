@@ -10,6 +10,7 @@ mod capability;
 mod client;
 mod credit;
 mod error;
+mod generation;
 pub(crate) mod internal;
 mod metadata;
 #[cfg(feature = "tokenizer")]
@@ -27,6 +28,10 @@ pub use credit::{
 pub use error::{
     ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,
     InvalidRequest, MetadataError, TransportError, TransportOperation,
+};
+pub use generation::{
+    NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
+    PreparedGeneration,
 };
 pub use metadata::{
     GeneratedImageMetadata, PngMetadata, PngMetadataWarning, VibeMetadataEntry, VibeMetadataSource,

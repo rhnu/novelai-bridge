@@ -178,12 +178,12 @@ fn request_and_client_helpers_share_the_standalone_calculator() {
         .build();
     let context = AnlasPricingContext::default();
 
-    let from_request = request.estimate_anlas_cost(context);
-    let from_input = estimate_anlas_cost(request.anlas_estimate_input(context));
+    let from_request = request.estimate_anlas_cost(context).unwrap();
+    let from_input = estimate_anlas_cost(request.anlas_estimate_input(context).unwrap());
     assert_eq!(from_request, from_input);
 
     let client = Client::with_transport(MockTransport::default());
-    assert_eq!(client.estimate_anlas_cost(&request), from_request);
+    assert_eq!(client.estimate_anlas_cost(&request).unwrap(), from_request);
 }
 
 #[test]
@@ -206,7 +206,9 @@ fn request_mapping_matches_non_strict_reference_conflict_resolution() {
         }])
         .build();
 
-    let estimate = request.estimate_anlas_cost(AnlasPricingContext::default());
+    let estimate = request
+        .estimate_anlas_cost(AnlasPricingContext::default())
+        .unwrap();
     assert_eq!(estimate.character_reference, 5);
     assert_eq!(estimate.vibe_reference_overage, 0);
 }
