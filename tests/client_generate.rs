@@ -399,10 +399,10 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
     let valid_without_metadata = STANDARD
         .decode(create_png_base64(2, 2))
         .expect("decode png");
-    let invalid_png = vec![0x89, b'P', b'N', b'G', 0, 1, 2, 3];
+    let invalid_comment = support::create_png_with_comment_text("{broken JSON");
     let transport = MockTransport::with_bytes_response(create_zip_with_pngs(&[
         ("missing.png", valid_without_metadata),
-        ("invalid.png", invalid_png),
+        ("invalid-comment.png", invalid_comment),
     ]));
     let client = Client::with_transport(transport);
 
@@ -414,8 +414,9 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
         GeneratedImageMetadata::NotPresent
     ));
     assert!(matches!(
-        result.images[1].metadata,
-        GeneratedImageMetadata::Invalid { .. }
+        &result.images[1].metadata,
+        GeneratedImageMetadata::Parsed(metadata)
+            if metadata.warnings.contains(&novelai_bridge::PngMetadataWarning::InvalidCommentJson)
     ));
 }
 

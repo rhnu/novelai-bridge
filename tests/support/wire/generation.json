@@ -1,0 +1,624 @@
+{
+  "nai-diffusion-3/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-3",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "dynamic_thresholding": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "prompt": "1girl, very aesthetic, masterpiece, no text",
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.0,
+      "seed": 42,
+      "sm": false,
+      "sm_dyn": false,
+      "steps": 23,
+      "uc": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "ucPreset": 1,
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-5-curated/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-5-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.0,
+      "seed": 42,
+      "steps": 23,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-5-curated/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-5-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.0,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-5-full/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-5-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.0,
+      "seed": 42,
+      "steps": 23,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-5-full/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-5-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.0,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-curated/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.5,
+      "seed": 42,
+      "steps": 23,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-curated/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.5,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-full/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.5,
+      "seed": 42,
+      "steps": 23,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-4-full/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-4-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 5.5,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-5-curated/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-5-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_uc": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 4,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 7.0,
+      "seed": 42,
+      "steps": 23,
+      "tag_hint_transparent_background": false,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-5-curated/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-5-curated",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_uc": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 4,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 7.0,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "tag_hint_transparent_background": false,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-5-full/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-5-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_uc": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 4,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 7.0,
+      "seed": 42,
+      "steps": 23,
+      "tag_hint_transparent_background": false,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-5-full/stream": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-5-full",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "characterPrompts": [],
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_uc": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 4,
+      "prefer_brownian": true,
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 7.0,
+      "seed": 42,
+      "steps": 23,
+      "stream": "sse",
+      "tag_hint_transparent_background": false,
+      "ucPreset": 1,
+      "use_coords": false,
+      "v4_negative_prompt": {
+        "caption": {
+          "base_caption": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+          "char_captions": []
+        }
+      },
+      "v4_prompt": {
+        "caption": {
+          "base_caption": "1girl, very aesthetic, masterpiece, no text",
+          "char_captions": []
+        },
+        "use_coords": false,
+        "use_order": true
+      },
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  },
+  "nai-diffusion-furry-3/generate": {
+    "action": "generate",
+    "input": "1girl",
+    "model": "nai-diffusion-furry-3",
+    "parameters": {
+      "add_original_image": true,
+      "autoSmea": false,
+      "cfg_rescale": 0.0,
+      "controlnet_strength": 1.0,
+      "deliberate_euler_ancestral_bug": false,
+      "dynamic_thresholding": false,
+      "height": 1216,
+      "inpaintImg2ImgStrength": 1.0,
+      "legacy": false,
+      "legacy_v3_extend": false,
+      "n_samples": 1,
+      "negative_prompt": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "noise_schedule": "karras",
+      "params_version": 3,
+      "prefer_brownian": true,
+      "prompt": "1girl, very aesthetic, masterpiece, no text",
+      "qualityToggle": true,
+      "sampler": "k_euler_ancestral",
+      "scale": 6.199999809265137,
+      "seed": 42,
+      "sm": false,
+      "sm_dyn": false,
+      "steps": 23,
+      "uc": "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
+      "ucPreset": 1,
+      "width": 832
+    },
+    "use_new_shared_trial": true
+  }
+}

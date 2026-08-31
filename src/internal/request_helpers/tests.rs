@@ -6,11 +6,12 @@ use image::{DynamicImage, Rgba, RgbaImage};
 use super::*;
 
 fn create_webp_bytes() -> Vec<u8> {
-    let mut bytes = b"RIFF".to_vec();
-    bytes.extend_from_slice(&[0, 0, 0, 0]);
-    bytes.extend_from_slice(b"WEBP");
-    bytes.extend_from_slice(&[0, 1, 2, 3]);
-    bytes
+    let image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(2, 2, Rgba([255; 4])));
+    let mut bytes = Cursor::new(Vec::new());
+    image
+        .write_to(&mut bytes, image::ImageFormat::WebP)
+        .unwrap();
+    bytes.into_inner()
 }
 
 fn create_png_base64(width: u32, height: u32) -> String {

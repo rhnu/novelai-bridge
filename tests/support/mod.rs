@@ -18,7 +18,7 @@ use novelai_bridge::{
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MockTransport {
     state: Arc<Mutex<MockTransportState>>,
 }
@@ -32,9 +32,21 @@ struct MockTransportState {
     bytes_response: Vec<u8>,
     encode_vibe_response: Vec<u8>,
     sse_chunks: Vec<ImageStreamChunk>,
+    sse_error: Option<BridgeError>,
     json_response: Value,
     json_error: Option<BridgeError>,
     bytes_error: Option<BridgeError>,
+}
+
+impl Default for MockTransport {
+    fn default() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockTransportState {
+                bytes_response: create_png_bytes(2, 2),
+                ..MockTransportState::default()
+            })),
+        }
+    }
 }
 
 impl MockTransport {
@@ -54,6 +66,10 @@ impl MockTransport {
 
     pub fn set_sse_chunks(&self, sse_chunks: Vec<ImageStreamChunk>) {
         self.state.lock().unwrap().sse_chunks = sse_chunks;
+    }
+
+    pub fn set_sse_error(&self, error: BridgeError) {
+        self.state.lock().unwrap().sse_error = Some(error);
     }
 
     pub fn set_json_response(&self, json_response: Value) {
@@ -166,8 +182,11 @@ impl Transport for MockTransport {
         state.last_path = Some(path.to_owned());
         state.last_body = Some(body.clone());
         state.post_history.push((path.to_owned(), body));
-        let items: Vec<Result<ImageStreamChunk, BridgeError>> =
+        let mut items: Vec<Result<ImageStreamChunk, BridgeError>> =
             state.sse_chunks.clone().into_iter().map(Ok).collect();
+        if let Some(error) = state.sse_error.take() {
+            items.push(Err(error));
+        }
         drop(state);
 
         Ok(Box::pin(stream::iter(items)))
@@ -181,7 +200,7 @@ pub fn create_zip_with_single_png() -> Vec<u8> {
     let mut writer = zip::ZipWriter::new(&mut cursor);
     let options = zip::write::SimpleFileOptions::default();
     writer.start_file("image.png", options).unwrap();
-    writer.write_all(&[0_u8, 1, 2, 3]).unwrap();
+    writer.write_all(&create_png_bytes(2, 2)).unwrap();
     writer.finish().unwrap();
     cursor.into_inner()
 }
@@ -193,20 +212,24 @@ pub fn create_zip_with_two_images() -> Vec<u8> {
     let mut writer = zip::ZipWriter::new(&mut cursor);
     let options = zip::write::SimpleFileOptions::default();
     writer.start_file("first.png", options).unwrap();
-    writer.write_all(&[11_u8, 22, 33]).unwrap();
+    writer.write_all(&create_png_bytes(2, 2)).unwrap();
     writer.start_file("second.png", options).unwrap();
-    writer.write_all(&[44_u8, 55, 66]).unwrap();
+    writer.write_all(&create_png_bytes(3, 2)).unwrap();
     writer.finish().unwrap();
     cursor.into_inner()
 }
 
 pub fn create_png_with_comment(comment: &serde_json::Value) -> Vec<u8> {
+    create_png_with_comment_text(&comment.to_string())
+}
+
+pub fn create_png_with_comment_text(comment: &str) -> Vec<u8> {
     let mut output = Vec::new();
     let mut encoder = png::Encoder::new(&mut output, 2, 2);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     encoder
-        .add_text_chunk("Comment".to_owned(), comment.to_string())
+        .add_text_chunk("Comment".to_owned(), comment.to_owned())
         .expect("add comment");
     let mut writer = encoder.write_header().expect("write header");
     writer
@@ -231,10 +254,14 @@ pub fn create_zip_with_pngs(images: &[(&str, Vec<u8>)]) -> Vec<u8> {
 }
 
 pub fn create_png_base64(width: u32, height: u32) -> String {
+    base64::engine::general_purpose::STANDARD.encode(create_png_bytes(width, height))
+}
+
+pub fn create_png_bytes(width: u32, height: u32) -> Vec<u8> {
     let image = RgbaImage::from_pixel(width, height, Rgba([255, 255, 255, 255]));
     let mut cursor = Cursor::new(Vec::new());
     DynamicImage::ImageRgba8(image)
         .write_to(&mut cursor, ImageFormat::Png)
         .expect("failed to encode png");
-    base64::engine::general_purpose::STANDARD.encode(cursor.into_inner())
+    cursor.into_inner()
 }

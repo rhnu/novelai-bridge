@@ -205,9 +205,9 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         })
         .await
         .unwrap();
-    assert_eq!(image.bytes, vec![11_u8, 22, 33]);
+    assert_eq!(image.bytes, support::create_png_bytes(2, 2));
 
-    let raw_png = vec![0x89, b'P', b'N', b'G', 0_u8, 1, 2, 3];
+    let raw_png = support::create_png_bytes(2, 2);
     let transport_raw = MockTransport::with_bytes_response(raw_png.clone());
     let client_raw = Client::with_transport(transport_raw);
     let fallback = client_raw
