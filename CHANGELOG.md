@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.5.0-rc.1 (unreleased)
+
+Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
+
+### Added
+
+- Local CLIP, T5 and Qwen encoders behind the default `tokenizer` feature, with token IDs,
+  explicit framing, model selection and per-field counts on requests, stream requests and clients.
+- Optional `Client::with_tokenizers` injection: strict requests reject overflow before transport;
+  non-strict requests warn and preserve the full text.
+- `bundled-assets` backed by the independently versioned `novelai-bridge-tokenizer-assets` 0.1.0
+  package. Git and registry consumers use the same `Tokenizers::bundled()` entry point and shared
+  encoder cache; callers can still supply their own asset bytes.
+- Pinned asset provenance and licenses, SHA-256 checks, and reproducible upstream token-ID fixtures.
+
+### Changed
+
+- Share `resolve_prompts()` between wire conditioning and token counting, including quality,
+  transparency and UC presets. Disabled characters no longer enter conditioning arrays.
+- Mark error enums, `ModelCapabilities`, `PromptStructure` and new tokenizer public types
+  `#[non_exhaustive]`. UI selection enums and request structs retain exhaustive matching and
+  struct-literal construction.
+- Reject unsupported tokenizer configurations explicitly. CLIP still omits full `ftfy` repair;
+  the bundled T5 model does not synthesize Hugging Face extra IDs.
+
+### Migration
+
+- Replace `GenerationCore` / `GenerateImageRequest` `processed_prompt*` calls with
+  `request.resolve_prompts().prompt` / `.negative_prompt`. The returned text includes presets.
+- Use original character-list indices from `ResolvedCharacterPrompt::index` and
+  `CharacterTokenUsage::index`; disabled characters are absent from these lists.
+- Add fallback arms when matching non-exhaustive enums and `..` when matching their structs.
+  External transports construct `ApiError`, `TransportError` and `DecodeError` with `new`, then
+  set optional public fields as needed.
+- Handle `BridgeError::Tokenizer` when `tokenizer` is enabled, and
+  `InvalidRequest::PromptTokenLimitExceeded` for strict token-limit checks.
+
 ## 0.4.0 - 2026-08-27
 
 ### Fixed
