@@ -55,7 +55,7 @@ impl<T: Transport> Client<T> {
                 },
             )
             .await;
-        match self.transport.post_bytes(endpoint.as_str(), &payload).await {
+        match crate::protocol::post_bytes(&*self.transport, endpoint.as_str(), &payload).await {
             Ok(raw) => {
                 self.finish_observation_succeeded(observation, 0).await;
                 Ok(STANDARD.encode(raw))
@@ -157,7 +157,7 @@ impl<T: Transport> Client<T> {
                 RequestCostEstimate::Fixed { anlas: estimate },
             )
             .await;
-        match self.transport.post_bytes(endpoint.as_str(), &payload).await {
+        match crate::protocol::post_bytes(&*self.transport, endpoint.as_str(), &payload).await {
             Ok(raw) => {
                 self.finish_observation_succeeded(observation, 1).await;
                 Ok(extract_first_image(raw))

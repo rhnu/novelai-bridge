@@ -1400,9 +1400,11 @@ async fn credit_observer_reports_local_validation_failures() {
 #[tokio::test]
 async fn credit_observer_reports_transport_failures() {
     let transport = MockTransport::default();
-    transport.set_bytes_error(BridgeError::InvalidRequest(InvalidRequest::EmptyField {
-        field: "simulated".to_owned(),
-    }));
+    transport.set_bytes_error(novelai_bridge::TransportError::new(
+        novelai_bridge::TransportOperation::SendRequest,
+        None,
+        "simulated".into(),
+    ));
     let observer = Arc::new(RecordingObserver::default());
     let client = Client::with_transport(transport).with_credit_observer(observer.clone());
 

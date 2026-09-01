@@ -1,7 +1,8 @@
 use super::Client;
 use crate::{
     BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
-    GenerateImageStreamRequest, InvalidRequest, PreparedGeneration, StreamMode, Transport,
+    GenerateImageStreamRequest, InvalidRequest, PreparedGeneration, StreamMode, StreamingTransport,
+    Transport,
     internal::{
         request_helpers::extract_images,
         wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
@@ -53,7 +54,13 @@ impl<T: Transport> Client<T> {
         let observation = self
             .begin_generation_observation(&params, crate::ObservedOperation::GenerateImage)
             .await;
-        let payload = match self.transport.post_bytes(endpoint.as_str(), &request).await {
+        let payload = match crate::protocol::post_bytes(
+            &*self.transport,
+            endpoint.as_str(),
+            &request,
+        )
+        .await
+        {
             Ok(payload) => payload,
             Err(error) => {
                 self.finish_observation_failed(observation, &error).await;
@@ -81,7 +88,10 @@ impl<T: Transport> Client<T> {
     pub async fn generate_stream(
         &self,
         params: GenerateImageStreamRequest,
-    ) -> Result<GenerateImageStream, BridgeError> {
+    ) -> Result<GenerateImageStream, BridgeError>
+    where
+        T: StreamingTransport,
+    {
         if !params.base.core.model.descriptor().support().streaming {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "generate_stream".to_owned(),
@@ -105,7 +115,10 @@ impl<T: Transport> Client<T> {
         &self,
         prepared: PreparedGeneration,
         mode: StreamMode,
-    ) -> Result<GenerateImageStream, BridgeError> {
+    ) -> Result<GenerateImageStream, BridgeError>
+    where
+        T: StreamingTransport,
+    {
         if !prepared
             .normalized()
             .request()
@@ -128,7 +141,10 @@ impl<T: Transport> Client<T> {
         &self,
         prepared: PreparedGeneration,
         mode: StreamMode,
-    ) -> Result<GenerateImageStream, BridgeError> {
+    ) -> Result<GenerateImageStream, BridgeError>
+    where
+        T: StreamingTransport,
+    {
         let (params, base, resolved_seed) = prepared.into_parts();
         let request = StreamImageGenerationRequestBody {
             action: base.action,
@@ -145,10 +161,10 @@ impl<T: Transport> Client<T> {
         let observation = self
             .begin_generation_observation(&params, crate::ObservedOperation::GenerateImageStream)
             .await;
-        match self.transport.post_sse(endpoint.as_str(), &request).await {
+        match crate::protocol::post_sse(&*self.transport, endpoint.as_str(), &request).await {
             Ok(stream) => {
-                self.finish_observation_succeeded(observation, 0).await;
-                Ok(GenerateImageStream::new(resolved_seed, stream))
+                let observation = self.stream_observation(observation);
+                Ok(GenerateImageStream::new(resolved_seed, stream, observation))
             }
             Err(error) => {
                 self.finish_observation_failed(observation, &error).await;

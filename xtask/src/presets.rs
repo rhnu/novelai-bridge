@@ -7,7 +7,8 @@ use futures_util::StreamExt;
 use novelai_bridge::{
     BridgeError, CharacterReference, CharacterReferenceType, Client, EncodeVibeRequest,
     GenerateImageRequest, GenerateImageStreamRequest, GeneratedImage, GeneratedImageMetadata,
-    ImageSize, Img2ImgRequest, Model, StreamMode, Transport, VibeReference, VibeTransferConfig,
+    ImageSize, Img2ImgRequest, Model, StreamMode, StreamingTransport, Transport, VibeReference,
+    VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, render};
@@ -54,7 +55,7 @@ pub fn print_capabilities() {
 }
 
 /// Builds and runs the selected preset, returning a printable report.
-pub async fn execute<T: Transport>(
+pub async fn execute<T: Transport + StreamingTransport>(
     client: &Client<T>,
     args: &RunArgs,
     model: Model,

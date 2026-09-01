@@ -11,6 +11,8 @@ mod generate;
 mod observe;
 mod subscription;
 
+pub use observe::StreamObservation;
+
 /// Options used to construct a [`Client`] with the default [`ReqwestTransport`].
 #[derive(Clone)]
 pub struct ClientOptions {

@@ -111,6 +111,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 When using `ApiKeySource::Environment`, set `NOVELAI_API_KEY` before constructing the client.
 
+### Custom transports and streaming
+
+`Transport` receives a fully encoded `TransportRequest` and returns status, headers and raw bytes
+in `TransportResponse`. It does not serialize generic Rust values or interpret NovelAI errors.
+Implement `StreamingTransport` only when SSE is needed; its events contain generic SSE `data`,
+while the bridge decodes `ImageStreamChunk` above the transport boundary.
+
+Streaming observations settle on actual EOF or stream error, not when the HTTP connection opens.
+Call `GenerateImageStream::cancel().await` to record explicit cancellation. Dropping a stream cannot
+run an async observer and deliberately emits no guessed terminal result.
+
 ### Effective generation plans
 
 `GenerateImageRequest` remains editable input. `normalize()` follows its `strict_mode`;

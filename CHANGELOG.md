@@ -6,6 +6,8 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- Dyn-compatible fixed HTTP request/response DTOs and a separate `StreamingTransport` capability.
+- `GenerateImageStream::cancel()` and `RequestOutcome::Cancelled` for explicit stream cancellation.
 - Read-only `ModelDescriptor` profiles for identity, support, constraints, defaults, prompt,
   sampling, wire and pricing. Registry entries explicitly compose profiles without model inheritance.
 - `GenerationMode`, `ReferenceIntent` and shared `resolve_references` decisions for model/mode
@@ -25,6 +27,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
+- Move JSON serialization, NovelAI status interpretation and stream-chunk decoding above transport;
+  transports now expose raw response data and generic framed SSE events.
+- Settle streaming credit observations only on EOF, stream failure or explicit cancellation. A
+  dropped, unconsumed stream does not emit an invented terminal state.
 - Change the default model from V4.5 Full to V5 Full; default sampling now uses guidance scale 7.
 - Remove `ModelCapabilities` and `capabilities()` in favor of registry-owned descriptors.
   Optional reference profiles eliminate V5's contradictory reference-inpainting flag.
@@ -46,6 +52,12 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+- Replace generic `Transport::{get_json,post_bytes,post_sse}` implementations with fixed
+  `Transport::execute`. Implement `StreamingTransport::execute_sse` only for SSE support. Inspect
+  `TransportRequest.body` as serialized JSON and return status/headers/body without API mapping.
+- Match the new `RequestOutcome::Cancelled` variant. Exhaust streams to observe success, handle
+  yielded errors for failure, or call `GenerateImageStream::cancel().await`; connection setup alone
+  is no longer reported as success.
 - Select `Model::NaiDiffusion45Full` explicitly to retain the previous default model, and use
   its builder or `SamplingParams::for_model` to retain its sampling defaults.
 - Replace `model.capabilities()` / `request.capabilities()` with `descriptor()` and the relevant

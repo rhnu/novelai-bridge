@@ -141,6 +141,8 @@ pub enum RequestOutcome {
         /// Failure classification.
         failure: RequestFailure,
     },
+    /// The caller explicitly cancelled consumption before a terminal stream event.
+    Cancelled,
 }
 
 /// Account and call state that affects Anlas pricing.

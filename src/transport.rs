@@ -1,53 +1,81 @@
-use std::{
-    pin::Pin,
-    time::{Duration, SystemTime},
-};
+use std::{pin::Pin, time::Duration};
 
-use async_stream::try_stream;
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use reqwest::header::HeaderMap;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{
-    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DecodeError, DecodeTarget,
-    ImageStreamChunk, TransportError, TransportOperation,
-};
+use crate::{BridgeError, TransportError, TransportOperation};
 
-/// Parsed SSE chunk stream returned by a transport implementation.
-pub type TransportSseStream =
-    Pin<Box<dyn Stream<Item = Result<ImageStreamChunk, BridgeError>> + Send>>;
-
-/// Abstraction over the HTTP transport used by [`crate::Client`].
-///
-/// Each method receives a complete endpoint URL resolved by the client.
-#[async_trait]
-pub trait Transport: Send + Sync {
-    /// Sends a GET request to `endpoint` and deserializes a JSON response.
-    async fn get_json<TRes: DeserializeOwned + Send>(
-        &self,
-        endpoint: &str,
-    ) -> Result<TRes, BridgeError>;
-
-    /// Sends a JSON POST request to `endpoint` and returns raw response bytes.
-    async fn post_bytes<TReq: Serialize + Send + Sync>(
-        &self,
-        endpoint: &str,
-        body: &TReq,
-    ) -> Result<Vec<u8>, BridgeError>;
-
-    /// Sends a JSON POST request to `endpoint` and returns an SSE stream.
-    async fn post_sse<TReq: Serialize + Send + Sync>(
-        &self,
-        endpoint: &str,
-        body: &TReq,
-    ) -> Result<TransportSseStream, BridgeError>;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TransportMethod {
+    Get,
+    Post,
 }
 
-/// Default [`Transport`] implementation backed by `reqwest + rustls`.
+/// Fully encoded HTTP request passed to a transport.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportRequest {
+    pub method: TransportMethod,
+    pub endpoint: String,
+    pub accept: Option<String>,
+    /// Serialized JSON, absent for GET.
+    pub body: Option<Vec<u8>>,
+}
+
+/// Raw response header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportHeader {
+    pub name: String,
+    pub value: Vec<u8>,
+}
+
+/// Complete ordinary HTTP response.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportResponse {
+    pub status: u16,
+    pub headers: Vec<TransportHeader>,
+    pub body: Vec<u8>,
+}
+
+/// Framed SSE event without application-specific fields.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransportSseEvent {
+    pub data: String,
+}
+
+pub type TransportSseStream =
+    Pin<Box<dyn Stream<Item = Result<TransportSseEvent, TransportError>> + Send>>;
+
+pub enum TransportSseBody {
+    Events(TransportSseStream),
+    Bytes(Vec<u8>),
+}
+
+pub struct TransportSseResponse {
+    pub status: u16,
+    pub headers: Vec<TransportHeader>,
+    pub body: TransportSseBody,
+}
+
+/// Ordinary HTTP adapter. JSON and API semantics remain above this boundary.
+#[async_trait]
+pub trait Transport: Send + Sync {
+    async fn execute(&self, request: TransportRequest)
+    -> Result<TransportResponse, TransportError>;
+}
+
+/// Optional SSE capability, separate from ordinary HTTP transport.
+#[async_trait]
+pub trait StreamingTransport: Transport {
+    async fn execute_sse(
+        &self,
+        request: TransportRequest,
+    ) -> Result<TransportSseResponse, TransportError>;
+}
+
+/// Default transport backed by `reqwest + rustls`.
 pub struct ReqwestTransport {
     client: reqwest::Client,
 }
@@ -57,252 +85,130 @@ impl ReqwestTransport {
     ///
     /// # Errors
     ///
-    /// Returns [`BridgeError`] when the authorization header or reqwest client cannot be built.
+    /// Returns a transport error when the authorization header or HTTP client cannot be built.
     pub fn new(api_key: SecretString, timeout_ms: u64) -> Result<Self, BridgeError> {
-        let mut headers = HeaderMap::new();
+        let mut headers = reqwest::header::HeaderMap::new();
         let auth_value = format!("Bearer {}", api_key.expose_secret());
         drop(api_key);
         let auth_header =
             reqwest::header::HeaderValue::from_str(&auth_value).map_err(|source| {
-                TransportError {
-                    operation: TransportOperation::BuildHeader,
-                    endpoint: None,
-                    source: Box::new(source),
-                }
+                TransportError::new(TransportOperation::BuildHeader, None, Box::new(source))
             })?;
         headers.insert(reqwest::header::AUTHORIZATION, auth_header);
         headers.insert(
             reqwest::header::CONTENT_TYPE,
             reqwest::header::HeaderValue::from_static("application/json"),
         );
-
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_millis(timeout_ms))
             .build()
-            .map_err(|source| TransportError {
-                operation: TransportOperation::BuildClient,
-                endpoint: None,
-                source: Box::new(source),
+            .map_err(|source| {
+                TransportError::new(TransportOperation::BuildClient, None, Box::new(source))
             })?;
-
         Ok(Self { client })
+    }
+
+    fn build(&self, request: &TransportRequest) -> reqwest::RequestBuilder {
+        let mut builder = match request.method {
+            TransportMethod::Get => self.client.get(&request.endpoint),
+            TransportMethod::Post => self.client.post(&request.endpoint),
+        };
+        if let Some(accept) = &request.accept {
+            builder = builder.header(reqwest::header::ACCEPT, accept);
+        }
+        if let Some(body) = &request.body {
+            builder = builder.body(body.clone());
+        }
+        builder
     }
 }
 
 #[async_trait]
 impl Transport for ReqwestTransport {
-    async fn get_json<TRes: DeserializeOwned + Send>(
+    async fn execute(
         &self,
-        endpoint: &str,
-    ) -> Result<TRes, BridgeError> {
-        let response = self
-            .client
-            .get(endpoint)
-            .send()
-            .await
-            .map_err(|source| TransportError {
-                operation: TransportOperation::SendRequest,
-                endpoint: Some(endpoint.to_owned()),
-                source: Box::new(source),
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let headers = response.headers().clone();
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(
-                status,
-                &headers,
-                body_text.as_str(),
-                endpoint,
-            ));
-        }
-
-        response
-            .json::<TRes>()
-            .await
-            .map_err(|source| DecodeError {
-                target: DecodeTarget::JsonResponse,
-                source: Box::new(source),
-            })
-            .map_err(Into::into)
+        request: TransportRequest,
+    ) -> Result<TransportResponse, TransportError> {
+        let endpoint = request.endpoint.clone();
+        let response = self.build(&request).send().await.map_err(|source| {
+            TransportError::new(
+                TransportOperation::SendRequest,
+                Some(endpoint.clone()),
+                Box::new(source),
+            )
+        })?;
+        let status = response.status().as_u16();
+        let headers = collect_headers(response.headers());
+        let body = response.bytes().await.map_err(|source| {
+            TransportError::new(
+                TransportOperation::ReadResponseBytes,
+                Some(endpoint),
+                Box::new(source),
+            )
+        })?;
+        Ok(TransportResponse {
+            status,
+            headers,
+            body: body.to_vec(),
+        })
     }
+}
 
-    async fn post_bytes<TReq: Serialize + Send + Sync>(
+#[async_trait]
+impl StreamingTransport for ReqwestTransport {
+    async fn execute_sse(
         &self,
-        endpoint: &str,
-        body: &TReq,
-    ) -> Result<Vec<u8>, BridgeError> {
-        let response = self
-            .client
-            .post(endpoint)
-            .json(body)
-            .send()
-            .await
-            .map_err(|source| TransportError {
-                operation: TransportOperation::SendRequest,
-                endpoint: Some(endpoint.to_owned()),
-                source: Box::new(source),
+        request: TransportRequest,
+    ) -> Result<TransportSseResponse, TransportError> {
+        let endpoint = request.endpoint.clone();
+        let response = self.build(&request).send().await.map_err(|source| {
+            TransportError::new(
+                TransportOperation::SendRequest,
+                Some(endpoint.clone()),
+                Box::new(source),
+            )
+        })?;
+        let status = response.status().as_u16();
+        let headers = collect_headers(response.headers());
+        if !(200..300).contains(&status) {
+            let body = response.bytes().await.map_err(|source| {
+                TransportError::new(
+                    TransportOperation::ReadResponseBytes,
+                    Some(endpoint),
+                    Box::new(source),
+                )
             })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let headers = response.headers().clone();
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(
+            return Ok(TransportSseResponse {
                 status,
-                &headers,
-                body_text.as_str(),
-                endpoint,
-            ));
+                headers,
+                body: TransportSseBody::Bytes(body.to_vec()),
+            });
         }
-
-        response
-            .bytes()
-            .await
-            .map(|bytes| bytes.to_vec())
-            .map_err(|source| TransportError {
-                operation: TransportOperation::ReadResponseBytes,
-                endpoint: Some(endpoint.to_owned()),
-                source: Box::new(source),
-            })
-            .map_err(Into::into)
-    }
-
-    async fn post_sse<TReq: Serialize + Send + Sync>(
-        &self,
-        endpoint: &str,
-        body: &TReq,
-    ) -> Result<TransportSseStream, BridgeError> {
-        let response = self
-            .client
-            .post(endpoint)
-            .header(reqwest::header::ACCEPT, "text/event-stream")
-            .json(body)
-            .send()
-            .await
-            .map_err(|source| TransportError {
-                operation: TransportOperation::SendRequest,
-                endpoint: Some(endpoint.to_owned()),
-                source: Box::new(source),
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let headers = response.headers().clone();
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_status_error(
-                status,
-                &headers,
-                body_text.as_str(),
-                endpoint,
-            ));
-        }
-
-        let mut event_stream = response.bytes_stream().eventsource();
-        let endpoint = endpoint.to_owned();
-        let output = try_stream! {
-            while let Some(item) = event_stream.next().await {
-                match item {
-                    Ok(event) => {
-                        if !event.data.is_empty() {
-                            yield parse_stream_chunk(&event.data)?;
-                        }
-                    }
-                    Err(err) => {
-                        Err(TransportError {
-                            operation: TransportOperation::ParseSse,
-                            endpoint: Some(endpoint.clone()),
-                            source: Box::new(err),
-                        })?;
-                    }
-                }
+        let mut events = response.bytes_stream().eventsource();
+        let output = async_stream::try_stream! {
+            while let Some(item) = events.next().await {
+                let event = item.map_err(|source| TransportError::new(
+                    TransportOperation::ParseSse, Some(endpoint.clone()), Box::new(source)))?;
+                if !event.data.is_empty() { yield TransportSseEvent { data: event.data }; }
             }
         };
-
-        Ok(Box::pin(output))
-    }
-}
-
-fn parse_stream_chunk(data: &str) -> Result<ImageStreamChunk, BridgeError> {
-    serde_json::from_str(data)
-        .map_err(|source| DecodeError {
-            target: DecodeTarget::StreamChunk,
-            source: Box::new(source),
+        Ok(TransportSseResponse {
+            status,
+            headers,
+            body: TransportSseBody::Events(Box::pin(output)),
         })
-        .map_err(Into::into)
+    }
 }
 
-fn map_status_error(
-    status: reqwest::StatusCode,
-    headers: &HeaderMap,
-    body_text: &str,
-    endpoint: &str,
-) -> BridgeError {
-    let trimmed = body_text.trim();
-    let server_reason = if trimmed.is_empty() {
-        None
-    } else {
-        extract_error_reason(trimmed)
-    };
-    let raw_body = (!trimmed.is_empty()).then(|| trimmed.to_owned());
-
-    ApiError {
-        kind: match status.as_u16() {
-            400 => ApiErrorKind::InvalidRequest,
-            401 => ApiErrorKind::AuthenticationFailed,
-            402 => ApiErrorKind::InsufficientCredit,
-            409 => ApiErrorKind::RequestConflict,
-            429 => ApiErrorKind::RateLimited {
-                retry_after: parse_retry_after(
-                    headers
-                        .get(reqwest::header::RETRY_AFTER)
-                        .and_then(|v| v.to_str().ok()),
-                    SystemTime::now(),
-                ),
-            },
-            500..=599 => ApiErrorKind::ServerError,
-            _ => ApiErrorKind::UnexpectedStatus,
-        },
-        status: status.as_u16(),
-        endpoint: endpoint.to_owned(),
-        server_reason,
-        raw_body,
-    }
-    .into()
-}
-
-fn extract_error_reason(raw: &str) -> Option<ApiErrorReason> {
-    let parsed = serde_json::from_str::<serde_json::Value>(raw).ok()?;
-    if let Some(message) = parsed.get("message").and_then(serde_json::Value::as_str) {
-        return Some(ApiErrorReason::Message(message.to_owned()));
-    }
-    if let Some(detail) = parsed.get("detail").and_then(serde_json::Value::as_str) {
-        return Some(ApiErrorReason::Detail(detail.to_owned()));
-    }
-    parsed
-        .get("error")
-        .and_then(|value| value.get("message"))
-        .and_then(serde_json::Value::as_str)
-        .map(|message| ApiErrorReason::ErrorMessage(message.to_owned()))
-}
-
-fn parse_retry_after(raw: Option<&str>, now: SystemTime) -> Option<Duration> {
-    let value = raw?;
-
-    if let Ok(seconds) = value.trim().parse::<i64>() {
-        if seconds < 0 {
-            return None;
-        }
-        return Some(Duration::from_secs(seconds.cast_unsigned()));
-    }
-
-    if let Ok(date) = httpdate::parse_http_date(value.trim()) {
-        return Some(date.duration_since(now).unwrap_or(Duration::ZERO));
-    }
-
-    None
+fn collect_headers(headers: &reqwest::header::HeaderMap) -> Vec<TransportHeader> {
+    headers
+        .iter()
+        .map(|(name, value)| TransportHeader {
+            name: name.as_str().to_owned(),
+            value: value.as_bytes().to_vec(),
+        })
+        .collect()
 }
 
 #[cfg(test)]

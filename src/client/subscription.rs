@@ -16,7 +16,8 @@ impl<T: Transport> Client<T> {
     /// Returns [`BridgeError`] when the transport request fails or the response cannot be decoded.
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
         let endpoint = self.image_endpoint("/user/subscription");
-        let raw = self.transport.get_json::<Value>(endpoint.as_str()).await?;
+        let raw =
+            crate::protocol::get_json::<_, Value>(&*self.transport, endpoint.as_str()).await?;
         let info = map_subscription_response(&raw);
         self.observe_balance(&info).await;
         Ok(info)

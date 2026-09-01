@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use novelai_bridge::{
     Character, CharacterPosition, Client, CreditEvent, CreditObserver, DecodeError, DecodeTarget,
-    GenerateImageRequest, GenerateImageStreamRequest, ImageSize, Model, RequestOutcome,
+    GenerateImageRequest, GenerateImageStreamRequest, ImageSize, ImageStreamChunk, Model,
+    RequestOutcome,
 };
 
 use support::MockTransport;
@@ -125,7 +126,6 @@ async fn normalized_characters_respect_the_model_limit() {
 }
 
 #[tokio::test]
-#[ignore = "stream lifecycle: connection setup is not generation completion"]
 async fn stream_failure_is_observed_as_failure_not_success() {
     let transport = MockTransport::default();
     transport.set_sse_error(
@@ -161,6 +161,81 @@ async fn stream_failure_is_observed_as_failure_not_success() {
             ..
         }
     )));
+    drop(events);
+}
+
+fn stream_chunk(sample: u32) -> ImageStreamChunk {
+    ImageStreamChunk {
+        event_type: "final".to_owned(),
+        samp_ix: sample,
+        step_ix: None,
+        gen_id: 1,
+        sigma: None,
+        image: "image fragment".to_owned(),
+    }
+}
+
+fn stream_request() -> GenerateImageStreamRequest {
+    GenerateImageStreamRequest {
+        base: GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build(),
+        ..GenerateImageStreamRequest::default()
+    }
+}
+
+#[tokio::test]
+async fn stream_eof_settles_once_with_distinct_sample_count() {
+    let transport = MockTransport::default();
+    transport.set_sse_chunks(vec![stream_chunk(0), stream_chunk(0), stream_chunk(1)]);
+    let observer = Arc::new(Observer::default());
+    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
+    let chunks: Vec<_> = client
+        .generate_stream(stream_request())
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(chunks.len(), 3);
+    let events = observer.0.lock().unwrap();
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        events[1],
+        CreditEvent::RequestSettled {
+            outcome: RequestOutcome::Succeeded { image_count: 2 },
+            ..
+        }
+    ));
+    drop(events);
+}
+
+#[tokio::test]
+async fn stream_explicit_cancel_is_settled_but_drop_is_not_guessed() {
+    let observer = Arc::new(Observer::default());
+    let client =
+        Client::with_transport(MockTransport::default()).with_credit_observer(observer.clone());
+    client
+        .generate_stream(stream_request())
+        .await
+        .unwrap()
+        .cancel()
+        .await;
+    {
+        let events = observer.0.lock().unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events[1],
+            CreditEvent::RequestSettled {
+                outcome: RequestOutcome::Cancelled,
+                ..
+            }
+        ));
+        drop(events);
+    }
+
+    let dropped = client.generate_stream(stream_request()).await.unwrap();
+    drop(dropped);
+    let events = observer.0.lock().unwrap();
+    assert_eq!(events.len(), 3, "drop adds only the second planned event");
+    assert!(matches!(events[2], CreditEvent::RequestPlanned { .. }));
     drop(events);
 }
 

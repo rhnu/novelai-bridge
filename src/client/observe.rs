@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use crate::{
     BridgeError, CreditBalance, CreditEvent, NormalizedGeneration, ObservedOperation,
@@ -13,7 +13,33 @@ pub(super) struct PendingObservation {
     fingerprint: RequestFingerprint,
 }
 
+/// Observer and fingerprint moved into a live stream until its real terminal state.
+pub struct StreamObservation {
+    observer: Arc<dyn crate::CreditObserver>,
+    fingerprint: RequestFingerprint,
+}
+
+impl StreamObservation {
+    pub async fn settle(self, outcome: RequestOutcome) {
+        self.observer
+            .observe(CreditEvent::RequestSettled {
+                fingerprint: self.fingerprint,
+                outcome,
+            })
+            .await;
+    }
+}
+
 impl<T: Transport> Client<T> {
+    pub(super) fn stream_observation(
+        &self,
+        observation: Option<PendingObservation>,
+    ) -> Option<StreamObservation> {
+        Some(StreamObservation {
+            observer: self.credit_observer.as_ref()?.clone(),
+            fingerprint: observation?.fingerprint,
+        })
+    }
     /// Reports a planned generation request, returning the handle used to settle it.
     ///
     /// Returns `None` when no observer is attached, so fingerprint construction is skipped.

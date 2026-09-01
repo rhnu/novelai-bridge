@@ -2,20 +2,18 @@
 
 use std::{
     io::Cursor,
-    pin::Pin,
     sync::{Arc, Mutex},
 };
 
 use async_trait::async_trait;
 use base64::Engine;
-use futures_core::Stream;
 use futures_util::stream;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use novelai_bridge::{
-    BridgeError, DecodeError, DecodeTarget, ImageStreamChunk, Transport, TransportError,
-    TransportOperation,
+    BridgeError, ImageStreamChunk, StreamingTransport, Transport, TransportError, TransportHeader,
+    TransportMethod, TransportOperation, TransportRequest, TransportResponse, TransportSseBody,
+    TransportSseEvent, TransportSseResponse,
 };
-use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
 #[derive(Clone)]
@@ -34,8 +32,8 @@ struct MockTransportState {
     sse_chunks: Vec<ImageStreamChunk>,
     sse_error: Option<BridgeError>,
     json_response: Value,
-    json_error: Option<BridgeError>,
-    bytes_error: Option<BridgeError>,
+    json_error: Option<TransportError>,
+    bytes_error: Option<TransportError>,
 }
 
 impl Default for MockTransport {
@@ -76,12 +74,12 @@ impl MockTransport {
         self.state.lock().unwrap().json_response = json_response;
     }
 
-    pub fn set_json_error(&self, json_error: BridgeError) {
+    pub fn set_json_error(&self, json_error: TransportError) {
         self.state.lock().unwrap().json_error = Some(json_error);
     }
 
     /// Makes the next `post_bytes` call fail with `bytes_error`.
-    pub fn set_bytes_error(&self, bytes_error: BridgeError) {
+    pub fn set_bytes_error(&self, bytes_error: TransportError) {
         self.state.lock().unwrap().bytes_error = Some(bytes_error);
     }
 
@@ -111,85 +109,119 @@ impl MockTransport {
 
 #[async_trait]
 impl Transport for MockTransport {
-    async fn get_json<TRes: DeserializeOwned + Send>(
+    async fn execute(
         &self,
-        path: &str,
-    ) -> Result<TRes, BridgeError> {
-        let mut state = self.state.lock().unwrap();
-        state.last_path = Some(path.to_owned());
-        if let Some(err) = state.json_error.take() {
-            return Err(err);
-        }
-        let payload = state.json_response.clone();
-        drop(state);
-
-        serde_json::from_value(payload)
-            .map_err(|source| DecodeError::new(DecodeTarget::JsonResponse, Box::new(source)))
-            .map_err(Into::into)
-    }
-
-    async fn post_bytes<TReq: Serialize + Send + Sync>(
-        &self,
-        path: &str,
-        body: &TReq,
-    ) -> Result<Vec<u8>, BridgeError> {
-        let body = serde_json::to_value(body)
+        request: TransportRequest,
+    ) -> Result<TransportResponse, TransportError> {
+        let body = request
+            .body
+            .as_ref()
+            .map(|body| serde_json::from_slice::<Value>(body))
+            .transpose()
             .map_err(|source| {
                 TransportError::new(
                     TransportOperation::SendRequest,
-                    Some(path.to_owned()),
+                    Some(request.endpoint.clone()),
                     Box::new(source),
                 )
-            })
-            .map_err(BridgeError::from)?;
-
+            })?;
         let mut state = self.state.lock().unwrap();
-        state.last_path = Some(path.to_owned());
-        state.last_body = Some(body.clone());
-        state.post_history.push((path.to_owned(), body));
-        state.byte_paths.push(path.to_owned());
-
+        state.last_path = Some(request.endpoint.clone());
+        if request.method == TransportMethod::Get {
+            if let Some(error) = state.json_error.take() {
+                return Err(error);
+            }
+            return Ok(TransportResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&state.json_response).unwrap(),
+            });
+        }
+        if let Some(mut body) = body {
+            restore_typed_float_view(&mut body);
+            state.last_body = Some(body.clone());
+            state.post_history.push((request.endpoint.clone(), body));
+        }
+        state.byte_paths.push(request.endpoint.clone());
         if let Some(error) = state.bytes_error.take() {
             return Err(error);
         }
-
-        if path.ends_with("/ai/encode-vibe") {
-            Ok(state.encode_vibe_response.clone())
+        let body = if request.endpoint.ends_with("/ai/encode-vibe") {
+            state.encode_vibe_response.clone()
         } else {
-            Ok(state.bytes_response.clone())
-        }
+            state.bytes_response.clone()
+        };
+        Ok(TransportResponse {
+            status: 200,
+            headers: Vec::new(),
+            body,
+        })
     }
+}
 
-    async fn post_sse<TReq: Serialize + Send + Sync>(
+#[async_trait]
+impl StreamingTransport for MockTransport {
+    async fn execute_sse(
         &self,
-        path: &str,
-        body: &TReq,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ImageStreamChunk, BridgeError>> + Send>>,
-        BridgeError,
-    > {
-        let body = serde_json::to_value(body)
+        request: TransportRequest,
+    ) -> Result<TransportSseResponse, TransportError> {
+        let body = serde_json::from_slice::<Value>(request.body.as_deref().unwrap_or_default())
             .map_err(|source| {
                 TransportError::new(
                     TransportOperation::SendRequest,
-                    Some(path.to_owned()),
+                    Some(request.endpoint.clone()),
                     Box::new(source),
                 )
-            })
-            .map_err(BridgeError::from)?;
-
+            })?;
+        let mut body = body;
+        restore_typed_float_view(&mut body);
         let mut state = self.state.lock().unwrap();
-        state.last_path = Some(path.to_owned());
+        state.last_path = Some(request.endpoint.clone());
         state.last_body = Some(body.clone());
-        state.post_history.push((path.to_owned(), body));
-        let mut items: Vec<Result<ImageStreamChunk, BridgeError>> =
-            state.sse_chunks.clone().into_iter().map(Ok).collect();
+        state.post_history.push((request.endpoint, body));
+        let mut items: Vec<Result<TransportSseEvent, TransportError>> = state
+            .sse_chunks
+            .iter()
+            .map(|chunk| {
+                Ok(TransportSseEvent {
+                    data: serde_json::to_string(chunk).unwrap(),
+                })
+            })
+            .collect();
         if let Some(error) = state.sse_error.take() {
-            items.push(Err(error));
+            match error {
+                BridgeError::Transport(error) => items.push(Err(error)),
+                _ => items.push(Ok(TransportSseEvent {
+                    data: "not json".to_owned(),
+                })),
+            }
         }
         drop(state);
+        Ok(TransportSseResponse {
+            status: 200,
+            headers: vec![TransportHeader {
+                name: "content-type".to_owned(),
+                value: b"text/event-stream".to_vec(),
+            }],
+            body: TransportSseBody::Events(Box::pin(stream::iter(items))),
+        })
+    }
+}
 
-        Ok(Box::pin(stream::iter(items)))
+// serde_json text uses the shortest f32 spelling, while serde_json::to_value historically
+// widened typed f32 values. Keep existing fixture views stable without changing request bytes.
+fn restore_typed_float_view(value: &mut Value) {
+    match value {
+        Value::Number(number) if number.is_f64() => {
+            if let Some(raw) = number.as_f64() {
+                #[allow(clippy::cast_possible_truncation)]
+                let typed = raw as f32;
+                *number = serde_json::Number::from_f64(f64::from(typed)).unwrap();
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(restore_typed_float_view),
+        Value::Object(fields) => fields.values_mut().for_each(restore_typed_float_view),
+        _ => {}
     }
 }
 

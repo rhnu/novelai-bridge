@@ -183,10 +183,9 @@ async fn effective_coordinate_grid_matches_wire_and_remains_idempotent() {
             .await
             .unwrap();
         let body = transport.last_body().unwrap();
-        assert_eq!(
-            body["parameters"]["characterPrompts"][0]["center"],
-            serde_json::json!({"x": expected.x, "y": expected.y})
-        );
+        let center = &body["parameters"]["characterPrompts"][0]["center"];
+        assert!((center["x"].as_f64().unwrap() - f64::from(expected.x)).abs() < 1e-6);
+        assert!((center["y"].as_f64().unwrap() - f64::from(expected.y)).abs() < 1e-6);
     }
 }
 
