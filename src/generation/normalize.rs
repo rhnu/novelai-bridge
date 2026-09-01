@@ -485,12 +485,6 @@ impl Normalizer {
         }
 
         for (idx, reference) in vibe.references.iter_mut().enumerate() {
-            if reference.vibe_data_cache.trim().is_empty() {
-                return Err(InvalidRequest::EmptyField {
-                    field: format!("vibe_transfer.references[{idx}].vibe_data_cache"),
-                }
-                .into());
-            }
             reference.strength = self.normalize_f32_range(
                 &format!("vibe_transfer.references[{idx}].strength"),
                 reference.strength,

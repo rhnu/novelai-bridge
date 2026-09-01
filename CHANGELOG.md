@@ -6,6 +6,9 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- `EncodedImage`, `VibeEncoding` and the replaceable `ImagePreprocessor` boundary. Validated image
+  bytes retain cached decoded pixels through normalization and preparation.
+- Strict, bounded raw/ZIP generated-image decoding with best-effort metadata state.
 - Dyn-compatible fixed HTTP request/response DTOs and a separate `StreamingTransport` capability.
 - `GenerateImageStream::cancel()` and `RequestOutcome::Cancelled` for explicit stream cancellation.
 - Read-only `ModelDescriptor` profiles for identity, support, constraints, defaults, prompt,
@@ -27,6 +30,8 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
+- Use semantic image and vibe payload types in request structs. Generation and director responses
+  reject arbitrary bytes and reject a ZIP response when any supported-image candidate is invalid.
 - Move JSON serialization, NovelAI status interpretation and stream-chunk decoding above transport;
   transports now expose raw response data and generic framed SSE events.
 - Settle streaming credit observations only on EOF, stream failure or explicit cancellation. A
@@ -52,6 +57,13 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+- Construct image-bearing request fields with `EncodedImage::from_bytes` or
+  `EncodedImage::from_base64`. `Img2ImgRequest::new` now takes `EncodedImage`, as do masks,
+  character references, Vibe encoding requests and director requests.
+- Treat `Client::encode_vibe` as returning `VibeEncoding`; pass it directly to
+  `VibeReference::vibe_data_cache`, or use `to_base64()` only at a text persistence boundary.
+- Implement `ImagePreprocessor` and call `NormalizedGeneration::prepare_with` only when replacing
+  the default pixel transform. Response decode failures now use `DecodeTarget::ImageResponse`.
 - Replace generic `Transport::{get_json,post_bytes,post_sse}` implementations with fixed
   `Transport::execute`. Implement `StreamingTransport::execute_sse` only for SSE support. Inspect
   `TransportRequest.body` as serialized JSON and return status/headers/body without API mapping.

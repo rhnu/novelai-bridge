@@ -7,11 +7,11 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use novelai_bridge::{
     BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
-    CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver,
+    CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver, EncodedImage,
     GenerateImageRequest, GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams,
     ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model,
     ObservedOperation, QualityPreset, ReferenceSet, RequestCostEstimate, RequestOutcome, UcPreset,
-    VibeReference, VibeTransferConfig,
+    VibeEncoding, VibeReference, VibeTransferConfig,
 };
 use serde_json::{Value, json};
 
@@ -28,8 +28,8 @@ fn request_for(prompt: &str, model: Model) -> GenerateImageRequest {
     GenerateImageRequest::builder(prompt, model).build()
 }
 
-fn png_data_url(width: u32, height: u32) -> String {
-    format!("data:image/png;base64,{}", create_png_base64(width, height))
+fn png_data_url(width: u32, height: u32) -> EncodedImage {
+    EncodedImage::from_base64(&create_png_base64(width, height)).unwrap()
 }
 
 fn decoded_dimensions(value: &Value) -> (u32, u32) {
@@ -326,26 +326,14 @@ async fn img2img_source_and_mask_are_fitted_to_the_requested_canvas() {
     );
 }
 
-#[tokio::test]
-async fn generate_rejects_undecodable_img2img_source() {
-    let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
-
-    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-        .img2img(Img2ImgRequest::new(
-            "data:image/png;base64,QUJDRA==",
-            0.7,
-            0.0,
-        ))
-        .build();
-
-    let error = client.generate(params).await.unwrap_err();
+#[test]
+fn encoded_image_rejects_undecodable_img2img_source_at_construction() {
+    let error = EncodedImage::from_bytes(b"not an image".to_vec()).unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UndecodableImage { ref field, .. })
-            if field == "img2img.image"
+            if field == "image"
     ));
-    assert!(transport.last_path().is_none());
 }
 
 #[tokio::test]
@@ -643,7 +631,7 @@ async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .vibe_transfer(VibeTransferConfig {
             references: vec![VibeReference {
-                vibe_data_cache: "QUJDRA==".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("QUJDRA==").unwrap(),
                 strength: 0.6,
             }],
             strength: 0.8,
@@ -671,7 +659,7 @@ async fn generate_serializes_explicit_vibe_data_cache() {
             strength: 1.0,
             references: vec![VibeReference {
                 strength: 0.6,
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         })
         .build();
@@ -721,54 +709,24 @@ async fn generate_omits_vibe_normalization_flag_without_references() {
     assert!(body["parameters"]["reference_image_multiple"].is_null());
 }
 
-#[tokio::test]
-async fn generate_rejects_vibe_transfer_without_explicit_vibe_data_cache() {
-    let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
-
-    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-        .vibe_transfer(VibeTransferConfig {
-            strength: 1.0,
-            references: vec![VibeReference {
-                strength: 0.6,
-                vibe_data_cache: String::new(),
-            }],
-        })
-        .build();
-
-    let error = client.generate(params).await.unwrap_err();
+#[test]
+fn vibe_encoding_rejects_empty_input_at_construction() {
+    let error = VibeEncoding::from_bytes(Vec::new()).unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
-            if field == "vibe_transfer.references[0].vibe_data_cache"
+            if field == "vibe_encoding"
     ));
-    assert!(transport.byte_paths().is_empty());
 }
 
-#[tokio::test]
-async fn generate_rejects_invalid_vibe_data_cache_without_transport_call() {
-    for cache in ["not-base64", "AAAAAAAAAAAAAAAAAAAAAAAAA"] {
-        let transport = MockTransport::default();
-        let client = Client::with_transport(transport.clone());
-
-        let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-            .vibe_transfer(VibeTransferConfig {
-                strength: 1.0,
-                references: vec![VibeReference {
-                    strength: 0.6,
-                    vibe_data_cache: cache.to_owned(),
-                }],
-            })
-            .build();
-
-        let error = client.generate(params).await.unwrap_err();
-        assert!(matches!(
-            error,
-            BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
-                if field == "vibe_data_cache"
-        ));
-        assert!(transport.byte_paths().is_empty());
-    }
+#[test]
+fn vibe_encoding_rejects_invalid_base64_at_construction() {
+    let error = VibeEncoding::from_base64("not-base64").unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
+            if field == "vibe_encoding"
+    ));
 }
 
 #[tokio::test]
@@ -868,7 +826,7 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
             strength: 1.0,
             references: vec![VibeReference {
                 strength: 1.0,
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         }),
         character_references: vec![CharacterReference {
@@ -902,7 +860,7 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
             strength: 1.0,
             references: vec![VibeReference {
                 strength: 1.0,
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         })
         .build();
@@ -1004,7 +962,7 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
             strength: 2.0,
             references: vec![VibeReference {
                 strength: -1.0,
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         })
         .build();
@@ -1028,7 +986,7 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
             strength: 1.0,
             references: vec![VibeReference {
                 strength: 5.0,
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         })
         .strict_mode(true)

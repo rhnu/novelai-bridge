@@ -294,8 +294,10 @@ fn schedule_support_is_independent_of_wire_format_and_fallback_is_idempotent() {
 
 #[tokio::test]
 async fn every_model_and_mode_uses_its_registered_wire_identity() {
-    use novelai_bridge::{Client, GenerateImageStreamRequest, ImageSize, Img2ImgRequest};
-    let image = support::create_png_base64(2, 2);
+    use novelai_bridge::{
+        Client, EncodedImage, GenerateImageStreamRequest, ImageSize, Img2ImgRequest,
+    };
+    let image = EncodedImage::from_base64(&support::create_png_base64(2, 2)).unwrap();
     for model in Model::ALL {
         let descriptor = model.descriptor();
         for mode in MODES {

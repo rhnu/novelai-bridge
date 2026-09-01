@@ -1,23 +1,28 @@
 use super::MODES;
 use novelai_bridge::{
-    AnlasPricingContext, CharacterReference, CharacterReferenceType, GenerateImageRequest,
-    GenerationMode, Img2ImgRequest, Model, NormalizationPolicy, ReferenceAvailability,
-    ReferenceIntent, ReferenceSet, VibeInputPath, VibeReference, VibeTransferConfig,
+    AnlasPricingContext, CharacterReference, CharacterReferenceType, EncodedImage,
+    GenerateImageRequest, GenerationMode, Img2ImgRequest, Model, NormalizationPolicy,
+    ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeEncoding, VibeInputPath,
+    VibeReference, VibeTransferConfig,
 };
+
+fn image() -> EncodedImage {
+    EncodedImage::from_base64(&super::support::create_png_base64(2, 2)).unwrap()
+}
 
 fn request(model: Model, mode: GenerationMode, intent: ReferenceIntent) -> GenerateImageRequest {
     let mut raw = GenerateImageRequest::builder("cat", model).build();
     if mode != GenerationMode::TextToImage {
-        let mut image = Img2ImgRequest::new("opaque source", 0.5, 0.0);
+        let mut image = Img2ImgRequest::new(image(), 0.5, 0.0);
         if mode == GenerationMode::Inpainting {
-            image.mask = Some("opaque mask".to_owned());
+            image.mask = Some(self::image());
         }
         raw.img2img = Some(image);
     }
     raw.references = Some(ReferenceSet {
         character_references: if intent.character {
             vec![CharacterReference {
-                image: "opaque reference".to_owned(),
+                image: image(),
                 reference_type: CharacterReferenceType::Character,
                 fidelity: 1.0,
                 strength: 1.0,
@@ -28,7 +33,7 @@ fn request(model: Model, mode: GenerationMode, intent: ReferenceIntent) -> Gener
         vibe_transfer: intent.vibe.then(|| VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
-                vibe_data_cache: "AQID".to_owned(),
+                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
                 strength: 1.0,
             }],
         }),

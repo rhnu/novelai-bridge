@@ -2,10 +2,14 @@ mod support;
 
 use novelai_bridge::{
     AnlasPricingContext, BridgeError, Character, CharacterPosition, CharacterReference, Client,
-    GenerateImageRequest, ImageSize, Img2ImgRequest, InvalidRequest, Model, NoiseSchedule,
-    NormalizationChange, NormalizationPolicy, QualityPreset, StreamMode, VibeReference,
-    VibeTransferConfig,
+    EncodedImage, GenerateImageRequest, ImageSize, Img2ImgRequest, InvalidRequest, Model,
+    NoiseSchedule, NormalizationChange, NormalizationPolicy, QualityPreset, StreamMode,
+    VibeEncoding, VibeReference, VibeTransferConfig,
 };
+
+fn image() -> EncodedImage {
+    EncodedImage::from_base64(&support::create_png_base64(2, 2)).unwrap()
+}
 
 fn request() -> GenerateImageRequest {
     GenerateImageRequest::builder("private prompt", Model::NaiDiffusion45Full)
@@ -194,14 +198,14 @@ fn conflict_diagnostics_contain_field_names_not_payloads() {
     let mut raw = request();
     raw.references = Some(novelai_bridge::ReferenceSet {
         character_references: vec![CharacterReference {
-            image: "private image".to_owned(),
+            image: image(),
             reference_type: novelai_bridge::CharacterReferenceType::Character,
             fidelity: 1.0,
             strength: 1.0,
         }],
         vibe_transfer: Some(VibeTransferConfig {
             references: vec![VibeReference {
-                vibe_data_cache: "private vibe".to_owned(),
+                vibe_data_cache: VibeEncoding::from_bytes(b"private vibe".to_vec()).unwrap(),
                 strength: 1.0,
             }],
             strength: 1.0,
@@ -232,15 +236,15 @@ fn conflict_diagnostics_contain_field_names_not_payloads() {
 }
 
 #[test]
-fn planning_and_pricing_do_not_decode_image_pixels_or_resolve_random_seed() {
+fn planning_and_pricing_preserve_validated_images_and_do_not_resolve_random_seed() {
     let mut raw = request();
     raw.core.seed = 0;
-    raw.img2img = Some(Img2ImgRequest::new("not an image", 2.0, -1.0));
+    raw.img2img = Some(Img2ImgRequest::new(image(), 2.0, -1.0));
     let normalized = raw.normalize().unwrap();
     assert_eq!(normalized.request().core.seed, 0);
     let cost = normalized.anlas_estimate_input(AnlasPricingContext::default());
     assert_eq!(cost.img2img_strength, Some(0.99));
-    assert!(normalized.prepare().is_err());
+    assert!(normalized.prepare().is_ok());
 }
 
 #[tokio::test]
@@ -284,7 +288,7 @@ async fn strict_rejection_precedes_image_decoding_and_transport() {
     let mut raw = request();
     raw.strict_mode = true;
     raw.core.size.width = 2048;
-    raw.img2img = Some(Img2ImgRequest::new("invalid", 0.5, 0.0));
+    raw.img2img = Some(Img2ImgRequest::new(image(), 0.5, 0.0));
     let transport = support::MockTransport::default();
     let result = Client::with_transport(transport.clone())
         .generate(raw)

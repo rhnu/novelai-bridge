@@ -1,11 +1,11 @@
 use super::NormalizedGeneration;
 use crate::{
-    BridgeError, GenerateImageRequest, GenerationMode, InvalidRequest, ModelDescriptor,
-    ResolvedPrompts, VibeTransferConfig,
+    BridgeError, DefaultImagePreprocessor, GenerateImageRequest, GenerationMode, ImagePreparation,
+    ImagePreprocessor, InvalidRequest, ModelDescriptor, ResolvedPrompts, VibeTransferConfig,
     internal::{
         request_helpers::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
-            default_seed, fit_mask_image, fit_source_image,
+            default_seed,
         },
         wire::{
             CharacterPrompt, ImageGenerationRequestBody, ImageParameters, V4Caption,
@@ -13,7 +13,6 @@ use crate::{
         },
     },
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 
 /// Image-prepared input for one sending attempt, with a fixed resolved seed.
 ///
@@ -45,8 +44,15 @@ impl PreparedGeneration {
 }
 
 pub(super) fn prepare(normalized: NormalizedGeneration) -> Result<PreparedGeneration, BridgeError> {
+    prepare_with(normalized, &DefaultImagePreprocessor)
+}
+
+pub(super) fn prepare_with(
+    normalized: NormalizedGeneration,
+    preprocessor: &dyn ImagePreprocessor,
+) -> Result<PreparedGeneration, BridgeError> {
     let resolved_seed = resolve_seed(normalized.request().core.seed);
-    let body = build_generate_request(&normalized, resolved_seed)?;
+    let body = build_generate_request(&normalized, resolved_seed, preprocessor)?;
     Ok(PreparedGeneration {
         normalized,
         body,
@@ -84,6 +90,7 @@ struct Img2ImgWireParts {
 fn build_generate_request(
     normalized: &NormalizedGeneration,
     resolved_seed: i64,
+    preprocessor: &dyn ImagePreprocessor,
 ) -> Result<ImageGenerationRequestBody, BridgeError> {
     let params = normalized.request();
     let action = params.mode();
@@ -95,7 +102,7 @@ fn build_generate_request(
             feature: "img2img.mask".to_owned(),
             required_model: "models with an inpainting variant".to_owned(),
         })?;
-    let image_parameters = build_image_parameters(normalized, action, resolved_seed)?;
+    let image_parameters = build_image_parameters(normalized, action, resolved_seed, preprocessor)?;
 
     Ok(ImageGenerationRequestBody {
         action: match action {
@@ -116,6 +123,7 @@ fn build_image_parameters(
     normalized: &NormalizedGeneration,
     action: GenerationMode,
     resolved_seed: i64,
+    preprocessor: &dyn ImagePreprocessor,
 ) -> Result<ImageParameters, BridgeError> {
     let params = normalized.request();
     let descriptor = params.core.model.descriptor();
@@ -131,17 +139,16 @@ fn build_image_parameters(
         descriptor,
         resolved_use_coords,
     );
-    let img2img = build_img2img_wire_parts(params, action, resolved_seed)?;
+    let img2img = build_img2img_wire_parts(params, action, resolved_seed, preprocessor)?;
 
     let references = params.references.as_ref();
     let vibe = references
         .and_then(|set| set.vibe_transfer.as_ref())
-        .map(encode_vibe_references)
-        .transpose()?;
+        .map(encode_vibe_references);
     let character_references = references
         .map(|set| set.character_references.as_slice())
         .filter(|refs| !refs.is_empty())
-        .map(convert_character_references)
+        .map(|refs| convert_character_references(refs, preprocessor))
         .transpose()?;
 
     let variety_sigma = params
@@ -153,6 +160,36 @@ fn build_image_parameters(
                 .variety_sigma(params.core.size.width, params.core.size.height)
         })
         .flatten();
+
+    let (
+        reference_image_multiple,
+        reference_strength_multiple,
+        normalize_reference_strength_multiple,
+        controlnet_strength,
+    ) = match vibe {
+        Some(VibeWireParts {
+            images,
+            strengths,
+            strength,
+        }) => (Some(images), Some(strengths), Some(true), strength),
+        None => (None, None, None, 1.0),
+    };
+    let (
+        director_reference_images,
+        director_reference_descriptions,
+        director_reference_information_extracted,
+        director_reference_secondary_strength_values,
+        director_reference_strength_values,
+    ) = match character_references {
+        Some(parts) => (
+            Some(parts.images),
+            Some(parts.descriptions),
+            Some(parts.information_extracted),
+            Some(parts.secondary_strength_values),
+            Some(parts.strength_values),
+        ),
+        None => (None, None, None, None, None),
+    };
 
     Ok(ImageParameters {
         params_version: Some(descriptor.wire().params_version()),
@@ -180,25 +217,15 @@ fn build_image_parameters(
         extra_noise_seed: img2img.extra_noise_seed,
         color_correct: img2img.color_correct,
         mask: img2img.mask,
-        reference_image_multiple: vibe.as_ref().map(|value| value.images.clone()),
-        reference_strength_multiple: vibe.as_ref().map(|value| value.strengths.clone()),
-        normalize_reference_strength_multiple: vibe.as_ref().map(|_| true),
-        controlnet_strength: Some(vibe.as_ref().map_or(1.0, |value| value.strength)),
-        director_reference_images: character_references
-            .as_ref()
-            .map(|value| value.images.clone()),
-        director_reference_descriptions: character_references
-            .as_ref()
-            .map(|value| value.descriptions.clone()),
-        director_reference_information_extracted: character_references
-            .as_ref()
-            .map(|value| value.information_extracted.clone()),
-        director_reference_secondary_strength_values: character_references
-            .as_ref()
-            .map(|value| value.secondary_strength_values.clone()),
-        director_reference_strength_values: character_references
-            .as_ref()
-            .map(|value| value.strength_values.clone()),
+        reference_image_multiple,
+        reference_strength_multiple,
+        normalize_reference_strength_multiple,
+        controlnet_strength: Some(controlnet_strength),
+        director_reference_images,
+        director_reference_descriptions,
+        director_reference_information_extracted,
+        director_reference_secondary_strength_values,
+        director_reference_strength_values,
         character_prompts: prompt.character_prompts,
         legacy: Some(false),
         legacy_uc: descriptor.wire().uses_v5_extensions().then_some(false),
@@ -238,20 +265,20 @@ fn resolve_seed(seed: i64) -> i64 {
     if seed == 0 { default_seed() } else { seed }
 }
 
-fn encode_vibe_references(vibe: &VibeTransferConfig) -> Result<VibeWireParts, BridgeError> {
+fn encode_vibe_references(vibe: &VibeTransferConfig) -> VibeWireParts {
     let mut images = Vec::with_capacity(vibe.references.len());
     let mut strengths = Vec::with_capacity(vibe.references.len());
 
     for reference in &vibe.references {
-        images.push(resolve_vibe_data_cache(&reference.vibe_data_cache)?);
+        images.push(reference.vibe_data_cache.to_base64());
         strengths.push(reference.strength);
     }
 
-    Ok(VibeWireParts {
+    VibeWireParts {
         images,
         strengths,
         strength: vibe.strength,
-    })
+    }
 }
 
 fn build_prompt_wire_parts(
@@ -324,18 +351,33 @@ fn build_img2img_wire_parts(
     params: &GenerateImageRequest,
     action: GenerationMode,
     resolved_seed: i64,
+    preprocessor: &dyn ImagePreprocessor,
 ) -> Result<Img2ImgWireParts, BridgeError> {
     let Some(img2img) = params.img2img.as_ref() else {
         return Ok(Img2ImgWireParts::default());
     };
 
-    let image = fit_source_image("img2img.image", &img2img.image, params.core.size)?;
+    let image = preprocessor
+        .prepare(
+            "img2img.image",
+            &img2img.image,
+            ImagePreparation::Source(params.core.size),
+        )?
+        .to_base64();
 
     if action == GenerationMode::Inpainting {
         let mask = img2img
             .mask
             .as_ref()
-            .map(|mask| fit_mask_image("img2img.mask", mask, params.core.size))
+            .map(|mask| {
+                preprocessor
+                    .prepare(
+                        "img2img.mask",
+                        mask,
+                        ImagePreparation::Mask(params.core.size),
+                    )
+                    .map(|image| image.to_base64())
+            })
             .transpose()?;
 
         return Ok(Img2ImgWireParts {
@@ -356,23 +398,4 @@ fn build_img2img_wire_parts(
         color_correct: Some(img2img.color_correct),
         ..Img2ImgWireParts::default()
     })
-}
-
-fn resolve_vibe_data_cache(value: &str) -> Result<String, BridgeError> {
-    let compact: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
-    if compact.is_empty() {
-        return Err(InvalidRequest::EmptyField {
-            field: "vibe_data_cache".to_owned(),
-        }
-        .into());
-    }
-
-    STANDARD
-        .decode(compact.as_bytes())
-        .map_err(|source| InvalidRequest::InvalidBase64 {
-            field: "vibe_data_cache".to_owned(),
-            source,
-        })?;
-
-    Ok(compact)
 }

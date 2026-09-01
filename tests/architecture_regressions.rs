@@ -240,7 +240,6 @@ async fn stream_explicit_cancel_is_settled_but_drop_is_not_guessed() {
 }
 
 #[tokio::test]
-#[ignore = "response decoding: non-image raw bytes must not be a generated image"]
 async fn non_image_response_is_rejected() {
     let client =
         Client::with_transport(MockTransport::with_bytes_response(b"not an image".to_vec()));

@@ -2,12 +2,12 @@ mod support;
 
 use novelai_bridge::{
     AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, CharacterReference,
-    CharacterReferenceType, Client, GenerateImageRequest, GuidanceParams, ImageSize, Model,
-    RequestCostEstimate, Sampler, VibeReference, VibeTransferConfig, estimate_anlas_cost,
-    estimate_director_tool_cost,
+    CharacterReferenceType, Client, EncodedImage, GenerateImageRequest, GuidanceParams, ImageSize,
+    Model, RequestCostEstimate, Sampler, VibeEncoding, VibeReference, VibeTransferConfig,
+    estimate_anlas_cost, estimate_director_tool_cost,
 };
 
-use support::MockTransport;
+use support::{MockTransport, create_png_base64};
 
 fn input(model: Model, size: ImageSize, steps: u32) -> AnlasEstimateInput {
     AnlasEstimateInput {
@@ -194,12 +194,12 @@ fn request_mapping_matches_non_strict_reference_conflict_resolution() {
             references: (0..5)
                 .map(|_| VibeReference {
                     strength: 1.0,
-                    vibe_data_cache: "AQID".to_owned(),
+                    vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
                 })
                 .collect(),
         })
         .character_references(vec![CharacterReference {
-            image: "AQID".to_owned(),
+            image: EncodedImage::from_base64(&create_png_base64(2, 2)).unwrap(),
             reference_type: CharacterReferenceType::Character,
             fidelity: 1.0,
             strength: 1.0,

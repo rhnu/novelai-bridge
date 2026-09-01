@@ -6,9 +6,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use novelai_bridge::{
     BridgeError, CharacterReference, CharacterReferenceType, Client, EncodeVibeRequest,
-    GenerateImageRequest, GenerateImageStreamRequest, GeneratedImage, GeneratedImageMetadata,
-    ImageSize, Img2ImgRequest, Model, StreamMode, StreamingTransport, Transport, VibeReference,
-    VibeTransferConfig,
+    EncodedImage, GenerateImageRequest, GenerateImageStreamRequest, GeneratedImage,
+    GeneratedImageMetadata, ImageSize, Img2ImgRequest, Model, StreamMode, StreamingTransport,
+    Transport, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, render};
@@ -97,7 +97,7 @@ pub async fn execute<T: Transport + StreamingTransport>(
                     strict_mode: args.strict,
                 })
                 .await?;
-            println!("  encoded vibe: {} base64 chars", encoded.len());
+            println!("  encoded vibe: {} base64 chars", encoded.to_base64().len());
 
             let mut request = base_request(args, model, size);
             request.references = Some(novelai_bridge::ReferenceSet {
@@ -220,17 +220,17 @@ fn save(dir: &Path, index: usize, image: &GeneratedImage) -> Result<String, Brid
         )
 }
 
-fn load_or_synthesize_source(args: &RunArgs, size: ImageSize) -> Result<String, BridgeError> {
+fn load_or_synthesize_source(args: &RunArgs, size: ImageSize) -> Result<EncodedImage, BridgeError> {
     args.image.as_ref().map_or_else(
-        || Ok(save_input(args, "source", encode_png(gradient(size)))),
-        |path| read_as_data_url(path),
+        || EncodedImage::from_base64(&save_input(args, "source", encode_png(gradient(size)))),
+        |path| read_image(path),
     )
 }
 
-fn load_or_synthesize_mask(args: &RunArgs, size: ImageSize) -> Result<String, BridgeError> {
+fn load_or_synthesize_mask(args: &RunArgs, size: ImageSize) -> Result<EncodedImage, BridgeError> {
     args.mask.as_ref().map_or_else(
-        || Ok(save_input(args, "mask", encode_png(center_mask(size)))),
-        |path| read_as_data_url(path),
+        || EncodedImage::from_base64(&save_input(args, "mask", encode_png(center_mask(size)))),
+        |path| read_image(path),
     )
 }
 
@@ -262,7 +262,7 @@ fn save_input(args: &RunArgs, name: &str, data_url: String) -> String {
     data_url
 }
 
-fn read_as_data_url(path: &Path) -> Result<String, BridgeError> {
+fn read_image(path: &Path) -> Result<EncodedImage, BridgeError> {
     let bytes = std::fs::read(path).map_err(|source| {
         novelai_bridge::TransportError::new(
             novelai_bridge::TransportOperation::SendRequest,
@@ -270,7 +270,7 @@ fn read_as_data_url(path: &Path) -> Result<String, BridgeError> {
             Box::new(source),
         )
     })?;
-    Ok(format!("data:image/png;base64,{}", STANDARD.encode(&bytes)))
+    EncodedImage::from_bytes(bytes)
 }
 
 /// A diagonal gradient, so a returned image visibly differs from its source.

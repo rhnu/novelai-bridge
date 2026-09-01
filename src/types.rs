@@ -392,8 +392,8 @@ impl CharacterReferenceType {
 /// Character reference input used by director references.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CharacterReference {
-    /// Base64 payload or image data URL for the reference image.
-    pub image: String,
+    /// Validated reference image.
+    pub image: crate::EncodedImage,
     /// How the reference should be interpreted.
     pub reference_type: CharacterReferenceType,
     /// Fidelity value used to derive secondary strength.
@@ -409,7 +409,7 @@ pub struct VibeReference {
     ///
     /// The information-extracted value is baked into this payload by `encode_vibe`; generation
     /// requests carry no separate field for it.
-    pub vibe_data_cache: String,
+    pub vibe_data_cache: crate::VibeEncoding,
     /// Per-image reference strength.
     pub strength: f32,
 }
@@ -450,16 +450,16 @@ impl ReferenceSet {
 /// also swaps the wire model to the inpainting sibling returned by [`Model::inpainting_id`].
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Img2ImgRequest {
-    /// Base64 payload or image data URL for the source image.
+    /// Validated source image.
     ///
     /// The client fits this image to the requested canvas before sending it.
-    pub image: String,
+    pub image: crate::EncodedImage,
     /// Strength value in the `[0.01, 0.99]` range.
     pub strength: f32,
     /// Noise value in the `[0, 0.99]` range.
     pub noise: f32,
-    /// Optional base64 payload or image data URL for the inpaint mask.
-    pub mask: Option<String>,
+    /// Optional validated inpaint mask.
+    pub mask: Option<crate::EncodedImage>,
     /// Whether the server applies color correction against the source image.
     pub color_correct: bool,
     /// Optional explicit `extra_noise_seed`. Defaults to the resolved request seed.
@@ -471,9 +471,9 @@ pub struct Img2ImgRequest {
 impl Img2ImgRequest {
     /// Creates an image-to-image request with the client defaults.
     #[must_use]
-    pub fn new(image: impl Into<String>, strength: f32, noise: f32) -> Self {
+    pub const fn new(image: crate::EncodedImage, strength: f32, noise: f32) -> Self {
         Self {
-            image: image.into(),
+            image,
             strength,
             noise,
             mask: None,
@@ -495,8 +495,8 @@ impl Img2ImgRequest {
 /// Request used by [`crate::Client::encode_vibe`].
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct EncodeVibeRequest {
-    /// Base64 payload or image data URL for the source image.
-    pub image: String,
+    /// Validated source image.
+    pub image: crate::EncodedImage,
     /// Information-extracted value in the `[0.01, 1.0]` range.
     pub information_extracted: f32,
     /// Target model for the encoded vibe payload.
@@ -528,8 +528,8 @@ pub enum DirectorTool {
 pub struct RunDirectorToolRequest {
     /// Director tool to run.
     pub tool: DirectorTool,
-    /// Base64 payload or image data URL for the source image.
-    pub image: String,
+    /// Validated source image.
+    pub image: crate::EncodedImage,
     /// Optional prompt for tools that accept it.
     pub prompt: Option<String>,
     /// Optional defry value for tools that accept it.

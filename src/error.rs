@@ -339,6 +339,8 @@ pub enum DecodeTarget {
     JsonResponse,
     /// SSE image stream chunk.
     StreamChunk,
+    /// Image-generation or director response body.
+    ImageResponse,
 }
 
 impl fmt::Display for DecodeTarget {
@@ -347,6 +349,7 @@ impl fmt::Display for DecodeTarget {
             Self::JsonRequest => "JSON request",
             Self::JsonResponse => "JSON response",
             Self::StreamChunk => "stream chunk",
+            Self::ImageResponse => "image response",
         };
         f.write_str(target)
     }

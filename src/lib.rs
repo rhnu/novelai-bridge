@@ -12,6 +12,7 @@ mod client;
 mod credit;
 mod error;
 mod generation;
+mod image;
 pub(crate) mod internal;
 mod metadata;
 mod model;
@@ -34,6 +35,10 @@ pub use error::{
 pub use generation::{
     NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
     PreparedGeneration,
+};
+pub use image::{
+    DefaultImagePreprocessor, EncodedImage, ImagePreparation, ImagePreprocessor, PreparedImage,
+    VibeEncoding, decode_generated_images,
 };
 pub use metadata::{
     GeneratedImageMetadata, PngMetadata, PngMetadataWarning, VibeMetadataEntry, VibeMetadataSource,

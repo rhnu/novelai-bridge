@@ -2,11 +2,8 @@ use super::Client;
 use crate::{
     BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
     GenerateImageStreamRequest, InvalidRequest, PreparedGeneration, StreamMode, StreamingTransport,
-    Transport,
-    internal::{
-        request_helpers::extract_images,
-        wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
-    },
+    Transport, decode_generated_images,
+    internal::wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
 };
 
 impl<T: Transport> Client<T> {
@@ -68,7 +65,13 @@ impl<T: Transport> Client<T> {
             }
         };
 
-        let images = extract_images(payload);
+        let images = match decode_generated_images(payload) {
+            Ok(images) => images,
+            Err(error) => {
+                self.finish_observation_failed(observation, &error).await;
+                return Err(error);
+            }
+        };
         let image_count = u32::try_from(images.len()).unwrap_or(u32::MAX);
         self.finish_observation_succeeded(observation, image_count)
             .await;

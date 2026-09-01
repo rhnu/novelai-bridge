@@ -82,6 +82,13 @@ framing and loading behavior.
 
 ## Image generation
 
+Image-bearing request fields use `EncodedImage`, which validates bytes and caches decoded pixels
+at construction. Use `EncodedImage::from_bytes` for binary input or `from_base64` at text/config
+boundaries. Vibe data is deliberately separate: `Client::encode_vibe` returns `VibeEncoding`, and
+`VibeReference::vibe_data_cache` accepts that type directly. `NormalizedGeneration::prepare_with`
+can inject an `ImagePreprocessor`; the default preserves the existing source, mask and director
+reference fitting behavior.
+
 ```rust
 use novelai_bridge::{ApiKeySource, BaseUrls, Client, ClientOptions, GenerateImageRequest, Model};
 
@@ -148,10 +155,15 @@ let prepared = plan.prepare()?;
 # }
 ```
 
-Normalization and estimates do not decode image pixels, resolve random seeds or access the
-network. `prepare()` decodes/fits payloads and resolves the seed once; the client can send that
-`PreparedGeneration` without repeating these steps. A plan is not proof that its image payloads
-are valid. Normal `generate` and `generate_stream` perform these steps automatically.
+Image payloads are already validated and decoded when `EncodedImage` is constructed.
+Normalization and estimates do not repeat that work, resolve random seeds or access the network.
+`prepare()` fits cached pixels and resolves the seed once; the client can send that
+`PreparedGeneration` without repeating these steps. Normal `generate` and `generate_stream`
+perform preparation automatically.
+
+Ordinary generation and director responses accept only validated PNG, JPEG or WebP bytes, either
+raw or in a bounded ZIP archive. A malformed image candidate rejects the whole response;
+best-effort metadata parsing remains represented on an otherwise valid `GeneratedImage`.
 
 Disabled characters do not participate in validation, counting or wire arrays. Normalize policy
 keeps the first model-limit enabled characters and disables the rest, preserving original indices;

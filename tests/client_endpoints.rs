@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use novelai_bridge::{
     ApiKeySource, BaseUrls, BridgeError, Client, ClientOptions, CreditEvent, CreditObserver,
-    DirectorTool, EncodeVibeRequest, InvalidRequest, Model, RequestCostEstimate,
+    DirectorTool, EncodeVibeRequest, EncodedImage, InvalidRequest, Model, RequestCostEstimate,
     RunDirectorToolRequest,
 };
 
@@ -26,6 +26,10 @@ use support::{
     MockTransport, create_png_base64, create_zip_with_single_png, create_zip_with_two_images,
 };
 
+fn image(width: u32, height: u32) -> EncodedImage {
+    EncodedImage::from_base64(&create_png_base64(width, height)).unwrap()
+}
+
 #[tokio::test]
 async fn encode_vibe_returns_base64() {
     let transport = MockTransport::default();
@@ -34,7 +38,7 @@ async fn encode_vibe_returns_base64() {
 
     let encoded = client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
             strict_mode: false,
@@ -42,9 +46,9 @@ async fn encode_vibe_returns_base64() {
         .await
         .unwrap();
 
-    assert_eq!(encoded, "AQID");
+    assert_eq!(encoded.to_base64(), "AQID");
     let body = transport.last_body().expect("encode_vibe body");
-    assert_eq!(body["image"], json!("QUJDRA=="));
+    assert_eq!(body["image"], json!(create_png_base64(2, 2)));
     assert_eq!(
         transport.last_path().as_deref(),
         Some("https://image.novelai.net/ai/encode-vibe")
@@ -60,7 +64,7 @@ async fn encode_vibe_observation_reports_a_fixed_cost() {
 
     client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
             strict_mode: false,
@@ -75,26 +79,14 @@ async fn encode_vibe_observation_reports_a_fixed_cost() {
     assert_eq!(estimate, RequestCostEstimate::Fixed { anlas: 2 });
 }
 
-#[tokio::test]
-async fn encode_vibe_rejects_invalid_base64_without_transport_call() {
-    let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
-
-    let error = client
-        .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,@@@".to_owned(),
-            information_extracted: 0.7,
-            model: Model::NaiDiffusion45Full,
-            strict_mode: false,
-        })
-        .await
-        .expect_err("invalid base64 should fail locally");
+#[test]
+fn encoded_image_rejects_invalid_base64_at_construction() {
+    let error = EncodedImage::from_base64("data:image/png;base64,@@@").unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
-            if field == "encode_vibe.image"
+            if field == "image"
     ));
-    assert!(transport.last_path().is_none());
 }
 
 #[tokio::test]
@@ -104,7 +96,7 @@ async fn encode_vibe_rejects_models_without_vibe_support() {
 
     let error = client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion5Full,
             strict_mode: false,
@@ -128,7 +120,7 @@ async fn encode_vibe_clamps_information_extracted_when_not_strict() {
 
     let _ = client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
             strict_mode: false,
@@ -147,7 +139,7 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
 
     let error = client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
             strict_mode: true,
@@ -172,7 +164,7 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
     let _ = client
         .run_director_tool(RunDirectorToolRequest {
             tool: DirectorTool::Lineart,
-            image: format!("data:image/png;base64,{image_base64}"),
+            image: EncodedImage::from_base64(&image_base64).unwrap(),
             prompt: None,
             defry: None,
             strict_mode: false,
@@ -195,17 +187,17 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
 async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     let transport_zip = MockTransport::with_bytes_response(create_zip_with_two_images());
     let client_zip = Client::with_transport(transport_zip);
-    let image = client_zip
+    let generated = client_zip
         .run_director_tool(RunDirectorToolRequest {
             tool: DirectorTool::Sketch,
-            image: create_png_base64(48, 48),
+            image: image(48, 48),
             prompt: None,
             defry: None,
             strict_mode: false,
         })
         .await
         .unwrap();
-    assert_eq!(image.bytes, support::create_png_bytes(2, 2));
+    assert_eq!(generated.bytes, support::create_png_bytes(2, 2));
 
     let raw_png = support::create_png_bytes(2, 2);
     let transport_raw = MockTransport::with_bytes_response(raw_png.clone());
@@ -213,7 +205,7 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     let fallback = client_raw
         .run_director_tool(RunDirectorToolRequest {
             tool: DirectorTool::Sketch,
-            image: create_png_base64(48, 48),
+            image: image(48, 48),
             prompt: None,
             defry: None,
             strict_mode: false,
@@ -232,7 +224,7 @@ async fn director_tool_clamps_defry_when_not_strict() {
     let _ = client
         .run_director_tool(RunDirectorToolRequest {
             tool: DirectorTool::Colorize,
-            image: create_png_base64(48, 48),
+            image: image(48, 48),
             prompt: None,
             defry: Some(9),
             strict_mode: false,
@@ -408,6 +400,7 @@ async fn get_subscription_infers_activity_from_expiration_and_honors_explicit_st
 #[tokio::test]
 async fn custom_base_urls_route_image_service_endpoints() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    transport.set_encode_vibe_response(vec![1]);
     transport.set_json_response(json!({ "tier": 1 }));
     let client = Client::with_transport_and_base_urls(
         transport.clone(),
@@ -419,7 +412,7 @@ async fn custom_base_urls_route_image_service_endpoints() {
 
     let _ = client
         .encode_vibe(EncodeVibeRequest {
-            image: "data:image/png;base64,QUJDRA==".to_owned(),
+            image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
             strict_mode: false,

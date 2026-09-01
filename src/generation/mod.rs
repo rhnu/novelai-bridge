@@ -1,9 +1,9 @@
-//! Generation planning is independent of transport and image preparation.
+//! Generation planning is independent of transport and pixel transformation.
 
 mod normalize;
 mod prepare;
 
-use crate::{BridgeError, GenerateImageRequest, ResolvedPrompts};
+use crate::{BridgeError, GenerateImageRequest, ImagePreprocessor, ResolvedPrompts};
 pub use prepare::PreparedGeneration;
 
 /// How unsupported combinations and out-of-range values are handled.
@@ -61,8 +61,8 @@ pub struct NormalizationDiagnostic {
 /// Created only by normalization. Borrowed fields are immutable; use
 /// [`Self::into_request`] and normalize again to edit.
 ///
-/// Planning does not decode images or select a random seed. A successful plan therefore does
-/// not guarantee that image preparation or a remote request will succeed.
+/// Image inputs were validated at construction. Planning does not transform their cached pixels
+/// or select a random seed, so preparation and remote transport can still fail independently.
 ///
 /// ```compile_fail
 /// use novelai_bridge::{GenerateImageRequest, Model};
@@ -161,8 +161,20 @@ impl NormalizedGeneration {
     ///
     /// # Errors
     ///
-    /// Returns payload decoding or image preparation errors.
+    /// Returns image preparation errors.
     pub fn prepare(self) -> Result<PreparedGeneration, BridgeError> {
         prepare::prepare(self)
+    }
+
+    /// Resolves the seed and prepares image payloads with a caller-provided pixel transformer.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors reported by the preprocessor.
+    pub fn prepare_with(
+        self,
+        preprocessor: &dyn ImagePreprocessor,
+    ) -> Result<PreparedGeneration, BridgeError> {
+        prepare::prepare_with(self, preprocessor)
     }
 }

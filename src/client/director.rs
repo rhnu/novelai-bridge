@@ -1,14 +1,9 @@
-use base64::{Engine, engine::general_purpose::STANDARD};
-
 use crate::{
-    BridgeError, DirectorTool, EncodeVibeRequest, GeneratedImage, ImageSize, InvalidRequest,
-    RequestCostEstimate, RunDirectorToolRequest, Transport,
+    BridgeError, DirectorTool, EncodeVibeRequest, GeneratedImage, InvalidRequest,
+    RequestCostEstimate, RunDirectorToolRequest, Transport, VibeEncoding,
     credit::VIBE_ENCODE_COST,
     estimate_director_tool_cost,
-    internal::{
-        request_helpers::{extract_first_image, normalize_image_payload},
-        wire::{DirectorAugmentRequestBody, EncodeVibeRequestBody},
-    },
+    internal::wire::{DirectorAugmentRequestBody, EncodeVibeRequestBody},
 };
 
 use super::Client;
@@ -16,13 +11,11 @@ use super::Client;
 impl<T: Transport> Client<T> {
     /// Encodes an image into a `NovelAI` vibe payload.
     ///
-    /// `req.image` accepts either a raw base64 payload or an image data URL.
-    ///
     /// # Errors
     ///
     /// Returns [`BridgeError`] when local request validation, image normalization, transport, or
     /// response decoding fails.
-    pub async fn encode_vibe(&self, req: EncodeVibeRequest) -> Result<String, BridgeError> {
+    pub async fn encode_vibe(&self, req: EncodeVibeRequest) -> Result<VibeEncoding, BridgeError> {
         if !req.model.descriptor().can_encode_vibe() {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "encode_vibe".to_owned(),
@@ -39,9 +32,8 @@ impl<T: Transport> Client<T> {
             req.strict_mode,
         )?;
 
-        let normalized_image = normalize_image_payload("encode_vibe.image", &req.image)?;
         let payload = EncodeVibeRequestBody {
-            image: normalized_image,
+            image: req.image.to_base64(),
             information_extracted,
             model: req.model.as_str().to_owned(),
         };
@@ -57,8 +49,15 @@ impl<T: Transport> Client<T> {
             .await;
         match crate::protocol::post_bytes(&*self.transport, endpoint.as_str(), &payload).await {
             Ok(raw) => {
+                let encoding = match VibeEncoding::from_bytes(raw) {
+                    Ok(encoding) => encoding,
+                    Err(error) => {
+                        self.finish_observation_failed(observation, &error).await;
+                        return Err(error);
+                    }
+                };
                 self.finish_observation_succeeded(observation, 0).await;
-                Ok(STANDARD.encode(raw))
+                Ok(encoding)
             }
             Err(error) => {
                 self.finish_observation_failed(observation, &error).await;
@@ -69,8 +68,6 @@ impl<T: Transport> Client<T> {
 
     /// Runs a `NovelAI` director tool against an input image.
     ///
-    /// `req.image` accepts either a raw base64 payload or an image data URL.
-    ///
     /// # Errors
     ///
     /// Returns [`BridgeError`] when local request validation, image decoding, transport, or
@@ -79,19 +76,7 @@ impl<T: Transport> Client<T> {
         &self,
         req: RunDirectorToolRequest,
     ) -> Result<GeneratedImage, BridgeError> {
-        let normalized_image = normalize_image_payload("director.image", &req.image)?;
-        let decoded_image = STANDARD
-            .decode(normalized_image.as_bytes())
-            .map_err(|source| InvalidRequest::InvalidBase64 {
-                field: "director.image".to_owned(),
-                source,
-            })?;
-        let decoded = image::load_from_memory(&decoded_image).map_err(|source| {
-            InvalidRequest::UndecodableImage {
-                field: "director.image".to_owned(),
-                source,
-            }
-        })?;
+        let image_size = req.image.size();
 
         let prompt = req.prompt.as_ref().map(|value| value.trim().to_owned());
         let prompt_is_valid = prompt.as_ref().is_some_and(|value| !value.is_empty());
@@ -136,21 +121,15 @@ impl<T: Transport> Client<T> {
 
         let payload = DirectorAugmentRequestBody {
             req_type: req.tool,
-            width: decoded.width(),
-            height: decoded.height(),
-            image: normalized_image,
+            width: image_size.width,
+            height: image_size.height,
+            image: req.image.to_base64(),
             prompt: resolved_prompt,
             defry: resolved_defry,
         };
 
         let endpoint = self.image_endpoint("/ai/augment-image");
-        let estimate = estimate_director_tool_cost(
-            ImageSize {
-                width: decoded.width(),
-                height: decoded.height(),
-            },
-            self.last_pricing_context(),
-        );
+        let estimate = estimate_director_tool_cost(image_size, self.last_pricing_context());
         let observation = self
             .begin_simple_observation(
                 crate::ObservedOperation::AugmentImage,
@@ -159,8 +138,15 @@ impl<T: Transport> Client<T> {
             .await;
         match crate::protocol::post_bytes(&*self.transport, endpoint.as_str(), &payload).await {
             Ok(raw) => {
+                let image = match crate::image::decode_first_generated_image(raw) {
+                    Ok(image) => image,
+                    Err(error) => {
+                        self.finish_observation_failed(observation, &error).await;
+                        return Err(error);
+                    }
+                };
                 self.finish_observation_succeeded(observation, 1).await;
-                Ok(extract_first_image(raw))
+                Ok(image)
             }
             Err(error) => {
                 self.finish_observation_failed(observation, &error).await;
