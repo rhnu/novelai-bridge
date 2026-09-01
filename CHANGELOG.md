@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0-rc.1 (unreleased)
+## 0.5.0-rc.1 - 2026-09-01
 
 Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
@@ -70,6 +70,9 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+Consumers upgrading from 0.4 should apply the following changes. The items are independent unless
+their Cargo feature is enabled; consumers using the default features should review the full list.
+
 - Consumers using `default-features = false` must opt into the capability they call. Use `client`
   for a custom transport, `reqwest-transport` for ordinary default HTTP, `streaming` for a custom
   SSE transport, or `reqwest-streaming` for the complete default transport. Enable
@@ -104,6 +107,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 - Handle normalization errors from request/client cost estimates and request token counting;
   `AnlasEstimateInput::for_request` also returns `Result`. For repeated queries, use
   `request.normalize()?` and its cached prompts, token counting and direct pricing projection.
+- For repeated estimates, retain `NormalizedGeneration` and use its borrowed cost projection.
+  Avoid cloning a request that owns large `EncodedImage` payloads only to expose cost fields. An
+  application with its own domain model should keep any extension trait or newtype in its adapter
+  instead of making the domain layer depend on bridge client or wire types.
 - To inspect diagnostics before sending, use `plan.prepare()?` followed by
   `client.generate_prepared(...)` or `generate_stream_prepared(..., mode)`. Editing requires
   `plan.into_request()` and another normalization pass; plans cannot be deserialized or mutated.
@@ -114,6 +121,11 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
   set optional public fields as needed.
 - Handle `BridgeError::Tokenizer` when `tokenizer` is enabled, and
   `InvalidRequest::PromptTokenLimitExceeded` for strict token-limit checks.
+- Treat arbitrary or partially corrupt raw/ZIP generation and Director responses as
+  `DecodeTarget::ImageResponse` failures. Best-effort `GeneratedImageMetadata` states apply only
+  after the image itself has passed PNG, JPEG or WebP validation. Continue to read the request seed
+  from `GenerateImageResult::resolved_seed` and optional per-image seeds from
+  `GeneratedImage::seed()`.
 
 ## 0.4.0 - 2026-08-27
 

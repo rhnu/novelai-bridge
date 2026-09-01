@@ -110,7 +110,7 @@ pub async fn execute<T: Transport + StreamingTransport>(
                 }),
                 character_references: Vec::new(),
             });
-            report(client.generate(request).await?, args)
+            report(&client.generate(request).await?, args)
         }
         preset => {
             let mut request = base_request(args, model, size);
@@ -144,7 +144,7 @@ pub async fn execute<T: Transport + StreamingTransport>(
                 }
                 _ => {}
             }
-            report(client.generate(request).await?, args)
+            report(&client.generate(request).await?, args)
         }
     }
 }
@@ -172,7 +172,7 @@ fn base_request(args: &RunArgs, model: Model, size: ImageSize) -> GenerateImageR
 }
 
 fn report(
-    result: novelai_bridge::GenerateImageResult,
+    result: &novelai_bridge::GenerateImageResult,
     args: &RunArgs,
 ) -> Result<String, BridgeError> {
     let mut lines = vec![format!(
@@ -245,7 +245,7 @@ fn save_input(args: &RunArgs, name: &str, data_url: String) -> String {
     };
 
     let payload = data_url
-        .split_once(",")
+        .split_once(',')
         .map_or(data_url.as_str(), |(_, b)| b);
     let path = dir.join(format!("input-{name}.png"));
     match STANDARD
@@ -282,7 +282,7 @@ fn gradient(size: ImageSize) -> image::RgbImage {
     })
 }
 
-/// White marks the region to repaint; NovelAI treats black as untouched.
+/// White marks the region to repaint; `NovelAI` treats black as untouched.
 fn center_mask(size: ImageSize) -> image::RgbImage {
     let (x0, x1) = (size.width / 4, size.width * 3 / 4);
     let (y0, y1) = (size.height / 4, size.height * 3 / 4);

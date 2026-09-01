@@ -20,7 +20,7 @@ mod presets;
 mod render;
 mod tokenizer_assets;
 
-use std::path::PathBuf;
+use std::{fmt::Write as _, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use novelai_bridge::{
@@ -88,6 +88,7 @@ pub enum Preset {
 }
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
     /// What to build.
     #[arg(value_enum)]
@@ -220,7 +221,7 @@ fn describe(error: &BridgeError) -> String {
     let mut rendered = error.to_string();
     let mut source = std::error::Error::source(error);
     while let Some(inner) = source {
-        rendered.push_str(&format!("\n  caused by: {inner}"));
+        let _ = write!(rendered, "\n  caused by: {inner}");
         source = inner.source();
     }
     rendered
