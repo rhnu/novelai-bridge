@@ -6,6 +6,9 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- Composable `generation`, `client`, `reqwest-transport`, `streaming`, `reqwest-streaming`,
+  `png-metadata`, `image-processing` and `credit-observer` Cargo features. The no-default core now
+  exposes model descriptors, common parameters and pure pricing without HTTP/image/SSE dependencies.
 - `DirectorCommand`, whose variants carry only the parameters accepted by that director operation.
 - `GenerateImageStreamRequest::base()` and its `AsRef<GenerateImageRequest>` implementation.
 - `EncodedImage`, `VibeEncoding` and the replaceable `ImagePreprocessor` boundary. Validated image
@@ -32,6 +35,12 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
+- Split pure pricing from optional credit observation, move common model/request parameters into a
+  lightweight always-available module, and make reqwest, SSE, image, ZIP and PNG stacks optional.
+- Disable default features on `image`, `zip` and `reqwest`; retain only PNG/JPEG/WebP decoding,
+  deflate ZIP responses and rustls/stream transport support required by the public contract.
+- Box implementation-specific base64/image/PNG error sources so public errors do not bind optional
+  dependency types while preserving source chains and structured field context.
 - Move private generation/director wire types and helper logic into their owning feature modules;
   the former horizontal `types` and `internal` implementation modules are gone.
 - Use semantic image and vibe payload types in request structs. Generation and director responses
@@ -61,6 +70,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+- Consumers using `default-features = false` must opt into the capability they call. Use `client`
+  for a custom transport, `reqwest-transport` for ordinary default HTTP, `streaming` for a custom
+  SSE transport, or `reqwest-streaming` for the complete default transport. Enable
+  `png-metadata` alone for metadata parsing and `generation` for request planning/sending types.
 - Replace `RunDirectorToolRequest { tool, prompt, defry, .. }` with
   `RunDirectorToolRequest { command: DirectorCommand::..., .. }`. `Colorize` carries an optional
   prompt and required defry value; `Emotion` carries a required prompt and defry value. Other

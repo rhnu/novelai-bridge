@@ -1,3 +1,5 @@
+#![cfg(all(feature = "client", feature = "streaming"))]
+
 mod support;
 
 use std::{io::Write, sync::Mutex};

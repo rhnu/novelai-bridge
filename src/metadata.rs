@@ -203,7 +203,7 @@ pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, Bridg
             .decode(normalized.as_bytes())
             .map_err(|source| InvalidRequest::InvalidBase64 {
                 field: "metadata.image".to_owned(),
-                source,
+                source: Box::new(source),
             })?;
     parse_png_metadata_from_bytes(decoded.as_slice())
 }
@@ -382,7 +382,7 @@ impl PngTextChunk for png::text_metadata::ITXtChunk {
 fn invalid_png_payload(source: png::DecodingError) -> MetadataError {
     MetadataError::InvalidPngPayload {
         field: "metadata.image".to_owned(),
-        source,
+        source: Box::new(source),
     }
 }
 

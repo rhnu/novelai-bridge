@@ -72,14 +72,14 @@ pub enum InvalidRequest {
     InvalidBase64 {
         field: String,
         #[source]
-        source: base64::DecodeError,
+        source: Box<dyn StdError + Send + Sync>,
     },
     /// A decoded payload was not a supported image.
     #[error("{field} must be a decodable image payload")]
     UndecodableImage {
         field: String,
         #[source]
-        source: image::ImageError,
+        source: Box<dyn StdError + Send + Sync>,
     },
     /// A request feature is only supported by a different model family.
     #[error("{feature} is only supported on {required_model}")]
@@ -104,7 +104,7 @@ pub enum InvalidRequest {
     ImageEncodingFailed {
         field: String,
         #[source]
-        source: image::ImageError,
+        source: Box<dyn StdError + Send + Sync>,
     },
 }
 
@@ -364,6 +364,6 @@ pub enum MetadataError {
     InvalidPngPayload {
         field: String,
         #[source]
-        source: png::DecodingError,
+        source: Box<dyn StdError + Send + Sync>,
     },
 }

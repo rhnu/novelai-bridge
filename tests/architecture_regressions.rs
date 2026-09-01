@@ -1,3 +1,5 @@
+#![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
+
 //! Target contracts, not snapshots of known bugs. Ignored tests name their remaining owner.
 mod support;
 

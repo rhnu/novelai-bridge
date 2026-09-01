@@ -1,12 +1,21 @@
-use std::{pin::Pin, time::Duration};
+#[cfg(feature = "streaming")]
+use std::pin::Pin;
+#[cfg(feature = "reqwest-transport")]
+use std::time::Duration;
 
 use async_trait::async_trait;
+#[cfg(feature = "reqwest-streaming")]
 use eventsource_stream::Eventsource;
+#[cfg(feature = "streaming")]
 use futures_core::Stream;
+#[cfg(feature = "reqwest-streaming")]
 use futures_util::StreamExt;
+#[cfg(feature = "reqwest-transport")]
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::{BridgeError, TransportError, TransportOperation};
+use crate::TransportError;
+#[cfg(feature = "reqwest-transport")]
+use crate::{BridgeError, TransportOperation};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TransportMethod {
@@ -41,18 +50,22 @@ pub struct TransportResponse {
 
 /// Framed SSE event without application-specific fields.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(feature = "streaming")]
 pub struct TransportSseEvent {
     pub data: String,
 }
 
+#[cfg(feature = "streaming")]
 pub type TransportSseStream =
     Pin<Box<dyn Stream<Item = Result<TransportSseEvent, TransportError>> + Send>>;
 
+#[cfg(feature = "streaming")]
 pub enum TransportSseBody {
     Events(TransportSseStream),
     Bytes(Vec<u8>),
 }
 
+#[cfg(feature = "streaming")]
 pub struct TransportSseResponse {
     pub status: u16,
     pub headers: Vec<TransportHeader>,
@@ -67,6 +80,7 @@ pub trait Transport: Send + Sync {
 }
 
 /// Optional SSE capability, separate from ordinary HTTP transport.
+#[cfg(feature = "streaming")]
 #[async_trait]
 pub trait StreamingTransport: Transport {
     async fn execute_sse(
@@ -76,10 +90,12 @@ pub trait StreamingTransport: Transport {
 }
 
 /// Default transport backed by `reqwest + rustls`.
+#[cfg(feature = "reqwest-transport")]
 pub struct ReqwestTransport {
     client: reqwest::Client,
 }
 
+#[cfg(feature = "reqwest-transport")]
 impl ReqwestTransport {
     /// Creates a transport with a resolved API key.
     ///
@@ -124,6 +140,7 @@ impl ReqwestTransport {
     }
 }
 
+#[cfg(feature = "reqwest-transport")]
 #[async_trait]
 impl Transport for ReqwestTransport {
     async fn execute(
@@ -155,6 +172,7 @@ impl Transport for ReqwestTransport {
     }
 }
 
+#[cfg(feature = "reqwest-streaming")]
 #[async_trait]
 impl StreamingTransport for ReqwestTransport {
     async fn execute_sse(
@@ -201,6 +219,7 @@ impl StreamingTransport for ReqwestTransport {
     }
 }
 
+#[cfg(feature = "reqwest-transport")]
 fn collect_headers(headers: &reqwest::header::HeaderMap) -> Vec<TransportHeader> {
     headers
         .iter()

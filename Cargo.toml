@@ -34,12 +34,12 @@ flate2 = "1.1.10"
 futures-core = "0.3.34"
 futures-util = "0.3.34"
 httpdate = "1.0.3"
-image = "0.25.10"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 log = "0.4.33"
 novelai-bridge = { path = ".", version = "0.5.0-rc.1" }
 novelai-bridge-tokenizer-assets = { path = "crates/tokenizer-assets", version = "=0.1.0" }
 png = "0.18.1"
-reqwest = { version = "0.13.4", features = ["json", "stream", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["stream", "rustls"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
@@ -49,39 +49,68 @@ thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["macros", "rt", "rt-multi-thread"] }
 toml = "1.0"
 unicode-normalization = "0.1.25"
-zip = "8.6.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dependencies]
-async-stream.workspace = true
-async-trait.workspace = true
-base64.workspace = true
-eventsource-stream.workspace = true
+async-stream = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+eventsource-stream = { workspace = true, optional = true }
 fancy-regex = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
-futures-core.workspace = true
-futures-util.workspace = true
-httpdate.workspace = true
-image.workspace = true
-log.workspace = true
+futures-core = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+httpdate = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
 novelai-bridge-tokenizer-assets = { workspace = true, optional = true }
-png.workspace = true
-reqwest.workspace = true
-secrecy.workspace = true
+png = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
 serde.workspace = true
-serde_json.workspace = true
-serde_with.workspace = true
+serde_json = { workspace = true, optional = true }
+serde_with = { workspace = true, optional = true }
 thiserror.workspace = true
 unicode-normalization = { workspace = true, optional = true }
-zip.workspace = true
+zip = { workspace = true, optional = true }
 
 [dev-dependencies]
+serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 
 [features]
-default = ["tokenizer"]
+default = ["client", "reqwest-streaming", "credit-observer", "tokenizer"]
+# Complete request planning and wire preparation without a network client.
+generation = ["image-processing", "dep:serde_with"]
+# High-level client and injectable ordinary transport contract, without reqwest.
+client = [
+    "generation",
+    "dep:async-trait",
+    "dep:httpdate",
+    "dep:log",
+    "dep:serde_json",
+]
+# Default ordinary HTTP adapter. Streaming remains a separate capability.
+reqwest-transport = ["client", "dep:reqwest", "dep:secrecy"]
+# SSE contract, protocol decoding and stream lifecycle for custom transports.
+streaming = ["client", "dep:async-stream", "dep:futures-core", "dep:futures-util"]
+# Reqwest SSE framing. This intersection alone pulls eventsource-stream.
+reqwest-streaming = ["reqwest-transport", "streaming", "dep:eventsource-stream"]
+# PNG metadata parsing without the pixel decoding and ZIP response stack.
+png-metadata = ["dep:base64", "dep:png", "dep:serde_json"]
+# Validated image inputs, preprocessing and strict raw/ZIP response decoding.
+image-processing = ["png-metadata", "dep:image", "dep:zip"]
+# Optional request-credit observation. Pure pricing is always available.
+credit-observer = ["client"]
 # Local CLIP / T5 / Qwen prompt tokenizers. Disable to drop the regex, Unicode and gzip
 # dependencies when only request building and metadata helpers are needed.
-tokenizer = ["dep:fancy-regex", "dep:unicode-normalization", "dep:flate2"]
+tokenizer = [
+    "generation",
+    "dep:fancy-regex",
+    "dep:unicode-normalization",
+    "dep:flate2",
+    "dep:serde_json",
+]
 # Embeds pinned upstream assets from the independently versioned asset package.
 bundled-assets = ["tokenizer", "dep:novelai-bridge-tokenizer-assets"]

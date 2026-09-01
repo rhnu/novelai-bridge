@@ -1,8 +1,10 @@
+#[cfg(feature = "reqwest-streaming")]
 use futures_util::{StreamExt, stream};
 
 use super::*;
 
 #[tokio::test]
+#[cfg(feature = "reqwest-streaming")]
 async fn sse_framing_handles_split_and_multiple_events() {
     let chunks = vec![
         Ok::<Vec<u8>, std::io::Error>(b"data: one\n".to_vec()),

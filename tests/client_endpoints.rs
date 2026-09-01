@@ -1,3 +1,9 @@
+#![cfg(all(
+    feature = "client",
+    feature = "reqwest-transport",
+    feature = "credit-observer"
+))]
+
 mod support;
 
 use std::sync::{Arc, Mutex};

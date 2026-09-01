@@ -145,6 +145,7 @@ pub struct ImageParameters {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg(feature = "streaming")]
 pub struct ImageStreamParameters {
     #[serde(flatten)]
     pub base: ImageParameters,
@@ -162,6 +163,7 @@ pub struct ImageGenerationRequestBody {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg(feature = "streaming")]
 pub struct StreamImageGenerationRequestBody {
     pub action: String,
     pub input: String,

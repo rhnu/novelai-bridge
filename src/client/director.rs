@@ -1,7 +1,7 @@
 use crate::{
     BridgeError, DirectorCommand, EncodeVibeRequest, GeneratedImage, InvalidRequest,
-    RequestCostEstimate, RunDirectorToolRequest, Transport, VibeEncoding, credit::VIBE_ENCODE_COST,
-    estimate_director_tool_cost,
+    RequestCostEstimate, RunDirectorToolRequest, Transport, VibeEncoding,
+    estimate_director_tool_cost, pricing::VIBE_ENCODE_COST,
 };
 
 mod wire;

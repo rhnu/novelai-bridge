@@ -1,3 +1,5 @@
+#![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
+
 mod support;
 
 use novelai_bridge::{

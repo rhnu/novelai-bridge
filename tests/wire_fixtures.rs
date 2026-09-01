@@ -1,3 +1,5 @@
+#![cfg(all(feature = "client", feature = "streaming"))]
+
 //! Valid wire payloads captured at 8fd7675. Changes require deliberate fixture review.
 mod support;
 

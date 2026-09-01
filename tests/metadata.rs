@@ -1,3 +1,5 @@
+#![cfg(feature = "png-metadata")]
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use novelai_bridge::{
     GeneratedImageMetadata, PngMetadataWarning, VibeMetadataSource,

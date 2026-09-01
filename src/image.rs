@@ -182,7 +182,7 @@ impl PreparedImage {
             image::load_from_memory_with_format(&bytes, ImageFormat::Png).map_err(|source| {
                 InvalidRequest::UndecodableImage {
                     field: "prepared_image".to_owned(),
-                    source,
+                    source: Box::new(source),
                 }
             })?;
         Ok(Self {
@@ -270,6 +270,7 @@ pub fn decode_generated_images(payload: Vec<u8>) -> Result<Vec<GeneratedImage>, 
     Ok(vec![validated_generated_image(payload, None)?])
 }
 
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
 pub fn decode_first_generated_image(payload: Vec<u8>) -> Result<GeneratedImage, BridgeError> {
     decode_generated_images(payload)?
         .into_iter()
@@ -370,7 +371,7 @@ fn decode_input_image(field: &str, bytes: &[u8]) -> Result<DynamicImage, BridgeE
     image::load_from_memory(bytes).map_err(|source| {
         InvalidRequest::UndecodableImage {
             field: field.to_owned(),
-            source,
+            source: Box::new(source),
         }
         .into()
     })
@@ -417,7 +418,7 @@ fn decode_plain_base64(field: &str, value: &str) -> Result<Vec<u8>, BridgeError>
     STANDARD.decode(compact).map_err(|source| {
         InvalidRequest::InvalidBase64 {
             field: field.to_owned(),
-            source,
+            source: Box::new(source),
         }
         .into()
     })
@@ -445,7 +446,7 @@ fn fit_decoded(
         .write_to(&mut output, ImageFormat::Png)
         .map_err(|source| InvalidRequest::ImageEncodingFailed {
             field: field.to_owned(),
-            source,
+            source: Box::new(source),
         })?;
     Ok(output.into_inner())
 }

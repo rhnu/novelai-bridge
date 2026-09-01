@@ -1,13 +1,15 @@
 use std::time::{Duration, SystemTime};
 
+#[cfg(feature = "streaming")]
 use futures_util::StreamExt;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DecodeError, DecodeTarget,
-    ImageStreamChunk, StreamingTransport, Transport, TransportHeader, TransportMethod,
-    TransportRequest, TransportResponse, TransportSseBody, TransportSseStream,
+    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DecodeError, DecodeTarget, Transport,
+    TransportHeader, TransportMethod, TransportRequest, TransportResponse,
 };
+#[cfg(feature = "streaming")]
+use crate::{ImageStreamChunk, StreamingTransport, TransportSseBody, TransportSseStream};
 
 pub async fn get_json<T: Transport, R: DeserializeOwned>(
     transport: &T,
@@ -37,6 +39,7 @@ pub async fn post_bytes<T: Transport, B: Serialize + Sync>(
     checked_body(response, endpoint)
 }
 
+#[cfg(feature = "streaming")]
 pub async fn post_sse<T: StreamingTransport, B: Serialize + Sync>(
     transport: &T,
     endpoint: &str,
@@ -95,6 +98,7 @@ fn checked_body(response: TransportResponse, endpoint: &str) -> Result<Vec<u8>, 
     }
 }
 
+#[cfg(feature = "streaming")]
 fn decode_stream(mut input: TransportSseStream) -> crate::ImageStreamResult {
     Box::pin(async_stream::stream! {
         while let Some(item) = input.next().await {

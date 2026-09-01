@@ -1,4 +1,4 @@
-#![cfg(feature = "bundled-assets")]
+#![cfg(all(feature = "bundled-assets", feature = "client"))]
 
 mod support;
 

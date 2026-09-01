@@ -53,7 +53,7 @@ pub fn normalize_image_payload(field_name: &str, raw: &str) -> Result<String, Br
         .decode(&compact)
         .map_err(|source| InvalidRequest::InvalidBase64 {
             field: field_name.to_owned(),
-            source,
+            source: Box::new(source),
         })?;
     Ok(compact)
 }

@@ -20,6 +20,7 @@ use crate::{
 #[derive(Debug)]
 pub struct PreparedGeneration {
     normalized: NormalizedGeneration,
+    #[cfg_attr(not(feature = "client"), allow(dead_code))]
     body: ImageGenerationRequestBody,
     resolved_seed: i64,
 }
@@ -37,6 +38,7 @@ impl PreparedGeneration {
         self.resolved_seed
     }
 
+    #[cfg_attr(not(feature = "client"), allow(dead_code))]
     pub(crate) fn into_parts(self) -> (NormalizedGeneration, ImageGenerationRequestBody, i64) {
         (self.normalized, self.body, self.resolved_seed)
     }

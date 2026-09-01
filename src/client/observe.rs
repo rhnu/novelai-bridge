@@ -1,4 +1,6 @@
-use std::sync::{Arc, atomic::Ordering};
+#[cfg(feature = "streaming")]
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::{
     BridgeError, CreditBalance, CreditEvent, NormalizedGeneration, ObservedOperation,
@@ -14,11 +16,13 @@ pub(super) struct PendingObservation {
 }
 
 /// Observer and fingerprint moved into a live stream until its real terminal state.
+#[cfg(feature = "streaming")]
 pub struct StreamObservation {
     observer: Arc<dyn crate::CreditObserver>,
     fingerprint: RequestFingerprint,
 }
 
+#[cfg(feature = "streaming")]
 impl StreamObservation {
     pub async fn settle(self, outcome: RequestOutcome) {
         self.observer
@@ -31,6 +35,7 @@ impl StreamObservation {
 }
 
 impl<T: Transport> Client<T> {
+    #[cfg(feature = "streaming")]
     pub(super) fn stream_observation(
         &self,
         observation: Option<PendingObservation>,

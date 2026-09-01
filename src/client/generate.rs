@@ -1,8 +1,12 @@
 use super::Client;
 use crate::{
-    BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
-    GenerateImageStreamRequest, InvalidRequest, PreparedGeneration, StreamMode, StreamingTransport,
-    Transport, decode_generated_images,
+    BridgeError, GenerateImageRequest, GenerateImageResult, PreparedGeneration, Transport,
+    decode_generated_images,
+};
+#[cfg(feature = "streaming")]
+use crate::{
+    GenerateImageStream, GenerateImageStreamRequest, InvalidRequest, StreamMode,
+    StreamingTransport,
     generation::wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
 };
 
@@ -88,6 +92,7 @@ impl<T: Transport> Client<T> {
     ///
     /// Returns [`BridgeError`] when request validation, image normalization, transport, or stream
     /// setup fails.
+    #[cfg(feature = "streaming")]
     pub async fn generate_stream(
         &self,
         params: GenerateImageStreamRequest,
@@ -114,6 +119,7 @@ impl<T: Transport> Client<T> {
     /// # Errors
     ///
     /// Returns capability, token-limit, transport or stream setup errors.
+    #[cfg(feature = "streaming")]
     pub async fn generate_stream_prepared(
         &self,
         prepared: PreparedGeneration,
@@ -140,6 +146,7 @@ impl<T: Transport> Client<T> {
         self.send_stream_prepared(prepared, mode).await
     }
 
+    #[cfg(feature = "streaming")]
     async fn send_stream_prepared(
         &self,
         prepared: PreparedGeneration,

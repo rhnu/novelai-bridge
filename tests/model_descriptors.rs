@@ -1,3 +1,5 @@
+#![cfg(all(feature = "client", feature = "streaming"))]
+
 #[path = "model_descriptors/references.rs"]
 mod references;
 mod support;

@@ -19,6 +19,30 @@ Supported models: NovelAI Diffusion V5, V4.5, V4, V3 and Furry V3.
 
 The default model is `Model::NaiDiffusion5Full` (`nai-diffusion-5-full`), with guidance scale 7.
 
+## Cargo features
+
+Default features provide the complete client: request planning and image handling, reqwest ordinary
+and streaming transports, credit observation, and local tokenizers. Smaller consumers can select
+only the boundary they use:
+
+| Feature | Adds |
+| --- | --- |
+| `generation` | Complete request planning, validated images, preprocessing and response decoding |
+| `client` | High-level client and injectable ordinary `Transport`, without reqwest |
+| `reqwest-transport` | Ordinary `reqwest + rustls` transport |
+| `streaming` | SSE transport contract, decoding and stream lifecycle |
+| `reqwest-streaming` | Reqwest SSE framing; implies the previous reqwest and streaming features |
+| `png-metadata` | PNG metadata parsing without HTTP, image pixel decoding or ZIP |
+| `image-processing` | Validated image inputs, pixel transforms and raw/ZIP response decoding |
+| `credit-observer` | Client credit event injection; pure pricing remains available without it |
+| `tokenizer` | Local CLIP, T5 and Qwen encoders |
+| `bundled-assets` | The separately versioned pinned tokenizer asset package |
+
+`--no-default-features` retains model descriptors, common parameters and pure Anlas pricing. For
+example, a metadata-only consumer can enable only `png-metadata`, while a custom HTTP adapter can
+enable `client` without compiling reqwest. Features compose; disabling one never silently skips a
+validation step in an API that remains available.
+
 ## Model descriptors
 
 `Model::descriptor()` returns a read-only registry entry with separate identity, support,
@@ -48,8 +72,9 @@ inspectable but cannot be encoded or sent by this bridge.
 
 ## Local prompt token counts
 
-The default `tokenizer` feature provides CLIP, T5 and Qwen encoders. Disable default features to
-omit encoder dependencies; model capabilities and prompt limits remain available.
+The default feature set includes `tokenizer`, which provides CLIP, T5 and Qwen encoders. Disable
+default features to omit encoder dependencies; model capabilities and prompt limits remain
+available.
 
 Load your own assets with `Tokenizers::with_clip_merges`, `with_t5_sentencepiece` or
 `with_qwen_json`, or enable the optional asset package:

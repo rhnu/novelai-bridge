@@ -2,22 +2,28 @@ use std::sync::{Arc, Mutex, atomic::AtomicU64};
 
 use crate::{
     AnlasEstimate, AnlasPricingContext, BridgeError, CreditBalance, CreditObserver,
-    DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, DEFAULT_TIMEOUT_MS, GenerateImageRequest,
-    ReqwestTransport, Transport,
+    DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, GenerateImageRequest, Transport,
 };
+#[cfg(feature = "reqwest-transport")]
+use crate::{DEFAULT_TIMEOUT_MS, ReqwestTransport};
 
+#[cfg(feature = "reqwest-transport")]
 mod api_key;
 mod director;
 mod generate;
 mod observe;
 mod subscription;
 
+#[cfg(feature = "reqwest-transport")]
 pub use api_key::ApiKeySource;
+#[cfg(feature = "streaming")]
 pub use observe::StreamObservation;
 
+#[cfg(feature = "reqwest-transport")]
 use api_key::resolve_api_key;
 
 /// Options used to construct a [`Client`] with the default [`ReqwestTransport`].
+#[cfg(feature = "reqwest-transport")]
 #[derive(Clone)]
 pub struct ClientOptions {
     /// Selects how the API key is resolved for authenticated requests.
@@ -27,26 +33,39 @@ pub struct ClientOptions {
     /// Overrides the HTTP timeout in milliseconds.
     pub timeout_ms: u64,
     /// Optional observer notified about request cost and account credit.
+    #[cfg(feature = "credit-observer")]
     pub credit_observer: Option<Arc<dyn CreditObserver>>,
 }
 
+#[cfg(feature = "reqwest-transport")]
 impl std::fmt::Debug for ClientOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClientOptions")
             .field("api_key_source", &self.api_key_source)
             .field("base_urls", &self.base_urls)
             .field("timeout_ms", &self.timeout_ms)
-            .field("credit_observer", &self.credit_observer.is_some())
+            .field("credit_observer", &{
+                #[cfg(feature = "credit-observer")]
+                {
+                    self.credit_observer.is_some()
+                }
+                #[cfg(not(feature = "credit-observer"))]
+                {
+                    false
+                }
+            })
             .finish()
     }
 }
 
+#[cfg(feature = "reqwest-transport")]
 impl Default for ClientOptions {
     fn default() -> Self {
         Self {
             api_key_source: ApiKeySource::Environment,
             base_urls: BaseUrls::default(),
             timeout_ms: DEFAULT_TIMEOUT_MS,
+            #[cfg(feature = "credit-observer")]
             credit_observer: None,
         }
     }
@@ -87,6 +106,7 @@ pub struct Client<T: Transport> {
     pub(super) last_balance: Arc<Mutex<Option<CreditBalance>>>,
 }
 
+#[cfg(feature = "reqwest-transport")]
 impl Client<ReqwestTransport> {
     /// Creates a client backed by [`ReqwestTransport`].
     ///
@@ -98,10 +118,12 @@ impl Client<ReqwestTransport> {
         let api_key = resolve_api_key(&options.api_key_source)?;
         let transport = ReqwestTransport::new(api_key, options.timeout_ms)?;
         let client = Self::with_transport_and_base_urls(transport, options.base_urls);
-        Ok(match options.credit_observer {
+        #[cfg(feature = "credit-observer")]
+        let client = match options.credit_observer {
             Some(observer) => client.with_credit_observer(observer),
             None => client,
-        })
+        };
+        Ok(client)
     }
 }
 
@@ -129,6 +151,7 @@ impl<T: Transport> Client<T> {
 
     /// Attaches a [`CreditObserver`], replacing any previously attached observer.
     #[must_use]
+    #[cfg(feature = "credit-observer")]
     pub fn with_credit_observer(mut self, observer: Arc<dyn CreditObserver>) -> Self {
         self.credit_observer = Some(observer);
         self
@@ -162,6 +185,7 @@ impl<T: Transport> Client<T> {
 
     /// Returns the most recently sampled account balance, if [`Client::get_subscription`] has run.
     #[must_use]
+    #[cfg(feature = "credit-observer")]
     pub fn last_sampled_balance(&self) -> Option<CreditBalance> {
         self.last_balance.lock().ok().and_then(|last| last.clone())
     }
