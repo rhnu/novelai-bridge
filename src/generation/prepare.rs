@@ -2,10 +2,9 @@ use super::NormalizedGeneration;
 use crate::{
     BridgeError, DefaultImagePreprocessor, GenerateImageRequest, GenerationMode, ImagePreparation,
     ImagePreprocessor, InvalidRequest, ModelDescriptor, ResolvedPrompts, VibeTransferConfig,
-    internal::{
-        request_helpers::{
+    generation::{
+        prompt::{
             build_v4_character_captions, convert_character_prompts, convert_character_references,
-            default_seed,
         },
         wire::{
             CharacterPrompt, ImageGenerationRequestBody, ImageParameters, V4Caption,
@@ -262,7 +261,16 @@ fn build_image_parameters(
 }
 
 fn resolve_seed(seed: i64) -> i64 {
-    if seed == 0 { default_seed() } else { seed }
+    if seed == 0 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(1, |duration| {
+                let seed = (duration.as_millis() % 10_000_000_000) as i64;
+                if seed == 0 { 1 } else { seed }
+            })
+    } else {
+        seed
+    }
 }
 
 fn encode_vibe_references(vibe: &VibeTransferConfig) -> VibeWireParts {

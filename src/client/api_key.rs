@@ -1,6 +1,15 @@
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::{BridgeError, InvalidRequest, types::ApiKeySource};
+use crate::{BridgeError, InvalidRequest};
+
+/// Selects how the API key is resolved.
+#[derive(Clone, Debug)]
+pub enum ApiKeySource {
+    /// Read the API key from the `NOVELAI_API_KEY` environment variable.
+    Environment,
+    /// Use an explicitly provided API key value.
+    Inline { value: SecretString },
+}
 
 fn validate_api_key_value(value: &str, field: &'static str) -> Result<SecretString, BridgeError> {
     let trimmed = value.trim();

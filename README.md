@@ -165,6 +165,10 @@ Ordinary generation and director responses accept only validated PNG, JPEG or We
 raw or in a bounded ZIP archive. A malformed image candidate rejects the whole response;
 best-effort metadata parsing remains represented on an otherwise valid `GeneratedImage`.
 
+Director operations use `DirectorCommand`: parameterless variants such as `Lineart` cannot carry
+irrelevant fields, while `Colorize { prompt, defry }` and `Emotion { prompt, defry }` carry their
+own valid inputs. This prevents invalid tool/option combinations before the client is called.
+
 Disabled characters do not participate in validation, counting or wire arrays. Normalize policy
 keeps the first model-limit enabled characters and disables the rest, preserving original indices;
 Reject policy errors on overflow. Coordinates use the existing five-by-five wire grid, including

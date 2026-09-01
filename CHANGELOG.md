@@ -6,6 +6,8 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Added
 
+- `DirectorCommand`, whose variants carry only the parameters accepted by that director operation.
+- `GenerateImageStreamRequest::base()` and its `AsRef<GenerateImageRequest>` implementation.
 - `EncodedImage`, `VibeEncoding` and the replaceable `ImagePreprocessor` boundary. Validated image
   bytes retain cached decoded pixels through normalization and preparation.
 - Strict, bounded raw/ZIP generated-image decoding with best-effort metadata state.
@@ -30,6 +32,8 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Changed
 
+- Move private generation/director wire types and helper logic into their owning feature modules;
+  the former horizontal `types` and `internal` implementation modules are gone.
 - Use semantic image and vibe payload types in request structs. Generation and director responses
   reject arbitrary bytes and reject a ZIP response when any supported-image candidate is invalid.
 - Move JSON serialization, NovelAI status interpretation and stream-chunk decoding above transport;
@@ -57,6 +61,10 @@ Release candidate during the tokenizer refactor; not a stable 0.5.0 release.
 
 ### Migration
 
+- Replace `RunDirectorToolRequest { tool, prompt, defry, .. }` with
+  `RunDirectorToolRequest { command: DirectorCommand::..., .. }`. `Colorize` carries an optional
+  prompt and required defry value; `Emotion` carries a required prompt and defry value. Other
+  commands cannot carry those invalid fields.
 - Construct image-bearing request fields with `EncodedImage::from_bytes` or
   `EncodedImage::from_base64`. `Img2ImgRequest::new` now takes `EncodedImage`, as do masks,
   character references, Vibe encoding requests and director requests.

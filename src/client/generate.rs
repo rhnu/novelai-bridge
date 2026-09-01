@@ -3,7 +3,7 @@ use crate::{
     BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
     GenerateImageStreamRequest, InvalidRequest, PreparedGeneration, StreamMode, StreamingTransport,
     Transport, decode_generated_images,
-    internal::wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
+    generation::wire::{ImageStreamParameters, StreamImageGenerationRequestBody},
 };
 
 impl<T: Transport> Client<T> {

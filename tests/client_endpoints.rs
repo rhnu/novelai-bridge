@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use novelai_bridge::{
     ApiKeySource, BaseUrls, BridgeError, Client, ClientOptions, CreditEvent, CreditObserver,
-    DirectorTool, EncodeVibeRequest, EncodedImage, InvalidRequest, Model, RequestCostEstimate,
+    DirectorCommand, EncodeVibeRequest, EncodedImage, InvalidRequest, Model, RequestCostEstimate,
     RunDirectorToolRequest,
 };
 
@@ -163,10 +163,8 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
 
     let _ = client
         .run_director_tool(RunDirectorToolRequest {
-            tool: DirectorTool::Lineart,
             image: EncodedImage::from_base64(&image_base64).unwrap(),
-            prompt: None,
-            defry: None,
+            command: DirectorCommand::Lineart,
             strict_mode: false,
         })
         .await
@@ -189,10 +187,8 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     let client_zip = Client::with_transport(transport_zip);
     let generated = client_zip
         .run_director_tool(RunDirectorToolRequest {
-            tool: DirectorTool::Sketch,
             image: image(48, 48),
-            prompt: None,
-            defry: None,
+            command: DirectorCommand::Sketch,
             strict_mode: false,
         })
         .await
@@ -204,10 +200,8 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     let client_raw = Client::with_transport(transport_raw);
     let fallback = client_raw
         .run_director_tool(RunDirectorToolRequest {
-            tool: DirectorTool::Sketch,
             image: image(48, 48),
-            prompt: None,
-            defry: None,
+            command: DirectorCommand::Sketch,
             strict_mode: false,
         })
         .await
@@ -223,10 +217,11 @@ async fn director_tool_clamps_defry_when_not_strict() {
 
     let _ = client
         .run_director_tool(RunDirectorToolRequest {
-            tool: DirectorTool::Colorize,
             image: image(48, 48),
-            prompt: None,
-            defry: Some(9),
+            command: DirectorCommand::Colorize {
+                prompt: None,
+                defry: 9,
+            },
             strict_mode: false,
         })
         .await
@@ -234,6 +229,68 @@ async fn director_tool_clamps_defry_when_not_strict() {
 
     let body = transport.last_body().expect("director body");
     assert_eq!(body["defry"], json!(5));
+}
+
+#[tokio::test]
+async fn director_emotion_requires_nonempty_prompt_and_preserves_valid_parameters() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+    let error = client
+        .run_director_tool(RunDirectorToolRequest {
+            image: image(48, 48),
+            command: DirectorCommand::Emotion {
+                prompt: "  ".to_owned(),
+                defry: 0,
+            },
+            strict_mode: false,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::RequiredFieldForContext { ref context, .. })
+            if context == "emotion"
+    ));
+    assert!(transport.last_path().is_none());
+
+    client
+        .run_director_tool(RunDirectorToolRequest {
+            image: image(48, 48),
+            command: DirectorCommand::Emotion {
+                prompt: " happy ".to_owned(),
+                defry: 3,
+            },
+            strict_mode: true,
+        })
+        .await
+        .unwrap();
+    let body = transport.last_body().unwrap();
+    assert_eq!(body["req_type"], json!("emotion"));
+    assert_eq!(body["prompt"], json!("happy"));
+    assert_eq!(body["defry"], json!(3));
+}
+
+#[tokio::test]
+async fn director_rejects_out_of_range_defry_in_strict_mode() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+    let error = client
+        .run_director_tool(RunDirectorToolRequest {
+            image: image(48, 48),
+            command: DirectorCommand::Colorize {
+                prompt: None,
+                defry: 6,
+            },
+            strict_mode: true,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
+            if field == "defry"
+    ));
+    assert!(transport.last_path().is_none());
 }
 
 #[test]

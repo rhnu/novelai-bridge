@@ -2,9 +2,13 @@
 
 mod normalize;
 mod prepare;
+mod prompt;
+mod types;
+pub mod wire;
 
-use crate::{BridgeError, GenerateImageRequest, ImagePreprocessor, ResolvedPrompts};
+use crate::{BridgeError, ImagePreprocessor};
 pub use prepare::PreparedGeneration;
+pub use types::*;
 
 /// How unsupported combinations and out-of-range values are handled.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

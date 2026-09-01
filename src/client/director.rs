@@ -1,10 +1,12 @@
 use crate::{
-    BridgeError, DirectorTool, EncodeVibeRequest, GeneratedImage, InvalidRequest,
-    RequestCostEstimate, RunDirectorToolRequest, Transport, VibeEncoding,
-    credit::VIBE_ENCODE_COST,
+    BridgeError, DirectorCommand, EncodeVibeRequest, GeneratedImage, InvalidRequest,
+    RequestCostEstimate, RunDirectorToolRequest, Transport, VibeEncoding, credit::VIBE_ENCODE_COST,
     estimate_director_tool_cost,
-    internal::wire::{DirectorAugmentRequestBody, EncodeVibeRequestBody},
 };
+
+mod wire;
+
+use wire::{DirectorAugmentRequestBody, EncodeVibeRequestBody};
 
 use super::Client;
 
@@ -78,49 +80,11 @@ impl<T: Transport> Client<T> {
     ) -> Result<GeneratedImage, BridgeError> {
         let image_size = req.image.size();
 
-        let prompt = req.prompt.as_ref().map(|value| value.trim().to_owned());
-        let prompt_is_valid = prompt.as_ref().is_some_and(|value| !value.is_empty());
-        let defry = req.defry.unwrap_or(0);
-        if req.strict_mode && defry > 5 {
-            return Err(InvalidRequest::NumericOutOfRange {
-                field: "defry".to_owned(),
-                value: f64::from(defry),
-                min: 0.0,
-                max: 5.0,
-            }
-            .into());
-        }
-        let defry = defry.min(5);
-
-        let (resolved_prompt, resolved_defry) = match req.tool {
-            DirectorTool::Lineart
-            | DirectorTool::Sketch
-            | DirectorTool::BgRemoval
-            | DirectorTool::Declutter => {
-                if prompt_is_valid || req.defry.is_some() {
-                    return Err(InvalidRequest::UnsupportedFieldForContext {
-                        field: "prompt or defry".to_owned(),
-                        context: "lineart/sketch/bg-removal/declutter".to_owned(),
-                    }
-                    .into());
-                }
-                (None, None)
-            }
-            DirectorTool::Colorize => (prompt.filter(|value| !value.is_empty()), Some(defry)),
-            DirectorTool::Emotion => {
-                if !prompt_is_valid {
-                    return Err(InvalidRequest::RequiredFieldForContext {
-                        context: "emotion".to_owned(),
-                        field: "prompt".to_owned(),
-                    }
-                    .into());
-                }
-                (prompt.filter(|value| !value.is_empty()), Some(defry))
-            }
-        };
+        let (req_type, resolved_prompt, resolved_defry) =
+            resolve_director_command(req.command, req.strict_mode)?;
 
         let payload = DirectorAugmentRequestBody {
-            req_type: req.tool,
+            req_type,
             width: image_size.width,
             height: image_size.height,
             image: req.image.to_base64(),
@@ -154,6 +118,54 @@ impl<T: Transport> Client<T> {
             }
         }
     }
+}
+
+fn resolve_director_command(
+    command: DirectorCommand,
+    strict_mode: bool,
+) -> Result<(&'static str, Option<String>, Option<u8>), BridgeError> {
+    let (req_type, prompt, defry) = match command {
+        DirectorCommand::Lineart => ("lineart", None, None),
+        DirectorCommand::Sketch => ("sketch", None, None),
+        DirectorCommand::BgRemoval => ("bg-removal", None, None),
+        DirectorCommand::Declutter => ("declutter", None, None),
+        DirectorCommand::Colorize { prompt, defry } => (
+            "colorize",
+            prompt
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty()),
+            Some(normalize_defry(defry, strict_mode)?),
+        ),
+        DirectorCommand::Emotion { prompt, defry } => {
+            let prompt = prompt.trim().to_owned();
+            if prompt.is_empty() {
+                return Err(InvalidRequest::RequiredFieldForContext {
+                    context: "emotion".to_owned(),
+                    field: "prompt".to_owned(),
+                }
+                .into());
+            }
+            (
+                "emotion",
+                Some(prompt),
+                Some(normalize_defry(defry, strict_mode)?),
+            )
+        }
+    };
+    Ok((req_type, prompt, defry))
+}
+
+fn normalize_defry(defry: u8, strict_mode: bool) -> Result<u8, BridgeError> {
+    if strict_mode && defry > 5 {
+        return Err(InvalidRequest::NumericOutOfRange {
+            field: "defry".to_owned(),
+            value: f64::from(defry),
+            min: 0.0,
+            max: 5.0,
+        }
+        .into());
+    }
+    Ok(defry.min(5))
 }
 
 fn normalize_f32_range(

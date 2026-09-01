@@ -1,7 +1,8 @@
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::{GenerationMode, Model, ModelDescriptor, metadata::GeneratedImageMetadata};
+use crate::{
+    GenerationMode, Model, ModelDescriptor, VibeTransferConfig, metadata::GeneratedImageMetadata,
+};
 
 const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
 const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
@@ -10,15 +11,6 @@ const UC_PRESET_HEAVY: &str = "nsfw, lowres, artistic error, film grain, scan ar
 const UC_PRESET_LIGHT: &str = "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page";
 const UC_PRESET_FURRY_FOCUS: &str = "{worst quality}, distracting watermark, unfinished, bad quality, {widescreen}, upscale, {sequence}, {{grandfathered content}}, blurred foreground, chromatic aberration, sketch, everyone, [sketch background], simple, [flat colors], ych (character), outline, multiple scenes, [[horror (theme)]], comic";
 const UC_PRESET_HUMAN_FOCUS: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy";
-
-/// Selects how the API key is resolved.
-#[derive(Clone, Debug)]
-pub enum ApiKeySource {
-    /// Read the API key from the `NOVELAI_API_KEY` environment variable.
-    Environment,
-    /// Use an explicitly provided API key value.
-    Inline { value: SecretString },
-}
 
 /// Supported image samplers.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -402,27 +394,6 @@ pub struct CharacterReference {
     pub strength: f32,
 }
 
-/// One vibe transfer reference.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct VibeReference {
-    /// Precomputed base64 vibe payload returned by [`crate::Client::encode_vibe`].
-    ///
-    /// The information-extracted value is baked into this payload by `encode_vibe`; generation
-    /// requests carry no separate field for it.
-    pub vibe_data_cache: crate::VibeEncoding,
-    /// Per-image reference strength.
-    pub strength: f32,
-}
-
-/// Vibe transfer configuration.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct VibeTransferConfig {
-    /// One or more precomputed vibe payloads.
-    pub references: Vec<VibeReference>,
-    /// Overall vibe transfer strength.
-    pub strength: f32,
-}
-
 /// Reference images attached to a generation request.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct ReferenceSet {
@@ -490,52 +461,6 @@ impl Img2ImgRequest {
     pub const fn is_infill(&self) -> bool {
         self.mask.is_some()
     }
-}
-
-/// Request used by [`crate::Client::encode_vibe`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct EncodeVibeRequest {
-    /// Validated source image.
-    pub image: crate::EncodedImage,
-    /// Information-extracted value in the `[0.01, 1.0]` range.
-    pub information_extracted: f32,
-    /// Target model for the encoded vibe payload.
-    pub model: Model,
-    /// Rejects out-of-range numeric values instead of clamping them.
-    pub strict_mode: bool,
-}
-
-/// Supported `NovelAI` director tools.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum DirectorTool {
-    /// Line art extraction.
-    Lineart,
-    /// Sketch conversion.
-    Sketch,
-    /// Background removal.
-    BgRemoval,
-    /// Emotion transfer.
-    Emotion,
-    /// Declutter cleanup.
-    Declutter,
-    /// Colorization.
-    Colorize,
-}
-
-/// Request used by [`crate::Client::run_director_tool`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RunDirectorToolRequest {
-    /// Director tool to run.
-    pub tool: DirectorTool,
-    /// Validated source image.
-    pub image: crate::EncodedImage,
-    /// Optional prompt for tools that accept it.
-    pub prompt: Option<String>,
-    /// Optional defry value for tools that accept it.
-    pub defry: Option<u8>,
-    /// Rejects out-of-range numeric values instead of clamping them.
-    pub strict_mode: bool,
 }
 
 /// Prompt, model and canvas fields shared by every generation request.
@@ -980,6 +905,20 @@ pub struct GenerateImageStreamRequest {
     pub stream: StreamMode,
 }
 
+impl GenerateImageStreamRequest {
+    /// Returns the underlying ordinary generation request.
+    #[must_use]
+    pub const fn base(&self) -> &GenerateImageRequest {
+        &self.base
+    }
+}
+
+impl AsRef<GenerateImageRequest> for GenerateImageStreamRequest {
+    fn as_ref(&self) -> &GenerateImageRequest {
+        self.base()
+    }
+}
+
 /// Result of a non-streaming image-generation request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GenerateImageResult {
@@ -1025,42 +964,4 @@ pub struct ImageStreamChunk {
     pub sigma: Option<f32>,
     /// Base64-encoded image payload fragment.
     pub image: String,
-}
-
-/// Free V5 generation allowance reported by `/user/subscription`.
-///
-/// Only accounts that receive the allowance report it; the `usage` object is absent for accounts
-/// that do not, which is why [`SubscriptionInfo::v5_usage`] is optional. See
-/// `docs/anlas-pricing.md` for the measured behaviour of each field.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct V5UsageStatus {
-    /// Whether the allowance is currently overdrawn.
-    pub is_negative: bool,
-    /// Remaining allowance as an integer percentage in the `[0, 100]` range.
-    pub percent: u32,
-    /// Seconds required to recharge one percent.
-    ///
-    /// This is a rate constant, not a countdown: it does not decrease as time passes and does not
-    /// change when `percent` does. Present it as a recharge rate rather than as a deadline.
-    /// Defaults to `0` when the API omits the field.
-    pub seconds_until_next_percent: u64,
-}
-
-/// Subscription summary returned by [`crate::Client::get_subscription`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SubscriptionInfo {
-    /// Combined fixed and purchased Anlas balance.
-    pub anlas_balance: i64,
-    /// Whether the account is effectively on Opus tier.
-    pub is_opus: bool,
-    /// Whether the paid subscription is currently active.
-    pub subscription_active: bool,
-    /// Numeric tier value.
-    pub tier: i32,
-    /// Lowercase tier name.
-    pub tier_name: String,
-    /// Optional expiration timestamp in milliseconds since the Unix epoch.
-    pub expires_at_ms: Option<u64>,
-    /// Free V5 generation allowance, when the account reports one.
-    pub v5_usage: Option<V5UsageStatus>,
 }

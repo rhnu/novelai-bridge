@@ -17,6 +17,15 @@ fn request() -> GenerateImageRequest {
         .build()
 }
 
+#[test]
+fn stream_request_exposes_one_borrowed_base_view() {
+    let stream = novelai_bridge::GenerateImageStreamRequest {
+        base: request(),
+        ..Default::default()
+    };
+    assert!(std::ptr::eq(stream.base(), stream.as_ref()));
+}
+
 fn character(index: usize) -> Character {
     Character {
         prompt: format!("character {index}"),

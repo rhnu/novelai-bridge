@@ -5,7 +5,7 @@ use crate::{
     BridgeError, Character, CharacterSet, GenerateImageRequest, GenerationConstraints,
     GuidanceParams, ImageSize, Img2ImgRequest, InvalidRequest, ModelDescriptor, QualityPreset,
     ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeTransferConfig,
-    internal::request_helpers::{is_center_position, snap_coord_to_grid},
+    generation::prompt::{is_center_position, snap_coord_to_grid},
 };
 
 pub(super) fn normalize(

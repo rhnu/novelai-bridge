@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::DirectorTool;
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CenterPoint {
     pub x: f32,
@@ -171,24 +169,4 @@ pub struct StreamImageGenerationRequestBody {
     #[serde(rename = "use_new_shared_trial")]
     pub use_new_shared_trial: bool,
     pub parameters: ImageStreamParameters,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct EncodeVibeRequestBody {
-    pub image: String,
-    #[serde(rename = "information_extracted")]
-    pub information_extracted: f32,
-    pub model: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct DirectorAugmentRequestBody {
-    pub req_type: DirectorTool,
-    pub width: u32,
-    pub height: u32,
-    pub image: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub defry: Option<u8>,
 }

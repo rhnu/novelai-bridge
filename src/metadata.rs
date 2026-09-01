@@ -4,10 +4,11 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{
-    BridgeError, InvalidRequest, MetadataError,
-    internal::request_helpers::{is_likely_base64, normalize_image_payload},
-};
+use crate::{BridgeError, InvalidRequest, MetadataError};
+
+mod input;
+
+use input::{is_likely_base64, normalize_image_payload};
 
 const KEY_COMMENT: &str = "Comment";
 const KEY_SOURCE: &str = "Source";

@@ -10,27 +10,37 @@ pub use secrecy::SecretString;
 
 mod client;
 mod credit;
+mod director;
 mod error;
 mod generation;
 mod image;
-pub(crate) mod internal;
 mod metadata;
 mod model;
 mod protocol;
+mod subscription;
 #[cfg(feature = "tokenizer")]
 mod tokenizer;
 mod transport;
-mod types;
+mod vibe;
 
-pub use client::{BaseUrls, Client, ClientOptions};
+pub use client::{ApiKeySource, BaseUrls, Client, ClientOptions};
 pub use credit::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, CreditBalance,
     CreditEvent, CreditObserver, ObservedOperation, RequestCostEstimate, RequestFailure,
     RequestFingerprint, RequestOutcome, estimate_anlas_cost, estimate_director_tool_cost,
 };
+pub use director::{DirectorCommand, RunDirectorToolRequest};
 pub use error::{
     ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,
     InvalidRequest, MetadataError, TransportError, TransportOperation,
+};
+pub use generation::{
+    Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
+    GenerateImageRequest, GenerateImageRequestBuilder, GenerateImageResult,
+    GenerateImageStreamRequest, GeneratedImage, GenerationCore, GuidanceParams, ImageFormat,
+    ImageSize, ImageStreamChunk, Img2ImgRequest, NoiseSchedule, OutputParams, QualityPreset,
+    ReferenceSet, ResolvedCharacterPrompt, ResolvedPrompts, Sampler, SamplingParams, StreamMode,
+    UcPreset,
 };
 pub use generation::{
     NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
@@ -53,6 +63,7 @@ pub use model::{
     ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile, VarietyBoostProfile,
     VibeInputPath, VibeProfile, WireProfile,
 };
+pub use subscription::{SubscriptionInfo, V5UsageStatus};
 #[cfg(feature = "tokenizer")]
 pub use tokenizer::{
     CharacterTokenUsage, ClipTokenizer, FramingPolicy, ImageTokenizer, PromptField,
@@ -64,15 +75,7 @@ pub use transport::{
     TransportRequest, TransportResponse, TransportSseBody, TransportSseEvent, TransportSseResponse,
     TransportSseStream,
 };
-pub use types::{
-    ApiKeySource, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
-    CharacterSet, DirectorTool, EncodeVibeRequest, GenerateImageRequest,
-    GenerateImageRequestBuilder, GenerateImageResult, GenerateImageStreamRequest, GeneratedImage,
-    GenerationCore, GuidanceParams, ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest,
-    NoiseSchedule, OutputParams, QualityPreset, ReferenceSet, ResolvedCharacterPrompt,
-    ResolvedPrompts, RunDirectorToolRequest, Sampler, SamplingParams, StreamMode, SubscriptionInfo,
-    UcPreset, V5UsageStatus, VibeReference, VibeTransferConfig,
-};
+pub use vibe::{EncodeVibeRequest, VibeReference, VibeTransferConfig};
 
 /// Default base URL for image-generation endpoints.
 pub const DEFAULT_IMAGE_BASE: &str = "https://image.novelai.net";

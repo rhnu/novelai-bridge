@@ -1,17 +1,21 @@
 use std::sync::{Arc, Mutex, atomic::AtomicU64};
 
 use crate::{
-    AnlasEstimate, AnlasPricingContext, ApiKeySource, BridgeError, CreditBalance, CreditObserver,
+    AnlasEstimate, AnlasPricingContext, BridgeError, CreditBalance, CreditObserver,
     DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, DEFAULT_TIMEOUT_MS, GenerateImageRequest,
-    ReqwestTransport, Transport, internal::transport_helpers::resolve_api_key,
+    ReqwestTransport, Transport,
 };
 
+mod api_key;
 mod director;
 mod generate;
 mod observe;
 mod subscription;
 
+pub use api_key::ApiKeySource;
 pub use observe::StreamObservation;
+
+use api_key::resolve_api_key;
 
 /// Options used to construct a [`Client`] with the default [`ReqwestTransport`].
 #[derive(Clone)]
