@@ -304,17 +304,24 @@ fn build_prompt_wire_parts(
         .unwrap_or_default();
 
     if descriptor.wire().uses_structured_prompt() {
+        let positioning = descriptor
+            .prompt()
+            .characters
+            .expect("structured models support character prompts")
+            .positioning;
         let char_prompts = build_v4_character_captions(
             characters,
             &resolved.characters,
             false,
             resolved_use_coords,
+            positioning,
         );
         let char_negative_prompts = build_v4_character_captions(
             characters,
             &resolved.characters,
             true,
             resolved_use_coords,
+            positioning,
         );
 
         return PromptWireParts {
@@ -343,6 +350,7 @@ fn build_prompt_wire_parts(
                 characters,
                 &resolved.characters,
                 resolved_use_coords,
+                positioning,
             )),
         };
     }

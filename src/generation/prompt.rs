@@ -1,35 +1,23 @@
 use crate::{
-    BridgeError, Character, CharacterPosition, CharacterReference, ImagePreparation,
-    ImagePreprocessor, ResolvedCharacterPrompt,
+    BridgeError, Character, CharacterPosition, CharacterPositionProfile, CharacterReference,
+    ImagePreparation, ImagePreprocessor, ResolvedCharacterPrompt,
     generation::wire::{
         CenterPoint, CharacterPrompt, ReferenceCaption, ReferenceConditionInput, V4CharacterCaption,
     },
 };
 
-const GRID_COORDS: [f32; 5] = [0.1, 0.3, 0.5, 0.7, 0.9];
 const GRID_CENTER: f32 = 0.5;
 const GRID_TOLERANCE: f32 = 0.0001;
 
-/// Snaps a coordinate onto the 5x5 grid the `NovelAI` web client sends for manual placement.
-pub fn snap_coord_to_grid(value: f32) -> f32 {
-    let clamped = value.clamp(0.0, 1.0);
-    let mut best = GRID_COORDS[0];
-    let mut best_distance = (best - clamped).abs();
-    for candidate in GRID_COORDS.into_iter().skip(1) {
-        let distance = (candidate - clamped).abs();
-        if distance < best_distance {
-            best = candidate;
-            best_distance = distance;
-        }
-    }
-    best
-}
-
-fn center_point(position: CharacterPosition, use_coords: bool) -> CenterPoint {
+fn center_point(
+    position: CharacterPosition,
+    use_coords: bool,
+    positioning: CharacterPositionProfile,
+) -> CenterPoint {
     if use_coords {
         CenterPoint {
-            x: snap_coord_to_grid(position.x),
-            y: snap_coord_to_grid(position.y),
+            x: positioning.resolve_coordinate(position.x),
+            y: positioning.resolve_coordinate(position.y),
         }
     } else {
         CenterPoint {
@@ -53,13 +41,18 @@ pub fn build_v4_character_captions(
     resolved: &[ResolvedCharacterPrompt],
     negative: bool,
     use_coords: bool,
+    positioning: CharacterPositionProfile,
 ) -> Vec<V4CharacterCaption> {
     let mut out = Vec::new();
     for resolved in resolved {
         let character = &characters[resolved.index];
 
         out.push(V4CharacterCaption {
-            centers: Some(vec![center_point(character.position, use_coords)]),
+            centers: Some(vec![center_point(
+                character.position,
+                use_coords,
+                positioning,
+            )]),
             char_caption: Some(if negative {
                 resolved.negative_prompt.clone()
             } else {
@@ -78,13 +71,14 @@ pub fn convert_character_prompts(
     characters: &[Character],
     resolved: &[ResolvedCharacterPrompt],
     use_coords: bool,
+    positioning: CharacterPositionProfile,
 ) -> Vec<CharacterPrompt> {
     resolved
         .iter()
         .map(|resolved| CharacterPrompt {
             prompt: resolved.prompt.clone(),
             uc: resolved.negative_prompt.clone(),
-            center: center_point(characters[resolved.index].position, use_coords),
+            center: center_point(characters[resolved.index].position, use_coords, positioning),
             enabled: true,
         })
         .collect()

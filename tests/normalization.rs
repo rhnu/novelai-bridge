@@ -220,6 +220,42 @@ async fn effective_coordinate_grid_matches_wire_and_remains_idempotent() {
     }
 }
 
+#[tokio::test]
+async fn v5_freeform_coordinates_survive_normalization_and_wire_serialization() {
+    let expected = CharacterPosition { x: 0.681, y: 0.723 };
+    let mut raw = GenerateImageRequest::builder("private prompt", Model::NaiDiffusion5Full)
+        .seed(42)
+        .build();
+    let mut ch = character(0);
+    ch.position = expected;
+    raw.characters = Some(novelai_bridge::CharacterSet {
+        characters: vec![ch],
+        use_coords: Some(true),
+    });
+
+    let normalized = raw.normalize().unwrap();
+    let set = normalized.request().characters.as_ref().unwrap();
+    assert_eq!(set.characters[0].position, expected);
+    assert!(normalized.diagnostics().is_empty());
+    let again = normalized.clone().into_request().normalize().unwrap();
+    assert_eq!(normalized.request(), again.request());
+    assert!(again.diagnostics().is_empty());
+
+    let transport = support::MockTransport::default();
+    Client::with_transport(transport.clone())
+        .generate_prepared(normalized.prepare().unwrap())
+        .await
+        .unwrap();
+    let body = transport.last_body().unwrap();
+    let center = &body["parameters"]["characterPrompts"][0]["center"];
+    assert!((center["x"].as_f64().unwrap() - f64::from(expected.x)).abs() < 1e-6);
+    assert!((center["y"].as_f64().unwrap() - f64::from(expected.y)).abs() < 1e-6);
+    let caption_center =
+        &body["parameters"]["v4_prompt"]["caption"]["char_captions"][0]["centers"][0];
+    assert!((caption_center["x"].as_f64().unwrap() - f64::from(expected.x)).abs() < 1e-6);
+    assert!((caption_center["y"].as_f64().unwrap() - f64::from(expected.y)).abs() < 1e-6);
+}
+
 #[test]
 fn conflict_diagnostics_contain_field_names_not_payloads() {
     let mut raw = request();
@@ -272,6 +308,44 @@ fn planning_and_pricing_preserve_validated_images_and_do_not_resolve_random_seed
     let cost = normalized.anlas_estimate_input(AnlasPricingContext::default());
     assert_eq!(cost.img2img_strength, Some(0.99));
     assert!(normalized.prepare().is_ok());
+}
+
+#[test]
+fn img2img_and_inpaint_strength_use_separate_profiles() {
+    let mut img2img = request();
+    img2img.img2img = Some(Img2ImgRequest::new(image(), 1.0, 0.0));
+    assert!(img2img.normalize_with(NormalizationPolicy::Reject).is_err());
+
+    let mut inpaint_input = Img2ImgRequest::new(image(), 1.0, 0.0);
+    inpaint_input.mask = Some(image());
+    let mut inpaint = request();
+    inpaint.img2img = Some(inpaint_input);
+    let accepted = inpaint
+        .clone()
+        .normalize_with(NormalizationPolicy::Reject)
+        .unwrap();
+    assert_eq!(accepted.request().img2img.as_ref().unwrap().strength, 1.0);
+    assert!(accepted.diagnostics().is_empty());
+
+    inpaint.img2img.as_mut().unwrap().strength = 1.1;
+    assert!(
+        inpaint
+            .clone()
+            .normalize_with(NormalizationPolicy::Reject)
+            .is_err()
+    );
+    let normalized = inpaint
+        .normalize_with(NormalizationPolicy::Normalize)
+        .unwrap();
+    assert_eq!(normalized.request().img2img.as_ref().unwrap().strength, 1.0);
+    assert!(normalized.diagnostics().iter().any(|item| {
+        item.field == "img2img.strength"
+            && matches!(
+                item.change,
+                NormalizationChange::Adjusted { from, to }
+                    if (from - 1.1).abs() < 1e-6 && (to - 1.0).abs() < 1e-6
+            )
+    }));
 }
 
 #[tokio::test]

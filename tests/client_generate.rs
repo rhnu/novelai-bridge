@@ -246,7 +246,7 @@ async fn masked_img2img_request_uses_infill_action_and_inpainting_model() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::with_transport(transport.clone());
 
-    let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 0.6, 0.1);
+    let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 1.0, 0.1);
     img2img.mask = Some(png_data_url(400, 600));
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .img2img(img2img)
@@ -268,7 +268,7 @@ async fn masked_img2img_request_uses_infill_action_and_inpainting_model() {
         (body["parameters"]["inpaintImg2ImgStrength"]
             .as_f64()
             .unwrap()
-            - 0.6)
+            - 1.0)
             .abs()
             < 1e-6
     );

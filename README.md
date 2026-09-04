@@ -196,8 +196,9 @@ own valid inputs. This prevents invalid tool/option combinations before the clie
 
 Disabled characters do not participate in validation, counting or wire arrays. Normalize policy
 keeps the first model-limit enabled characters and disables the rest, preserving original indices;
-Reject policy errors on overflow. Coordinates use the existing five-by-five wire grid, including
-in Reject mode. Native noise scheduling on V4+ retains the existing Karras fallback and reports it.
+Reject policy errors on overflow. V4/V4.5 coordinates use the five-by-five wire grid, including
+in Reject mode, while V5 preserves normalized freeform coordinates. Native noise scheduling on
+V4+ retains the existing Karras fallback and reports it.
 
 Raw-request `resolve_prompts`, `count_tokens`, `anlas_estimate_input` and `estimate_anlas_cost`
 now return `Result` because they normalize first. Repeated calls clone the raw input; reuse a plan
@@ -230,6 +231,8 @@ Notes:
   prompt. Anime mode remains the default. V3 requests drop this toggle, or reject it in
   `strict_mode`.
 - Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.
+- Image-to-image strength accepts `0.01..=0.99`; masked Inpaint requests use their separate
+  `0.01..=1.0` strength constraint.
 - `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
 - Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request
   seed is never presented as an image seed.

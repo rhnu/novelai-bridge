@@ -147,7 +147,10 @@ pub struct Img2ImgRequest {
     ///
     /// The client fits this image to the requested canvas before sending it.
     pub image: crate::EncodedImage,
-    /// Strength value in the `[0.01, 0.99]` range.
+    /// Strength value.
+    ///
+    /// Image-to-image requests accept `[0.01, 0.99]`; adding a mask selects the Inpaint profile,
+    /// which accepts `[0.01, 1.0]`.
     pub strength: f32,
     /// Noise value in the `[0, 0.99]` range.
     pub noise: f32,

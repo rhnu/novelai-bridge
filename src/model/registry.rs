@@ -1,10 +1,10 @@
 //! Explicit composition: no model descriptor inherits from another model.
 use super::{
-    CanvasConstraints, CharacterPromptProfile, GenerationConstraints, ImageTokenizerKind,
-    InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity, ModelSupport,
-    NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile, PromptProfile,
-    QualitySupport, ReferenceModes, ReferenceProfile, SamplingProfile, VarietyBoostProfile,
-    VibeInputPath, VibeProfile, WireProfile,
+    CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
+    ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
+    ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
+    PromptProfile, QualitySupport, ReferenceModes, ReferenceProfile, SamplingProfile,
+    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
 };
 use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
 
@@ -24,6 +24,10 @@ const CONSTRAINTS: GenerationConstraints = GenerationConstraints {
     img2img_strength: ParameterRange {
         min: 0.01,
         max: 0.99,
+    },
+    inpaint_strength: ParameterRange {
+        min: 0.01,
+        max: 1.0,
     },
     img2img_noise: ParameterRange {
         min: 0.0,
@@ -97,7 +101,10 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 1471,
-        characters: Some(CharacterPromptProfile { max_characters: 32 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 32,
+            positioning: CharacterPositionProfile::Freeform,
+        }),
         quality: QualitySupport::StandardAndLight,
         transparent_background: true,
         furry_mode: true,
@@ -128,7 +135,10 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 703,
-        characters: Some(CharacterPromptProfile { max_characters: 32 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 32,
+            positioning: CharacterPositionProfile::Freeform,
+        }),
         quality: QualitySupport::StandardAndLight,
         transparent_background: true,
         furry_mode: true,
@@ -165,7 +175,10 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 6,
+            positioning: CharacterPositionProfile::Grid5x5,
+        }),
         quality: QualitySupport::Standard,
         transparent_background: false,
         furry_mode: true,
@@ -202,7 +215,10 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 6,
+            positioning: CharacterPositionProfile::Grid5x5,
+        }),
         quality: QualitySupport::Standard,
         transparent_background: false,
         furry_mode: true,
@@ -237,7 +253,10 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 6,
+            positioning: CharacterPositionProfile::Grid5x5,
+        }),
         quality: QualitySupport::Standard,
         transparent_background: false,
         furry_mode: true,
@@ -272,7 +291,10 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile {
+            max_characters: 6,
+            positioning: CharacterPositionProfile::Grid5x5,
+        }),
         quality: QualitySupport::Standard,
         transparent_background: false,
         furry_mode: true,

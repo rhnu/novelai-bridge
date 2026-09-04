@@ -8,10 +8,16 @@
   remains the default; enabling furry mode prepends `fur dataset` to the effective positive prompt
   used by request encoding and token counting. V3 follows the existing strict/normalize handling
   for unsupported prompt features.
+- Add `CharacterPositionProfile` to character prompt descriptors. V4/V4.5 explicitly select the
+  discrete 5x5 grid, while V5 explicitly selects normalized freeform coordinates.
 
 ### Fixed
 
 - Correct the maximum enabled character count for V5 Full and V5 Curated from 6 to 32.
+- Preserve V5 freeform character coordinates through normalization and structured prompt wire
+  assembly instead of applying the V4/V4.5 5x5 projection to every structured model.
+- Separate Image2Image and Inpaint strength constraints. Image2Image remains `0.01..=0.99`, while
+  masked Inpaint requests now accept and serialize strength `1.0` without normalization loss.
 
 ## 0.5.0-rc.1 - 2026-09-01
 

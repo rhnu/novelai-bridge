@@ -160,8 +160,10 @@ pub struct GenerationConstraints {
     pub scale: ParameterRange<f32>,
     /// CFG rescale.
     pub cfg_rescale: ParameterRange<f32>,
-    /// Image-to-image and inpainting strength.
+    /// Image-to-image strength.
     pub img2img_strength: ParameterRange<f32>,
+    /// Inpainting strength.
+    pub inpaint_strength: ParameterRange<f32>,
     /// Image-to-image and inpainting noise.
     pub img2img_noise: ParameterRange<f32>,
 }
@@ -182,12 +184,48 @@ pub struct ModelDefaults {
     pub uc_preset: UcPreset,
 }
 
-/// Character prompt availability and its nonzero count limit.
+/// Character-position geometry used by a model's structured prompt.
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CharacterPositionProfile {
+    /// V4/V4.5 positions are projected onto the centers of a discrete 5x5 grid.
+    Grid5x5,
+    /// V5 positions retain any normalized point on the canvas.
+    Freeform,
+}
+
+impl CharacterPositionProfile {
+    /// Resolves one already-clamped coordinate according to this model's geometry.
+    #[must_use]
+    pub fn resolve_coordinate(self, value: f32) -> f32 {
+        match self {
+            Self::Grid5x5 => {
+                const GRID_COORDS: [f32; 5] = [0.1, 0.3, 0.5, 0.7, 0.9];
+                let mut best = GRID_COORDS[0];
+                let mut best_distance = (best - value).abs();
+                for candidate in GRID_COORDS.into_iter().skip(1) {
+                    let distance = (candidate - value).abs();
+                    if distance < best_distance {
+                        best = candidate;
+                        best_distance = distance;
+                    }
+                }
+                best
+            }
+            Self::Freeform => value,
+        }
+    }
+}
+
+/// Character prompt availability, count limit and position geometry.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CharacterPromptProfile {
     /// Maximum enabled characters.
     pub max_characters: u32,
+    /// Model-specific character-position geometry.
+    pub positioning: CharacterPositionProfile,
 }
 
 /// Available quality presets.

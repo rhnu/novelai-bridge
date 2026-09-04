@@ -2,10 +2,10 @@ use super::{
     NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
 };
 use crate::{
-    BridgeError, Character, CharacterSet, GenerateImageRequest, GenerationConstraints,
-    GuidanceParams, ImageSize, Img2ImgRequest, InvalidRequest, ModelDescriptor, QualityPreset,
-    ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeTransferConfig,
-    generation::prompt::{is_center_position, snap_coord_to_grid},
+    BridgeError, Character, CharacterPositionProfile, CharacterSet, GenerateImageRequest,
+    GenerationConstraints, GuidanceParams, ImageSize, Img2ImgRequest, InvalidRequest,
+    ModelDescriptor, QualityPreset, ReferenceAvailability, ReferenceIntent, ReferenceSet,
+    VibeTransferConfig, generation::prompt::is_center_position,
 };
 
 pub(super) fn normalize(
@@ -24,7 +24,9 @@ pub(super) fn normalize(
     normalizer.apply_capability_gates(&mut request, descriptor)?;
     if let Some(characters) = request.characters.as_mut() {
         normalizer.validate_character_inputs(&characters.characters)?;
-        normalizer.normalize_character_positions(characters)?;
+        if let Some(profile) = descriptor.prompt().characters {
+            normalizer.normalize_character_positions(characters, profile.positioning)?;
+        }
     }
     if let Some(references) = request.references.as_mut() {
         normalizer.normalize_character_references(references)?;
@@ -385,7 +387,11 @@ impl Normalizer {
         Ok(())
     }
 
-    fn normalize_character_positions(&mut self, set: &mut CharacterSet) -> Result<(), BridgeError> {
+    fn normalize_character_positions(
+        &mut self,
+        set: &mut CharacterSet,
+        positioning: CharacterPositionProfile,
+    ) -> Result<(), BridgeError> {
         for (index, ch) in set
             .characters
             .iter_mut()
@@ -405,7 +411,7 @@ impl Normalizer {
                 1.0,
             )?;
         }
-        // Preserve automatic placement semantics before snapping to the wire grid.
+        // Preserve automatic placement semantics before applying model-specific geometry.
         let use_coords = resolve_use_coords(Some(set));
         set.use_coords = Some(use_coords);
         for (index, ch) in set
@@ -416,7 +422,7 @@ impl Normalizer {
         {
             for (axis, value) in [("x", &mut ch.position.x), ("y", &mut ch.position.y)] {
                 let effective = if use_coords {
-                    snap_coord_to_grid(*value)
+                    positioning.resolve_coordinate(*value)
                 } else {
                     0.5
                 };
@@ -462,11 +468,16 @@ impl Normalizer {
         };
 
         let limits = self.constraints;
+        let strength = if img2img.is_infill() {
+            limits.inpaint_strength
+        } else {
+            limits.img2img_strength
+        };
         img2img.strength = self.normalize_f32_range(
             "img2img.strength",
             img2img.strength,
-            limits.img2img_strength.min,
-            limits.img2img_strength.max,
+            strength.min,
+            strength.max,
         )?;
         img2img.noise = self.normalize_f32_range(
             "img2img.noise",

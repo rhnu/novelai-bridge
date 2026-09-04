@@ -72,12 +72,12 @@ pub use metadata::{
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
 pub use model::{
-    CanvasConstraints, CharacterPromptProfile, GenerationConstraints, GenerationMode,
-    ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
-    ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
-    PromptProfile, PromptStructure, QualitySupport, ReferenceAvailability, ReferenceIntent,
-    ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile, VarietyBoostProfile,
-    VibeInputPath, VibeProfile, WireProfile,
+    CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
+    GenerationMode, ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor,
+    ModelIdentity, ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange,
+    PricingProfile, PromptProfile, PromptStructure, QualitySupport, ReferenceAvailability,
+    ReferenceIntent, ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile,
+    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
 };
 #[cfg(all(feature = "client", not(feature = "credit-observer")))]
 pub(crate) use observation::{

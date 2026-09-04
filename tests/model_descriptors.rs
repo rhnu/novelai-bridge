@@ -5,8 +5,8 @@ mod references;
 mod support;
 
 use novelai_bridge::{
-    GenerateImageRequest, GenerationCore, GenerationMode, Model, NoiseSchedule,
-    NoiseScheduleSupport, NormalizationPolicy, SamplingParams, WireProfile,
+    CharacterPositionProfile, GenerateImageRequest, GenerationCore, GenerationMode, Model,
+    NoiseSchedule, NoiseScheduleSupport, NormalizationPolicy, SamplingParams, WireProfile,
 };
 
 const MODES: [GenerationMode; 3] = [
@@ -46,6 +46,40 @@ async fn default_model_and_generation_use_v5_full_profiles() {
     assert_eq!(body["model"], "nai-diffusion-5-full");
     assert_eq!(body["parameters"]["params_version"], 4);
     assert_eq!(body["parameters"]["scale"], 7.0);
+}
+
+#[test]
+fn character_position_geometry_is_an_explicit_model_profile() {
+    for model in [Model::NaiDiffusion5Full, Model::NaiDiffusion5Curated] {
+        assert_eq!(
+            model
+                .descriptor()
+                .prompt()
+                .characters
+                .expect("V5 character profile")
+                .positioning,
+            CharacterPositionProfile::Freeform
+        );
+    }
+    for model in [
+        Model::NaiDiffusion45Full,
+        Model::NaiDiffusion45Curated,
+        Model::NaiDiffusion4Full,
+        Model::NaiDiffusion4Curated,
+    ] {
+        assert_eq!(
+            model
+                .descriptor()
+                .prompt()
+                .characters
+                .expect("V4 character profile")
+                .positioning,
+            CharacterPositionProfile::Grid5x5
+        );
+    }
+    for model in [Model::NaiDiffusion3, Model::NaiDiffusion3Furry] {
+        assert!(model.descriptor().prompt().characters.is_none());
+    }
 }
 
 #[test]
@@ -99,6 +133,8 @@ fn builders_use_descriptor_defaults_and_defaults_satisfy_all_constraints() {
             (limits.cfg_rescale.min..=limits.cfg_rescale.max).contains(&raw.sampling.cfg_rescale)
         );
         assert!((limits.samples.min..=limits.samples.max).contains(&raw.core.n_samples));
+        assert_eq!(limits.img2img_strength.max, 0.99);
+        assert_eq!(limits.inpaint_strength.max, 1.0);
         for size in [defaults.size.width, defaults.size.height] {
             assert!((limits.canvas.dimension.min..=limits.canvas.dimension.max).contains(&size));
             assert!(size.is_multiple_of(limits.canvas.multiple));
