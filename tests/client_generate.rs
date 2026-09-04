@@ -1199,6 +1199,65 @@ async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
     assert!(transport.last_path().is_none());
 }
 
+#[tokio::test]
+async fn furry_mode_prepends_the_dataset_tag_for_v4_and_later_models() {
+    for model in [
+        Model::NaiDiffusion4Full,
+        Model::NaiDiffusion4Curated,
+        Model::NaiDiffusion45Full,
+        Model::NaiDiffusion45Curated,
+        Model::NaiDiffusion5Full,
+        Model::NaiDiffusion5Curated,
+    ] {
+        let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+        let client = Client::with_transport(transport.clone());
+        let params = GenerateImageRequest::builder("1girl", model)
+            .furry_mode(true)
+            .build();
+
+        client.generate(params).await.unwrap();
+        let body = transport.last_body().expect("generate body");
+        assert_eq!(
+            body["parameters"]["v4_prompt"]["caption"]["base_caption"],
+            json!("fur dataset, 1girl, very aesthetic, masterpiece, no text"),
+            "{model:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn furry_mode_is_dropped_for_v3_when_not_strict() {
+    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
+    let client = Client::with_transport(transport.clone());
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
+        .furry_mode(true)
+        .build();
+
+    client.generate(params).await.unwrap();
+    assert_eq!(
+        transport.last_body().unwrap()["parameters"]["prompt"],
+        json!("1girl, very aesthetic, masterpiece, no text")
+    );
+}
+
+#[tokio::test]
+async fn furry_mode_is_rejected_for_v3_in_strict_mode() {
+    let transport = MockTransport::default();
+    let client = Client::with_transport(transport.clone());
+    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
+        .furry_mode(true)
+        .strict_mode(true)
+        .build();
+
+    let error = client.generate(params).await.unwrap_err();
+    assert!(matches!(
+        error,
+        BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
+            if feature == "furry_mode"
+    ));
+    assert!(transport.last_path().is_none());
+}
+
 #[test]
 fn sampling_defaults_follow_model_descriptors() {
     let v5 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build();

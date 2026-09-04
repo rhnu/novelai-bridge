@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0-rc.2 - 2026-09-04
+
+### Added
+
+- Add `GenerationCore::furry_mode` and the matching builder method for V4, V4.5 and V5. Anime
+  remains the default; enabling furry mode prepends `fur dataset` to the effective positive prompt
+  used by request encoding and token counting. V3 follows the existing strict/normalize handling
+  for unsupported prompt features.
+
 ## 0.5.0-rc.1 - 2026-09-01
 
 Release candidate during the tokenizer refactor; not a stable 0.5.0 release.

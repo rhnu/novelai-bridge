@@ -221,6 +221,8 @@ pub struct PromptProfile {
     pub quality: QualitySupport,
     /// Transparent-background tag support.
     pub transparent_background: bool,
+    /// Anime/furry prompt dataset switching support.
+    pub furry_mode: bool,
 }
 impl PromptProfile {
     /// Maximum enabled characters, or zero when unsupported.

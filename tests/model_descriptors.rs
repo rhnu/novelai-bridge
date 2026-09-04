@@ -182,6 +182,7 @@ fn every_variant_has_the_expected_independent_profiles() {
             v5
         );
         assert_eq!(descriptor.prompt().transparent_background, v5);
+        assert_eq!(descriptor.prompt().furry_mode, !legacy);
         assert!(
             (descriptor.pricing().multiplier - if v5 { 1.5 } else { 1.0 }).abs() < f64::EPSILON
         );

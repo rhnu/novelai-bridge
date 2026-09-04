@@ -147,6 +147,16 @@ impl Normalizer {
         {
             params.core.transparent_background = false;
         }
+        if params.core.furry_mode
+            && !self.require_capability(
+                descriptor.prompt().furry_mode,
+                "furry_mode",
+                "V4 and later models",
+                NormalizationChange::Unsupported,
+            )?
+        {
+            params.core.furry_mode = false;
+        }
         self.gate_guidance(&mut params.guidance, descriptor)?;
         Ok(())
     }

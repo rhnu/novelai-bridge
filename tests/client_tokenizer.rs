@@ -43,6 +43,7 @@ fn all_counting_entry_points_include_presets_and_use_the_same_framing() {
         .quality(QualityPreset::Standard)
         .uc_preset(UcPreset::Heavy)
         .transparent_background(true)
+        .furry_mode(true)
         .build();
     let usage = params.count_tokens(&TOKENIZERS).unwrap();
     let encoder = TOKENIZERS.for_model(params.core.model).unwrap();
@@ -54,6 +55,7 @@ fn all_counting_entry_points_include_presets_and_use_the_same_framing() {
     );
     assert!(usage.negative_prompt.used > encoder.count("bad", FramingPolicy::ModelInput).unwrap());
     let resolved = params.resolve_prompts().unwrap();
+    assert!(resolved.prompt.starts_with("fur dataset, hello"));
     assert_eq!(
         usage.prompt.used,
         encoder

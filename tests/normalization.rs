@@ -64,6 +64,22 @@ fn explicit_policy_overrides_strict_mode_and_raw_helpers_validate() {
 }
 
 #[test]
+fn furry_mode_normalization_reports_v3_capability_drop() {
+    let raw = GenerateImageRequest::builder("cat", Model::NaiDiffusion3)
+        .furry_mode(true)
+        .build();
+    let normalized = raw.normalize().unwrap();
+
+    assert!(!normalized.request().core.furry_mode);
+    assert!(matches!(
+        normalized.diagnostics(),
+        [diagnostic]
+            if diagnostic.field == "furry_mode"
+                && diagnostic.change == NormalizationChange::Unsupported
+    ));
+}
+
+#[test]
 fn normalization_is_idempotent_and_diagnostics_are_deterministic() {
     let mut raw = request();
     raw.core.size = ImageSize {

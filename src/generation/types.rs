@@ -7,6 +7,7 @@ use crate::{
 };
 
 const TRANSPARENT_BACKGROUND_TAG: &str = ", transparent background";
+const FURRY_DATASET_TAG: &str = "fur dataset";
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CharacterPosition {
@@ -206,6 +207,12 @@ pub struct GenerationCore {
     /// This is a prompt-level feature: it appends a `transparent background` tag and sets the
     /// matching wire hint. Requires [`crate::PromptProfile::transparent_background`].
     pub transparent_background: bool,
+    /// Switches supported V4-and-later models from the default anime dataset to furry mode.
+    ///
+    /// This is a prompt-level feature that prepends a `fur dataset` tag. Requires
+    /// [`crate::PromptProfile::furry_mode`].
+    #[serde(default)]
+    pub furry_mode: bool,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
 }
@@ -224,13 +231,22 @@ impl GenerationCore {
             n_samples: defaults.n_samples,
             quality: defaults.quality,
             transparent_background: false,
+            furry_mode: false,
             uc_preset: defaults.uc_preset,
         }
     }
 
     /// Assembles the positive prompt from every contributing source.
     fn assemble_prompt(&self) -> String {
-        let mut prompt = self.prompt.clone();
+        let mut prompt = if self.furry_mode {
+            if self.prompt.is_empty() {
+                FURRY_DATASET_TAG.to_owned()
+            } else {
+                format!("{FURRY_DATASET_TAG}, {}", self.prompt)
+            }
+        } else {
+            self.prompt.clone()
+        };
         if self.transparent_background {
             prompt.push_str(TRANSPARENT_BACKGROUND_TAG);
         }
@@ -255,8 +271,9 @@ impl GenerationCore {
 
 /// Final conditioning text a request will actually send, per field.
 ///
-/// A prompt is contributed to by several sources: the caller's text, the transparent-background
-/// tag, [`QualityPreset`] tags and the [`UcPreset`] text. Anything that inspects prompt text —
+/// A prompt is contributed to by several sources: the caller's text, the furry-dataset prefix,
+/// the transparent-background tag, [`QualityPreset`] tags and the [`UcPreset`] text. Anything
+/// that inspects prompt text —
 /// most importantly token counting — must look at the assembled result rather than at
 /// [`GenerationCore::prompt`], or it will under-report. Request building and token counting both
 /// read this one type, so the counted text cannot drift from the sent text.
@@ -265,7 +282,7 @@ impl GenerationCore {
 #[non_exhaustive]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResolvedPrompts {
-    /// Positive prompt including the transparency and quality tags.
+    /// Positive prompt including the furry prefix, transparency tag and quality tags.
     pub prompt: String,
     /// Negative prompt including the UC preset text.
     pub negative_prompt: String,
@@ -464,6 +481,13 @@ impl GenerateImageRequestBuilder {
     #[must_use]
     pub const fn transparent_background(mut self, enabled: bool) -> Self {
         self.request.core.transparent_background = enabled;
+        self
+    }
+
+    /// Switches a V4-or-later model from the default anime dataset to furry mode.
+    #[must_use]
+    pub const fn furry_mode(mut self, enabled: bool) -> Self {
+        self.request.core.furry_mode = enabled;
         self
     }
 

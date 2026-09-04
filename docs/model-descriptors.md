@@ -73,7 +73,7 @@ Given `let d = model.descriptor();`:
 | Character-reference flags | `d.support().character_reference`; query `resolve_references` for modes |
 | Variety flag and coefficient | `d.sampling().variety` / `variety_sigma(width, height)` |
 | SMEA / dynamic thresholding | `d.sampling().smea` / `.dynamic_thresholding` |
-| Light quality / transparency | `d.prompt().quality.supports(QualityPreset::Light)` / `.transparent_background` |
+| Light quality / transparency / furry mode | `d.prompt().quality.supports(QualityPreset::Light)` / `.transparent_background` / `.furry_mode` |
 | Prompt structure / parameter version | `d.wire().prompt_structure()` / `.params_version()` |
 | V5 protocol extensions | `d.wire().uses_v5_extensions()` |
 | Pricing multiplier / usage limit | `d.pricing().multiplier` / `.opus_allowance` |

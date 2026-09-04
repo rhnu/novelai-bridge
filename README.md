@@ -80,7 +80,7 @@ Load your own assets with `Tokenizers::with_clip_merges`, `with_t5_sentencepiece
 `with_qwen_json`, or enable the optional asset package:
 
 ```toml
-novelai-bridge = { version = "0.5.0-rc.1", features = ["bundled-assets"] }
+novelai-bridge = { version = "0.5.0-rc.2", features = ["bundled-assets"] }
 ```
 
 ```rust,no_run
@@ -226,6 +226,9 @@ Notes:
   V3 and Furry V3 locally; it does not silently downgrade to a non-streaming request.
 - `QualityPreset::Light` and `transparent_background` are V5-only; on earlier models they fall
   back to the standard behaviour, or are rejected in `strict_mode`.
+- V4, V4.5 and V5 support `furry_mode`; it prepends `fur dataset` to the effective positive
+  prompt. Anime mode remains the default. V3 requests drop this toggle, or reject it in
+  `strict_mode`.
 - Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.
 - `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
 - Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request
