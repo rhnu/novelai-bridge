@@ -9,6 +9,10 @@
   used by request encoding and token counting. V3 follows the existing strict/normalize handling
   for unsupported prompt features.
 
+### Fixed
+
+- Correct the maximum enabled character count for V5 Full and V5 Curated from 6 to 32.
+
 ## 0.5.0-rc.1 - 2026-09-01
 
 Release candidate during the tokenizer refactor; not a stable 0.5.0 release.

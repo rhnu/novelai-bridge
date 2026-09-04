@@ -97,7 +97,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 1471,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile { max_characters: 32 }),
         quality: QualitySupport::StandardAndLight,
         transparent_background: true,
         furry_mode: true,
@@ -128,7 +128,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     prompt: PromptProfile {
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 703,
-        characters: Some(CharacterPromptProfile { max_characters: 6 }),
+        characters: Some(CharacterPromptProfile { max_characters: 32 }),
         quality: QualitySupport::StandardAndLight,
         transparent_background: true,
         furry_mode: true,

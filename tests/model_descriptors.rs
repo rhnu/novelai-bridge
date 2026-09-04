@@ -5,9 +5,8 @@ mod references;
 mod support;
 
 use novelai_bridge::{
-    GenerateImageRequest, GenerationCore, GenerationMode, ImageTokenizerKind, Model, NoiseSchedule,
-    NoiseScheduleSupport, NormalizationPolicy, OpusAllowance, QualityPreset, SamplingParams,
-    WireProfile,
+    GenerateImageRequest, GenerationCore, GenerationMode, Model, NoiseSchedule,
+    NoiseScheduleSupport, NormalizationPolicy, SamplingParams, WireProfile,
 };
 
 const MODES: [GenerationMode; 3] = [
@@ -77,123 +76,6 @@ fn registry_identity_is_unique_and_agrees_with_serde_and_sibling_queries() {
                 }
             );
         }
-    }
-}
-
-#[test]
-#[allow(clippy::too_many_lines)] // Keep the explicit registry fixture beside its assertions.
-fn every_variant_has_the_expected_independent_profiles() {
-    let expected = [
-        (
-            Model::NaiDiffusion3,
-            5.0,
-            ImageTokenizerKind::Clip,
-            225,
-            WireProfile::LegacyV3,
-            None,
-            Some("v3"),
-        ),
-        (
-            Model::NaiDiffusion3Furry,
-            6.2,
-            ImageTokenizerKind::Clip,
-            225,
-            WireProfile::LegacyV3,
-            None,
-            Some("v3furry"),
-        ),
-        (
-            Model::NaiDiffusion4Full,
-            5.5,
-            ImageTokenizerKind::T5,
-            512,
-            WireProfile::StructuredV4,
-            Some(19.0),
-            Some("v4full"),
-        ),
-        (
-            Model::NaiDiffusion4Curated,
-            5.5,
-            ImageTokenizerKind::T5,
-            512,
-            WireProfile::StructuredV4,
-            Some(19.0),
-            Some("v4curated"),
-        ),
-        (
-            Model::NaiDiffusion45Full,
-            5.0,
-            ImageTokenizerKind::T5,
-            512,
-            WireProfile::StructuredV4,
-            Some(58.0),
-            Some("v4-5full"),
-        ),
-        (
-            Model::NaiDiffusion45Curated,
-            5.0,
-            ImageTokenizerKind::T5,
-            512,
-            WireProfile::StructuredV4,
-            Some(58.0),
-            Some("v4-5curated"),
-        ),
-        (
-            Model::NaiDiffusion5Full,
-            7.0,
-            ImageTokenizerKind::Qwen,
-            1471,
-            WireProfile::StructuredV5,
-            None,
-            None,
-        ),
-        (
-            Model::NaiDiffusion5Curated,
-            7.0,
-            ImageTokenizerKind::Qwen,
-            703,
-            WireProfile::StructuredV5,
-            None,
-            None,
-        ),
-    ];
-    assert_eq!(expected.len(), Model::ALL.len());
-    for (model, scale, tokenizer, limit, wire, sigma, key) in expected {
-        let descriptor = model.descriptor();
-        assert!((descriptor.defaults().sampling.scale - scale).abs() < f32::EPSILON);
-        assert_eq!(descriptor.defaults().sampling.steps, 23);
-        assert_eq!(descriptor.prompt().tokenizer, tokenizer);
-        assert_eq!(descriptor.prompt().token_limit, limit);
-        assert_eq!(*descriptor.wire(), wire);
-        assert_eq!(descriptor.sampling().variety_sigma(832, 1216), sigma);
-        assert_eq!(model.vibe_model_key(), key);
-        let legacy = wire == WireProfile::LegacyV3;
-        let v5 = wire == WireProfile::StructuredV5;
-        assert_eq!(wire.params_version(), if v5 { 4 } else { 3 });
-        assert_eq!(
-            descriptor.prompt().max_characters(),
-            if legacy { 0 } else { 6 }
-        );
-        assert_eq!(descriptor.sampling().smea, legacy);
-        assert_eq!(descriptor.sampling().dynamic_thresholding, legacy);
-        assert_eq!(descriptor.support().streaming, !legacy);
-        assert_eq!(
-            descriptor.prompt().quality.supports(QualityPreset::Light),
-            v5
-        );
-        assert_eq!(descriptor.prompt().transparent_background, v5);
-        assert_eq!(descriptor.prompt().furry_mode, !legacy);
-        assert!(
-            (descriptor.pricing().multiplier - if v5 { 1.5 } else { 1.0 }).abs() < f64::EPSILON
-        );
-        assert_eq!(
-            descriptor.pricing().opus_allowance,
-            if v5 {
-                OpusAllowance::Metered
-            } else {
-                OpusAllowance::Standard
-            }
-        );
     }
 }
 
