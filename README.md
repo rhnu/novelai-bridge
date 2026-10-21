@@ -1,25 +1,24 @@
 # novelai-bridge
 
-A Rust client for NovelAI image generation, including streaming, image-to-image, inpainting,
-Director Tools and Vibe Transfer. It also provides local tokenization, image metadata parsing and
-Anlas cost estimates.
+A Rust SDK for NovelAI image generation. Build and validate requests locally, prepare image inputs,
+and execute them through the included HTTP adapter or your own transport.
 
-Supports the Diffusion V3, V4, V4.5 and V5 families. The default model is V5 Full;
-[model descriptors](docs/model-descriptors.md) describe which operations each model supports.
-V5 models are listed as Full, Full Medium, then Curated. `Model::NaiDiffusion5FullMedium` is the
-Medium variant of Full, with fixed sampling and negative-conditioning rules.
+Supports Diffusion V3, V4, V4.5 and V5, including V5 Full Medium and Max Enhance. Model descriptors
+provide defaults, supported operations, parameter constraints and pricing rules; V5 Full is the
+default model.
 
-## Get started
+## Quick start
 
-Add the client and an async runtime:
+Add the SDK and an async runtime:
 
 ```toml
 [dependencies]
-novelai-bridge = "0.6.0"
+novelai-bridge = "0.7.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-Set `NOVELAI_API_KEY` to your NovelAI persistent API token, then generate and save an image:
+Set `NOVELAI_API_KEY` to your NovelAI persistent API token. This example sends a generation request
+and saves every returned image:
 
 ```rust,no_run
 use std::sync::Arc;
@@ -45,13 +44,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Configure credentials and timeout through `ReqwestOptions`. Use `ClientConfig`
-to change the service URL and response limits, or supply your own `Transport` implementation. Cloned clients share
-the transport and cached subscription state.
+`ReqwestOptions` configures credentials and timeout. `ClientConfig` configures service routing,
+response budgets and image request encoding. Cloned clients share the transport, subscription
+snapshot and image-cache state.
 
-## Stream images
+## Capabilities
 
-Add `futures-util` to consume the stream. With the same client as above:
+| Area | Entry points and behavior |
+| --- | --- |
+| Generation | `GenerateImageRequest::builder` for text-to-image, image-to-image, inpainting and Max Enhance; character prompts, image references and transparent output where supported. |
+| Streaming | `Client::generate_stream` for SSE or length-prefixed MessagePack previews and final images. |
+| Image tools | `Client::run_director_tool` for Director operations, including dialogue-preserving declutter; `Client::upscale` for standalone upscaling. Both return every output image. |
+| Vibe Transfer | Raw image references for V3, encoded references for V4/V4.5, and `Client::encode_vibe` with optional masks, cropping and explicit seeds. |
+| Tag suggestions | `Client::suggest_tags` for English and Japanese queries, preserving provider order and language-specific ranking fields. |
+| Local files | `VibeDocument` reads and writes official vibe files, bundles and PNG embeddings with bounded parsing and identity validation. |
+| Metadata | `parse_image_metadata_from_bytes` reads PNG, JPEG and WebP metadata; `write_png_text_chunks` updates PNG text without re-encoding pixels. |
+| Tokens and costs | Local CLIP, T5 and Qwen tokenization, Anlas estimates, subscription snapshots and runtime credit observation. |
+
+Operation availability depends on the selected model. See [model descriptors](docs/model-descriptors.md)
+for model-specific behavior and the [API reference](https://docs.rs/novelai-bridge) for request types.
+
+## Validate and prepare locally
+
+Requests default to `ValidationPolicy::Normalize`: supported adjustments produce diagnostics,
+while invalid request shapes fail. Use `.policy(ValidationPolicy::Reject)` to reject settings
+that would require adjustment. Unknown serialized request fields are rejected under either policy.
+
+The generation path separates three steps:
+
+1. `request.normalize()` resolves the effective model, parameters, conditioning text and geometry.
+2. `plan.prepare()` processes image inputs and resolves an automatic seed without network access.
+3. `client.generate_prepared(prepared).await` sends that fixed preparation.
+
+Use `plan.diagnostics()` to explain adjustments and `plan.geometry()` to inspect input, expected
+output and pricing dimensions. `prepared.encode(GenerationDelivery::Images)` exposes the wire JSON
+without sending it. `client.generate(request)` performs the preparation steps for you.
+
+Image operations take validated `EncodedImage` inputs. Inpainting starts with
+`InpaintingInput::new(image, mask)` for pure infill; V4 and later can add source conditioning through
+`input.img2img = Some(InpaintImageToImage::new(strength, noise))`. Max Enhance uses the builder's
+`.max_enhance(input)` method and retains separate output and pricing geometry.
+
+Returned `GeneratedImage` values expose bytes, format, metadata and source identity, including ZIP
+entry names or JSON response positions. `GenerateImageResult::resolved_seed` is the request seed;
+`image.seed()` reports an embedded sample seed when present.
+
+## Consume a stream
+
+Add `futures-util` to your dependencies. With the client from the quick start:
 
 ```rust,no_run
 use futures_util::StreamExt;
@@ -77,149 +117,53 @@ while let Some(item) = stream.next().await {
 }
 ```
 
-Each `Final` contains a complete, validated image. A multi-image request continues until every
-expected sample has a final image and the stream reaches EOF. Empty or incomplete streams and
-provider errors return `BridgeError::Stream`; a preview alone never establishes success.
+Each final event contains a validated image. Successful completion requires a final image for every
+expected sample and EOF; previews alone, missing finals and provider errors cannot establish success.
+Consume the stream to completion to detect terminal failures. `chunk.raw` retains the original SSE
+or MessagePack source; select `StreamMode::MessagePack` for the binary protocol.
 
-Unknown extensions remain available as `ImageStreamEvent::Unknown`. Every chunk retains its
-original source in `chunk.raw`: `StreamEventSource::Sse` retains the name, ID, retry and data;
-`MessagePack` retains the binary payload. Select `StreamMode::MessagePack` for the length-prefixed
-binary protocol. Previews contain decoded bytes and generation IDs are optional in either protocol.
-Call `stream.cancel().await` to stop
-consumption and finish any pending observer notification; dropping a stream cannot run that
-asynchronous notification.
+Call `stream.cancel().await` to stop consumption and finish any pending observer notification.
+Dropping the stream cannot deliver an asynchronous notification.
 
-## Build and prepare requests
+## Cargo features
 
-The builder exposes prompts, sampling, image size, references and output options. Image-based
-operations use validated `EncodedImage` inputs:
+Request planning, media processing, metadata, the client, streaming and credit observation are part
+of the core. Three features select adapters and tokenizer support:
 
-| Operation      | Entry point                                                       |
-| -------------- | ----------------------------------------------------------------- |
-| Text-to-image  | `GenerateImageRequest::builder(...)`                              |
-| Image-to-image | `.image_to_image(ImageToImageInput::new(...))`                    |
-| Inpainting     | `.inpainting(InpaintingInput::new(image, mask))`                  |
-| Director Tools | `Client::run_director_tool` with `RunDirectorToolRequest`         |
-| Vibe encoding  | `Client::encode_vibe` with `EncodeVibeRequest`                    |
-| Upscale        | `Client::upscale` with `UpscaleImageRequest::new(image)`          |
-| Tag suggestions | `Client::suggest_tags` with `SuggestTagsRequest::new(prefix, model)` |
+| Feature | Provides | Default |
+| --- | --- | --- |
+| `reqwest-transport` | Authenticated reqwest HTTP transport | Yes |
+| `tokenizer` | Local CLIP, T5 and Qwen encoders with caller-supplied assets | Yes |
+| `bundled-assets` | Pinned embedded tokenizer assets; enables `tokenizer` | No |
 
-Requests default to `ValidationPolicy::Normalize`, which adjusts unsupported or out-of-range
-settings and records diagnostics. Select `.policy(ValidationPolicy::Reject)` to reject those
-settings instead. Unknown serialized request fields are rejected under both policies.
+For embedded assets, enable `bundled-assets` and load `Tokenizers::bundled()`. Attach tokenizers with
+`Client::with_tokenizers` to check prompt lengths before sending. Loading and encoding never download
+assets; without an attached registry, client-side token checks are skipped.
 
-Inpainting defaults to pure infill. Set `input.img2img` to
-`Some(InpaintImageToImage::new(strength, noise))` for additional source-image conditioning on
-V4 and later. That group owns its color correction and optional noise seed; V3 supports pure
-infill only.
-
-For V5 Max Enhance, use `.max_enhance(ImageToImageInput::new(image, strength, noise))`.
-The source dimensions seed the request canvas, then normalization applies the model's grid.
-`NormalizedGeneration::geometry()` exposes the effective input, expected output and pricing target separately.
-
-Vibe inputs follow the selected model: use `VibeReference::image(image, information_extracted,
-strength)` for V3, or `VibeReference::encoded(encoding, strength)` for V4/V4.5. Wrap references
-with `VibeTransferConfig::new(references)`. Its `normalize_strength` switch defaults to true and
-normalizes multiple encoded-reference strengths when their absolute sum exceeds one. Signed
-strengths are preserved; V3 uses its own 448-pixel image preparation without this normalization.
-
-`EncodeVibeRequest::new(image, model)` accepts an optional mask, `crop_to_mask`, `focus_seed` and
-`info_extract_seed`. Omitted seeds retain the provider's content-based behavior; explicit zero
-and negative seeds are sent unchanged. Cropping requires a mask. Character references expose
-`information_extracted` independently of strength and fidelity.
-
-For transparent generation, `.alpha_mode(AlphaMode::Straight)` is the default. Select
-`AlphaMode::Premultiplied` to request premultiplied output. Alpha options are only sent when
-transparent output is enabled on a supported model.
-
-For inspection or reuse, call `request.normalize()` to get the effective plan and its diagnostics,
-then `plan.prepare()` to transform images and resolve an automatic seed. Send that preparation
-with `client.generate_prepared(...)`, or inspect its JSON with
-`prepared.encode(GenerationDelivery::Images)`. Preparing and encoding do not contact NovelAI.
-
-Director calls return `RunDirectorToolResult` with every returned image. Returned `GeneratedImage`
-values expose validated bytes, format, source identity, metadata and any embedded image seed. `GenerateImageResult::resolved_seed` is the request seed; it is separate from per-image seeds.
-
-Use `.response_format(ImageResponseFormat::Json)` to request the JSON image envelope instead of ZIP.
-`GeneratedImageSource::Json` retains the response array position and optional provider index/seed;
-`image.seed()` continues to report only an embedded seed. All response formats share image-count and
-byte budgets. Content-Type is checked before selecting a decoder.
-
-Director preparation resizes the source to the official tool's processing canvas. Inspect
-`PreparedDirector::source_size()` and `image_size()` for the original and effective dimensions.
-`DirectorCommand::DeclutterKeepBubbles` preserves dialogue bubbles during cleanup.
-
-Standalone upscaling sends the original image and a typed blur declaration, with V5 Curated and
-zero blur as defaults. It returns all images through `UpscaleImageResult::images`. Tag queries
-support English and Japanese and return suggestions in provider order without generating images.
-`SuggestTagsResult` retains English tag/count/confidence records or Japanese/English translation
-pairs and their `power` ranking as separate variants.
-
-## Local files and metadata
-
-`VibeDocument::from_json` and `to_json` read and write official `.naiv4vibe` and
-`.naiv4vibebundle` files without network access. They preserve original payload strings and
-ordered model/parameter encoding caches, validate the file's SHA-256 identity and apply explicit
-`VibeDocumentLimits`. `VibeFile::encoding(model_key, parameter_key)` selects an existing encoding;
-missing data returns `None` and never starts a paid encoding operation.
-
-Use `VibeDocument::from_png` or `embed_in_png` for official `naidata` embedding. Generic
-`write_png_text_chunks` replaces selected text without changing pixel data or unrelated chunks.
-These operations validate the complete PNG and enforce text and output byte budgets.
-
-`parse_image_metadata_from_bytes` reads PNG, JPEG and WebP into `ImageMetadata`. It selects one
-carrier in order: PNG text, EXIF UserComment, then supported 8-bit alpha `stealth_pngcomp` metadata.
-`MetadataOrigin` identifies the selected carrier; generation fields are never mixed across carriers.
-Malformed metadata produces warnings while malformed image data is rejected. PNG-specific entry
-points remain available. `ImageMetadata` and `MetadataWarning` replace the former PNG-only names.
-
-## Tokenization and cost estimates
-
-Tokenization runs locally. Enable `bundled-assets` and load `Tokenizers::bundled()`, or provide
-CLIP, T5 or Qwen assets yourself. Attach the registry with `Client::with_tokenizers` to check prompt
-lengths before sending. Without a registry, local token checks are skipped. Loading and encoding
-never download assets. See [tokenization](docs/image-tokenizers.md) for supported formats and limits.
-
-`Client::get_subscription()` refreshes the subscription snapshot used by client cost estimates.
-It includes V5 regular and purchased allowance; `raw_response` retains the full account response,
-including extensions. Treat that JSON as private account data. For offline estimates, use
-`estimate_anlas_cost` with an explicit `AnlasPricingContext`. Estimates are local calculations;
-see [Anlas pricing](docs/anlas-pricing.md) for the formula and allowance rules.
-
-The optional `CreditObserver` receives request estimates, terminal outcomes and sampled
-subscriptions. Applications own persistence and logging; the library emits `tracing` events
-without installing a subscriber.
-
-## Choose Cargo features
-
-The core always includes request planning, media processing, metadata parsing, the client,
-streaming and optional runtime credit observation. Cargo features select external adapters and
-local tokenizer dependencies:
-
-| Feature | Provides |
-| --- | --- |
-| No features | Complete core with an injected `Transport` |
-| `reqwest-transport` | Authenticated reqwest HTTP byte transport |
-| `tokenizer` | Local CLIP, T5 and Qwen encoders |
-| `bundled-assets` | Pinned tokenizer assets; enables `tokenizer` |
-
-Defaults enable `reqwest-transport` and `tokenizer`. Embedded assets remain opt-in. For a custom
-transport without local tokenization, use:
+For a custom transport without tokenization:
 
 ```toml
-novelai-bridge = { version = "0.6.0", default-features = false }
+novelai-bridge = { version = "0.7.0", default-features = false }
 ```
 
-Response byte limits belong to `ClientConfig` and apply to custom transports as well as reqwest.
-A transport returns response headers and a raw byte stream; the core handles bounded buffering,
-HTTP errors, SSE and MessagePack decoding.
+Implement `Transport::execute` to return status, headers and a raw byte stream.
+`TransportResponse::from_bytes` adapts a complete body. The core applies response budgets, HTTP
+error handling and protocol decoding to every transport.
 
-Set `ClientConfig::image_request_encoding` to `ImageRequestEncoding::Multipart` to move supported
-media fields into binary form parts. The JSON `request` part preserves the prepared request.
-`ClientConfig::image_cache = Some(ImageCacheConfig::default())` enables bounded server-cache key
-registration for generation, shared by client clones. Local state stores keys rather than images.
-Only an explicit `400 INVALID_CACHE_KEYS` rejection can trigger one recovery attempt using the
-current request's retained media. Other errors and ambiguous transport failures are returned directly. `TransportResponse::from_bytes` adapts a complete response body.
+## Integration options
+
+- Choose JSON image responses with `.response_format(ImageResponseFormat::Json)`. ZIP and JSON
+  responses share image-count and byte limits.
+- Set `ClientConfig::image_request_encoding` to `ImageRequestEncoding::Multipart` for binary media
+  parts. Enable `ClientConfig::image_cache` for bounded server-cache registration shared by client
+  clones. An explicit invalid-cache-key rejection permits one recovery attempt with retained media;
+  ambiguous transport failures are returned directly.
+- Use `Client::get_subscription()` to refresh the account snapshot used for estimates, or
+  `estimate_anlas_cost` with an explicit `AnlasPricingContext` for offline calculations.
+  Estimates and sampled balances do not establish the actual charge for an individual request.
+- Attach a `CreditObserver` with `Client::with_credit_observer` for estimates and terminal outcomes.
+  Applications own persistence and logging; the library emits `tracing` events without installing
+  a subscriber. Treat subscription `raw_response` as private account data.
 
 ## Documentation
 
@@ -228,7 +172,7 @@ current request's retained media. Other errors and ambiguous transport failures 
 - [Tokenization and asset loading](docs/image-tokenizers.md)
 - [Anlas pricing and subscription allowances](docs/anlas-pricing.md)
 - [Development and verification](docs/development.md)
-- [Release notes and migration](CHANGELOG.md)
+- [0.7.0 release notes and migration](CHANGELOG.md#070---2026-10-21)
 
 This project is not affiliated with NovelAI. Licensed under [Apache-2.0](LICENSE).
 See [credits](CREDITS.md) for third-party sources and acknowledgements.
