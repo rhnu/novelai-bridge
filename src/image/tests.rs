@@ -192,7 +192,7 @@ impl ImagePreprocessor for PixelCopyPreprocessor {
 fn custom_preprocessor_reuses_pixels_and_must_match_the_resolved_canvas() {
     let image = image(3, 2);
     let prepared = super::prepare_image(
-        &PixelCopyPreprocessor,
+        Some(&PixelCopyPreprocessor),
         crate::RequestField::Image,
         &image,
         ImagePreparation::Source(image.size()),
@@ -204,7 +204,7 @@ fn custom_preprocessor_reuses_pixels_and_must_match_the_resolved_canvas() {
         height: 8,
     };
     assert!(
-        matches!(super::prepare_image(&PixelCopyPreprocessor, crate::RequestField::Image, &image, ImagePreparation::Mask(expected)), Err(BridgeError::Preparation(crate::PreparationError::ImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size())
+        matches!(super::prepare_image(Some(&PixelCopyPreprocessor), crate::RequestField::Image, &image, ImagePreparation::Mask(expected)), Err(BridgeError::Preparation(crate::PreparationError::ImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size())
     );
 }
 
@@ -213,7 +213,7 @@ fn preprocessing_rejects_zero_canvas_before_calling_the_adapter() {
     let preprocessor = CountingPreprocessor::default();
     assert!(
         super::prepare_image(
-            &preprocessor,
+            Some(&preprocessor),
             crate::RequestField::Image,
             &image(2, 2),
             ImagePreparation::Source(ImageSize {
@@ -224,6 +224,110 @@ fn preprocessing_rejects_zero_canvas_before_calling_the_adapter() {
         .is_err()
     );
     assert!(preprocessor.operations.lock().unwrap().is_empty());
+}
+
+#[test]
+fn builtin_entry_points_preserve_canvas_validation_and_prepared_pixels() {
+    let source = image(2, 2);
+    let field = crate::RequestField::Image;
+    let target = ImageSize {
+        width: 4,
+        height: 3,
+    };
+    let operation = ImagePreparation::Source(target);
+    let direct = DefaultImagePreprocessor
+        .prepare(field, &source, operation)
+        .unwrap();
+    let internal = super::prepare_image(None, field, &source, operation).unwrap();
+    assert_eq!(direct, internal);
+    assert_eq!(direct.size(), target);
+    assert_eq!(
+        EncodedImage::from_bytes(direct.as_bytes()).unwrap().size(),
+        target
+    );
+
+    for size in [
+        ImageSize {
+            width: 0,
+            height: 2,
+        },
+        ImageSize {
+            width: 2,
+            height: 0,
+        },
+    ] {
+        for error in [
+            DefaultImagePreprocessor
+                .prepare(field, &source, ImagePreparation::Mask(size))
+                .unwrap_err(),
+            super::prepare_image(None, field, &source, ImagePreparation::Mask(size)).unwrap_err(),
+        ] {
+            assert!(matches!(
+                error,
+                BridgeError::InvalidRequest(crate::InvalidRequest::ZeroImageDimension {
+                    field: crate::RequestField::Image,
+                })
+            ));
+        }
+    }
+}
+
+#[test]
+fn every_preparation_entry_point_rejects_an_oversized_target() {
+    let source = image(2, 2);
+    let field = crate::RequestField::Image;
+    let adapter = CountingPreprocessor::default();
+    let operation = ImagePreparation::Source(ImageSize {
+        width: crate::ImageDecodePolicy::default().max_width + 1,
+        height: 1,
+    });
+    for error in [
+        DefaultImagePreprocessor
+            .prepare(field, &source, operation)
+            .unwrap_err(),
+        super::prepare_image(None, field, &source, operation).unwrap_err(),
+        super::prepare_image(Some(&adapter), field, &source, operation).unwrap_err(),
+    ] {
+        assert!(contains_limit(&error, crate::ImageLimit::Width));
+    }
+    assert!(adapter.operations.lock().unwrap().is_empty());
+}
+
+#[test]
+fn custom_preprocessor_output_must_meet_default_budgets_after_invocation() {
+    struct FixedPreprocessor(PreparedImage, Mutex<bool>);
+
+    impl ImagePreprocessor for FixedPreprocessor {
+        fn prepare(
+            &self,
+            _field: crate::RequestField,
+            _image: &EncodedImage,
+            _operation: ImagePreparation,
+        ) -> Result<PreparedImage, BridgeError> {
+            *self.1.lock().unwrap() = true;
+            Ok(self.0.clone())
+        }
+    }
+
+    let relaxed = crate::ImageDecodePolicy {
+        max_text_chunk_bytes: crate::ImageDecodePolicy::default().max_text_chunk_bytes + 1,
+        ..Default::default()
+    };
+    let png = create_png_with_comment_text(&"a".repeat(relaxed.max_text_chunk_bytes));
+    let adapter = FixedPreprocessor(
+        PreparedImage::from_png_with_policy(png, relaxed).unwrap(),
+        Mutex::new(false),
+    );
+    let source = image(2, 2);
+    let error = super::prepare_image(
+        Some(&adapter),
+        crate::RequestField::Image,
+        &source,
+        ImagePreparation::Source(source.size()),
+    )
+    .unwrap_err();
+    assert!(*adapter.1.lock().unwrap());
+    assert!(contains_limit(&error, crate::ImageLimit::TextChunkBytes));
 }
 
 #[test]
@@ -409,14 +513,20 @@ fn preparation_checks_default_budgets_before_invoking_a_custom_adapter() {
     let source =
         EncodedImage::from_bytes_with_policy(create_png_bytes(17_000, 1), relaxed).unwrap();
     let adapter = CountingPreprocessor::default();
-    let error = super::prepare_image(
-        &adapter,
-        crate::RequestField::Image,
-        &source,
-        ImagePreparation::Source(source.size()),
-    )
-    .unwrap_err();
-    assert!(contains_limit(&error, ImageLimit::Width));
+    let field = crate::RequestField::Image;
+    let operation = ImagePreparation::Source(ImageSize {
+        width: 2,
+        height: 2,
+    });
+    for error in [
+        DefaultImagePreprocessor
+            .prepare(field, &source, operation)
+            .unwrap_err(),
+        super::prepare_image(None, field, &source, operation).unwrap_err(),
+        super::prepare_image(Some(&adapter), field, &source, operation).unwrap_err(),
+    ] {
+        assert!(contains_limit(&error, ImageLimit::Width));
+    }
     assert!(adapter.operations.lock().unwrap().is_empty());
 }
 

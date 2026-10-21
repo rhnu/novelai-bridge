@@ -61,6 +61,17 @@ fn t5_uses_viterbi_unknown_runs_user_symbols_and_normalizer_flags() {
 }
 
 #[test]
+fn multibyte_pieces_remain_reachable_across_unknown_runs() {
+    let mut bytes = t5_asset();
+    bytes.extend(piece("é", -1.0, 1));
+    let tokenizer = T5Tokenizer::from_sentencepiece_model(&bytes).unwrap();
+    assert_eq!(
+        tokenizer.encode("é界🙂é", FramingPolicy::ContentOnly),
+        [2, 8, 0, 8]
+    );
+}
+
+#[test]
 fn t5_rejects_corrupt_maps_empty_pieces_nonfinite_scores_and_wrong_models() {
     for suffix in [
         field(3, &field(2, &[0, 0, 0, 0])),

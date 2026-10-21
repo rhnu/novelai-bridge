@@ -113,7 +113,8 @@ impl T5Tokenizer {
     )]
     fn viterbi(&self, text: &str) -> Vec<TokenId> {
         let bytes = text.len();
-        // best[i] = (score of best path ending at byte i, start byte, piece id)
+        // Only character boundaries are populated:
+        // best[i] = (score of best path ending at byte i, start byte, piece id).
         let mut best: Vec<Option<(f32, usize, TokenId)>> = vec![None; bytes + 1];
         best[0] = Some((0.0, 0, 0));
 
@@ -121,9 +122,6 @@ impl T5Tokenizer {
             let Some((base_score, ..)) = best[start] else {
                 continue;
             };
-            if !text.is_char_boundary(start) {
-                continue;
-            }
 
             let limit = (start + self.max_piece_len).min(bytes);
             let mut has_single = false;
@@ -152,8 +150,8 @@ impl T5Tokenizer {
                 }
             }
 
-            // No piece covers this position: fall back to the unknown piece for one character, so
-            // segmentation always reaches the end instead of failing.
+            // Without a single-character piece, add an unknown edge so every character boundary
+            // remains reachable even when a longer known piece also starts here.
             if !has_single {
                 let score = base_score + self.unknown_score;
                 if best[next].is_none_or(|(existing, ..)| existing < score) {
@@ -165,11 +163,8 @@ impl T5Tokenizer {
         let mut ids = Vec::new();
         let mut cursor = bytes;
         while cursor > 0 {
-            let Some((_, start, id)) = best[cursor] else {
-                // Unreachable for well-formed input; degrade to an unknown token rather than loop.
-                ids.push(self.unk_id);
-                break;
-            };
+            let (_, start, id) = best[cursor]
+                .expect("each character boundary is reachable through a known or unknown piece");
             ids.push(id);
             cursor = start;
         }

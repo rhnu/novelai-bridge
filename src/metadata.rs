@@ -12,10 +12,7 @@ pub use types::{
     VibeMetadataEntry, VibeMetadataSource,
 };
 
-use crate::{
-    BridgeError, RequestField,
-    media_policy::{ImageDecodePolicy, check_base64_budget},
-};
+use crate::{BridgeError, RequestField, media_policy::ImageDecodePolicy};
 const KEY_SOURCE: &str = "Source";
 const KEY_SOFTWARE: &str = "Software";
 
@@ -26,13 +23,11 @@ const KEY_SOFTWARE: &str = "Software";
 /// Returns [`BridgeError`] when the payload is empty, invalid base64/data URL input, or not a
 /// valid PNG payload.
 pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, BridgeError> {
-    check_base64_budget(image, ImageDecodePolicy::default()).map_err(|source| {
-        crate::MetadataError::InvalidPngPayload {
-            field: RequestField::MetadataImage,
-            source: Box::new(source),
-        }
-    })?;
-    let decoded = crate::payload::decode_image(RequestField::MetadataImage, image)?;
+    let decoded = crate::payload::decode_image(
+        RequestField::MetadataImage,
+        image,
+        ImageDecodePolicy::default(),
+    )?;
     parse_png_metadata_from_bytes(decoded.as_slice())
 }
 

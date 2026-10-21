@@ -201,12 +201,7 @@ fn generation_summary(
     GenerationSummary {
         pricing,
         sampler: params.sampling.sampler,
-        character_count: count(
-            params
-                .characters
-                .as_ref()
-                .map_or(0, crate::CharacterSet::enabled_count),
-        ),
+        character_count: count(prompts.characters.len()),
         prompt_len_chars: count(prompts.prompt.chars().count()),
         negative_prompt_len_chars: count(prompts.negative_prompt.chars().count()),
     }

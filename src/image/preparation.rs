@@ -119,9 +119,6 @@ impl PreparedImage {
             text_chunk_bytes: 0,
             total_text_bytes: 0,
         };
-        usage
-            .validate(policy)
-            .map_err(|source| invalid_policy(field, source))?;
         Ok(Self { bytes, size, usage })
     }
 
@@ -164,44 +161,23 @@ impl ImagePreprocessor for DefaultImagePreprocessor {
         image: &EncodedImage,
         operation: ImagePreparation,
     ) -> Result<PreparedImage, BridgeError> {
-        let size = operation.target_size();
-        validate_size(field, size)?;
-        image.validate_policy(field, ImageDecodePolicy::default())?;
-        let filter = match operation {
-            ImagePreparation::Mask(_) => FilterType::Nearest,
-            ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => {
-                FilterType::CatmullRom
-            },
-        };
-        let bytes = super::fit::fit_decoded(field, image.pixels(), size, filter)?;
-        let usage = ImageResourceUsage {
-            encoded_bytes: bytes.len() as u64,
-            width: size.width,
-            height: size.height,
-            decoded_bytes: u64::from(size.width) * u64::from(size.height) * 4,
-            text_chunk_bytes: 0,
-            total_text_bytes: 0,
-        };
-        usage
-            .validate(ImageDecodePolicy::default())
-            .map_err(|source| invalid_policy(field, source))?;
-        Ok(PreparedImage { bytes, size, usage })
+        validate_inputs(field, image, operation)?;
+        prepare_builtin(field, image, operation)
     }
 }
 
 #[cfg(any(feature = "generation", test))]
 pub fn prepare_image(
-    preprocessor: &dyn ImagePreprocessor,
+    preprocessor: Option<&dyn ImagePreprocessor>,
     field: RequestField,
     image: &EncodedImage,
     operation: ImagePreparation,
 ) -> Result<PreparedImage, BridgeError> {
+    validate_inputs(field, image, operation)?;
+    let Some(preprocessor) = preprocessor else {
+        return prepare_builtin(field, image, operation);
+    };
     let expected = operation.target_size();
-    validate_size(field, expected)?;
-    ImageDecodePolicy::default()
-        .check_dimensions(expected.width, expected.height)
-        .map_err(|source| invalid_policy(field, source))?;
-    image.validate_policy(field, ImageDecodePolicy::default())?;
     let prepared = preprocessor.prepare(field, image, operation)?;
     if prepared.size() != expected {
         return Err(crate::PreparationError::ImageSizeMismatch {
@@ -216,6 +192,44 @@ pub fn prepare_image(
         .validate(ImageDecodePolicy::default())
         .map_err(|source| invalid_policy(field, source))?;
     Ok(prepared)
+}
+
+fn validate_inputs(
+    field: RequestField,
+    image: &EncodedImage,
+    operation: ImagePreparation,
+) -> Result<(), BridgeError> {
+    let size = operation.target_size();
+    validate_size(field, size)?;
+    ImageDecodePolicy::default()
+        .check_dimensions(size.width, size.height)
+        .map_err(|source| invalid_policy(field, source))?;
+    image.validate_policy(field, ImageDecodePolicy::default())
+}
+
+/// Executes the built-in transformation after the shared input boundary has validated it.
+fn prepare_builtin(
+    field: RequestField,
+    image: &EncodedImage,
+    operation: ImagePreparation,
+) -> Result<PreparedImage, BridgeError> {
+    let size = operation.target_size();
+    let filter = match operation {
+        ImagePreparation::Mask(_) => FilterType::Nearest,
+        ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => {
+            FilterType::CatmullRom
+        },
+    };
+    let bytes = super::fit::fit_decoded(field, image.pixels(), size, filter)?;
+    let usage = ImageResourceUsage {
+        encoded_bytes: bytes.len() as u64,
+        width: size.width,
+        height: size.height,
+        decoded_bytes: u64::from(size.width) * u64::from(size.height) * 4,
+        text_chunk_bytes: 0,
+        total_text_bytes: 0,
+    };
+    Ok(PreparedImage { bytes, size, usage })
 }
 
 fn validate_size(field: RequestField, size: ImageSize) -> Result<(), BridgeError> {

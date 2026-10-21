@@ -14,7 +14,7 @@ use crate::{
 pub(in crate::generation) fn build_generate_request(
     normalized: &NormalizedGeneration,
     resolved_seed: i64,
-    preprocessor: &dyn ImagePreprocessor,
+    preprocessor: Option<&dyn ImagePreprocessor>,
 ) -> Result<ImageGenerationRequestBody, BridgeError> {
     let params = normalized.request();
     let descriptor = params.descriptor();
@@ -122,7 +122,7 @@ fn conditioning(
 fn prepare_operation(
     normalized: &NormalizedGeneration,
     resolved_seed: i64,
-    preprocessor: &dyn ImagePreprocessor,
+    preprocessor: Option<&dyn ImagePreprocessor>,
 ) -> Result<OperationParameters, BridgeError> {
     let request = normalized.request();
     let prepare_image = |field, image, operation| {

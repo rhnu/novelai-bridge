@@ -65,14 +65,8 @@ impl EncodedImage {
         value: &str,
         policy: ImageDecodePolicy,
     ) -> Result<Self, BridgeError> {
-        crate::media_policy::check_base64_budget(value, policy).map_err(|source| {
-            InvalidRequest::UndecodableImage {
-                field: RequestField::Image,
-                source: Box::new(source),
-            }
-        })?;
         Self::from_bytes_with_policy(
-            crate::payload::decode_image(RequestField::Image, value)?,
+            crate::payload::decode_image(RequestField::Image, value, policy)?,
             policy,
         )
     }

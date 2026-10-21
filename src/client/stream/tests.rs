@@ -180,7 +180,9 @@ impl CreditObserver for DelayedObserver {
     }
 }
 
-async fn cancel_during_settlement(input: ImageStreamResult, expected: RequestOutcome) {
+async fn abandon_next_during_settlement(
+    input: ImageStreamResult,
+) -> (GenerateImageStream, Arc<DelayedObserver>) {
     let observer = Arc::new(DelayedObserver::default());
     let pending = ObservationContext::new(Arc::<DelayedObserver>::clone(&observer))
         .begin(
@@ -205,6 +207,11 @@ async fn cancel_during_settlement(input: ImageStreamResult, expected: RequestOut
         []
     );
     observer.released.store(true, Ordering::Relaxed);
+    (output, observer)
+}
+
+async fn cancel_during_settlement(input: ImageStreamResult, expected: RequestOutcome) {
+    let (output, observer) = abandon_next_during_settlement(input).await;
     output.cancel().await;
     assert_eq!(
         *observer
@@ -212,6 +219,25 @@ async fn cancel_during_settlement(input: ImageStreamResult, expected: RequestOut
             .lock()
             .expect("observer mutex is not poisoned"),
         [expected]
+    );
+}
+
+#[tokio::test]
+async fn resumed_next_delivers_failure_once_after_settlement_was_pending() {
+    let error = DecodeError::new(DecodeTarget::StreamChunk, "invalid stream".into());
+    let (mut output, observer) =
+        abandon_next_during_settlement(Box::pin(stream::iter([Err(error.into())]))).await;
+    assert!(output.next().await.unwrap().is_err());
+    assert!(output.next().await.is_none());
+    output.cancel().await;
+    assert_eq!(
+        *observer
+            .outcomes
+            .lock()
+            .expect("observer mutex is not poisoned"),
+        [RequestOutcome::Failed {
+            failure: crate::RequestFailure::Decode,
+        }]
     );
 }
 

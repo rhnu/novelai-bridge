@@ -31,7 +31,7 @@ pub(super) enum ReferenceParameters {
 
 pub(super) fn prepare_references(
     references: Option<&ReferenceSet>,
-    preprocessor: &dyn ImagePreprocessor,
+    preprocessor: Option<&dyn ImagePreprocessor>,
 ) -> Result<ReferenceParameters, BridgeError> {
     let Some(references) = references else {
         return Ok(ReferenceParameters::None);

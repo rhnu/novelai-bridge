@@ -6,8 +6,8 @@ use super::{
     },
 };
 use crate::{
-    BridgeError, DefaultImagePreprocessor, EncodeError, EncodeTarget, ImagePreprocessor,
-    InvalidRequest, RequestField, StreamMode,
+    BridgeError, EncodeError, EncodeTarget, ImagePreprocessor, InvalidRequest, RequestField,
+    StreamMode,
 };
 
 /// Wire delivery selected after seed and image preparation.
@@ -91,12 +91,19 @@ impl PreparedGeneration {
 }
 
 pub(super) fn prepare(normalized: NormalizedGeneration) -> Result<PreparedGeneration, BridgeError> {
-    prepare_with(normalized, &DefaultImagePreprocessor)
+    prepare_inner(normalized, None)
 }
 
 pub(super) fn prepare_with(
     normalized: NormalizedGeneration,
     preprocessor: &dyn ImagePreprocessor,
+) -> Result<PreparedGeneration, BridgeError> {
+    prepare_inner(normalized, Some(preprocessor))
+}
+
+fn prepare_inner(
+    normalized: NormalizedGeneration,
+    preprocessor: Option<&dyn ImagePreprocessor>,
 ) -> Result<PreparedGeneration, BridgeError> {
     let resolved_seed = super::seed::resolve_seed(normalized.request().core.seed)?;
     let body = build_generate_request(&normalized, resolved_seed, preprocessor)?;

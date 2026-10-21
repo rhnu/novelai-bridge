@@ -16,7 +16,10 @@ type SettlementFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 /// The handle retains terminal delivery when a polling future is cancelled.
 enum Lifecycle {
-    Active(PendingObservation),
+    Active {
+        stream: ImageStreamResult,
+        pending: PendingObservation,
+    },
     Settling {
         future: SettlementFuture,
         terminal: Option<ImageStreamItem>,
@@ -27,7 +30,6 @@ enum Lifecycle {
 /// Parsed image-generation stream and the request seed actually sent.
 pub struct GenerateImageStream {
     pub resolved_seed: i64,
-    stream: Option<ImageStreamResult>,
     lifecycle: Lifecycle,
     samples: BTreeSet<u32>,
     span: tracing::Span,
@@ -42,8 +44,10 @@ impl GenerateImageStream {
     ) -> Self {
         Self {
             resolved_seed,
-            stream: Some(stream),
-            lifecycle: Lifecycle::Active(observation),
+            lifecycle: Lifecycle::Active {
+                stream,
+                pending: observation,
+            },
             samples: BTreeSet::new(),
             span: tracing::Span::current(),
             started: Instant::now(),
@@ -58,13 +62,13 @@ impl GenerateImageStream {
     /// An active stream reports cancellation. An EOF or failure already being settled retains
     /// that outcome. Dropping a stream emits no asynchronous terminal notification.
     pub async fn cancel(mut self) {
-        drop(self.stream.take());
         let lifecycle = std::mem::replace(&mut self.lifecycle, Lifecycle::Settled);
         let span = self.span.clone();
         let elapsed_secs = self.started.elapsed().as_secs_f64();
         async move {
             match lifecycle {
-                Lifecycle::Active(pending) => {
+                Lifecycle::Active { stream, pending } => {
+                    drop(stream);
                     tracing::debug!(outcome = "cancelled", elapsed_secs, "image stream stopped");
                     pending.cancel().await;
                 },
@@ -76,12 +80,7 @@ impl GenerateImageStream {
         .await;
     }
 
-    fn begin_settlement(&mut self, terminal: Option<ImageStreamItem>) {
-        drop(self.stream.take());
-        let Lifecycle::Active(pending) = std::mem::replace(&mut self.lifecycle, Lifecycle::Settled)
-        else {
-            return;
-        };
+    fn begin_settlement(&mut self, pending: PendingObservation, terminal: Option<ImageStreamItem>) {
         let future: SettlementFuture = if let Some(Err(error)) = &terminal {
             tracing::debug!(
                 outcome = "failed",
@@ -112,28 +111,35 @@ impl Stream for GenerateImageStream {
         let span = self.span.clone();
         let _entered = span.enter();
         loop {
-            match &mut self.lifecycle {
-                Lifecycle::Active(_) => {
-                    let Some(input) = &mut self.stream else {
-                        return Poll::Ready(None);
-                    };
-                    match input.as_mut().poll_next(context) {
-                        Poll::Ready(Some(Ok(chunk))) => {
-                            if !chunk.image.is_empty() {
-                                self.samples.insert(chunk.samp_ix);
-                            }
-                            return Poll::Ready(Some(Ok(chunk)));
-                        },
-                        Poll::Ready(terminal) => self.begin_settlement(terminal),
-                        Poll::Pending => return Poll::Pending,
-                    }
+            match std::mem::replace(&mut self.lifecycle, Lifecycle::Settled) {
+                Lifecycle::Active {
+                    mut stream,
+                    pending,
+                } => match stream.as_mut().poll_next(context) {
+                    Poll::Ready(Some(Ok(chunk))) => {
+                        if !chunk.image.is_empty() {
+                            self.samples.insert(chunk.samp_ix);
+                        }
+                        self.lifecycle = Lifecycle::Active { stream, pending };
+                        return Poll::Ready(Some(Ok(chunk)));
+                    },
+                    Poll::Ready(terminal) => {
+                        drop(stream);
+                        self.begin_settlement(pending, terminal);
+                    },
+                    Poll::Pending => {
+                        self.lifecycle = Lifecycle::Active { stream, pending };
+                        return Poll::Pending;
+                    },
                 },
-                Lifecycle::Settling { future, terminal } => {
+                Lifecycle::Settling {
+                    mut future,
+                    terminal,
+                } => {
                     if future.as_mut().poll(context).is_pending() {
+                        self.lifecycle = Lifecycle::Settling { future, terminal };
                         return Poll::Pending;
                     }
-                    let terminal = terminal.take();
-                    self.lifecycle = Lifecycle::Settled;
                     return Poll::Ready(terminal);
                 },
                 Lifecycle::Settled => return Poll::Ready(None),

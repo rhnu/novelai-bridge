@@ -119,6 +119,36 @@ fn finite_values_are_required_in_both_policies() {
 }
 
 #[test]
+fn disabled_characters_do_not_enable_coordinates_under_any_override() {
+    for use_coords in [None, Some(false), Some(true)] {
+        let mut disabled = character(0);
+        disabled.enabled = false;
+        disabled.prompt.clear();
+        disabled.position.x = f32::NAN;
+        let mut input = request();
+        input.characters = Some(CharacterSet {
+            characters: vec![disabled],
+            use_coords,
+        });
+        let plan = input.normalize_with(ValidationPolicy::Reject).unwrap();
+        assert!(!plan.resolved_prompts().use_coords);
+        assert_eq!(plan.resolved_prompts().characters, []);
+    }
+}
+
+#[test]
+fn rejected_character_overflow_reports_only_the_enabled_count() {
+    let mut characters: Vec<_> = (0..8).map(character).collect();
+    characters[0].enabled = false;
+    let mut input = request();
+    input.characters = Some(CharacterSet::new(characters));
+    let error = input.normalize_with(ValidationPolicy::Reject).unwrap_err();
+    assert!(
+        matches!(error, BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { field, value: 7.0, .. }) if field == GenerationField::Characters.into())
+    );
+}
+
+#[test]
 fn empty_vibe_is_always_absent_independent_of_other_reference_groups() {
     for character_present in [false, true] {
         for policy in [ValidationPolicy::Reject, ValidationPolicy::Normalize] {

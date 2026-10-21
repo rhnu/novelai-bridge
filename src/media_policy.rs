@@ -1,30 +1,15 @@
 use thiserror::Error;
 
-pub fn check_base64_budget(value: &str, policy: ImageDecodePolicy) -> Result<(), ImagePolicyError> {
-    let value = value.trim();
-    let encoded = if value.starts_with("data:") {
-        value.split_once(',').map_or(value, |(_, payload)| payload)
-    } else {
-        value
-    };
-    // Match the UTF-8 byte length allocated by the base64 decoder, including invalid input.
-    let count = encoded
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .map(|ch| ch.len_utf8() as u64)
-        .sum::<u64>();
-    let padding = encoded
-        .chars()
-        .rev()
-        .filter(|ch| !ch.is_whitespace())
-        .take_while(|ch| *ch == '=')
-        .count()
-        .min(2) as u64;
-    let decoded = count
+pub fn check_base64_budget(
+    encoded_bytes: usize,
+    padding: usize,
+    policy: ImageDecodePolicy,
+) -> Result<(), ImagePolicyError> {
+    let decoded = (encoded_bytes as u64)
         .saturating_add(3)
         .saturating_div(4)
         .saturating_mul(3)
-        .saturating_sub(padding);
+        .saturating_sub(padding as u64);
     policy.check(ImageLimit::EncodedBytes, decoded)
 }
 

@@ -14,13 +14,10 @@ pub(super) fn fit_decoded(
 ) -> Result<Vec<u8>, BridgeError> {
     let policy = crate::media_policy::ImageDecodePolicy::default();
     policy
-        .check_dimensions(size.width, size.height)
-        .and_then(|()| {
-            policy.check(
-                crate::media_policy::ImageLimit::DecodedBytes,
-                u64::from(size.width) * u64::from(size.height) * 4,
-            )
-        })
+        .check(
+            crate::media_policy::ImageLimit::DecodedBytes,
+            u64::from(size.width) * u64::from(size.height) * 4,
+        )
         .map_err(|source| InvalidRequest::UndecodableImage {
             field,
             source: Box::new(source),
