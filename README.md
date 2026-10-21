@@ -2,9 +2,16 @@
 
 A Rust library for NovelAI image generation, director tools, vibe encoding, model descriptors, local tokenization, PNG metadata and Anlas estimates.
 
-The default model is NovelAI Diffusion V5 Full. V5 Curated, V4.5, V4, V3 and Furry V3 are also supported. This project is experimental and RC APIs may change.
+The default model is NovelAI Diffusion V5 Full. V5 Curated, V4.5, V4, V3 and Furry V3 are also supported. Public API changes before 1.0 are documented in the [changelog](CHANGELOG.md).
 
 ## Quick start
+
+Add the library to your `Cargo.toml`:
+
+```toml
+[dependencies]
+novelai-bridge = "0.5.0"
+```
 
 Set `NOVELAI_API_KEY` before creating the default HTTP transport:
 

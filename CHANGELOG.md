@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-10-21
+
+Stable release of the 0.5 series, including the composable Cargo features, model descriptors,
+local tokenizers and V5 support introduced in the release candidates below. Consumers upgrading
+from 0.4 should apply both the migration notes here and those under 0.5.0-rc.1.
 
 ### Changed
 
