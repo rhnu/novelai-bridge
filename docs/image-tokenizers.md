@@ -9,12 +9,8 @@ prompt weights or multiprompt syntax.
 `Model::descriptor().prompt()` supplies the encoder kind and an independent `token_limit` for
 each conditioning field. Descriptors remain available without the `tokenizer` feature.
 
-| Model family | Encoder | Tokens per field |
-| ------------ | ------- | ---------------: |
-| NAI 3 / Furry 3 | CLIP | 225 |
-| NAI 4 / 4.5 | T5 | 512 |
-| NAI 5 Full | Qwen | 1471 |
-| NAI 5 Curated | Qwen | 703 |
+Inspect the selected profile's `tokenizer` and `token_limit` rather than maintaining a separate
+model-to-encoder or limit table. See [model descriptors](model-descriptors.md).
 
 Inpainting uses the base model's prompt profile. The limit is neither the vocabulary size nor a
 combined budget for positive, negative and character prompts.
@@ -73,13 +69,13 @@ Request counting defaults to `ModelInput`; `count_tokens_with` accepts an explic
 `GenerateImageRequest::normalize()` assembles effective text once. Wire conditioning, token
 counting and observation share `NormalizedGeneration::resolved_prompts()`:
 
-1. Positive prompt: caller text, supported transparency tag, then quality tags.
+1. Positive prompt: supported furry-dataset prefix, caller text, supported transparency tag, then quality tags.
 2. Negative prompt: UC preset followed by caller text.
 3. Characters: supported, enabled characters within the model limit, without quality or UC
    presets. Each keeps its index in the original character list. Disabled fields are not validated.
 
 `GenerateImageRequest::resolve_prompts()` is a fallible convenience wrapper around normalization.
-Raw request and stream-request counting now return `BridgeError`, including normalization errors;
+Raw request and stream-request counting return `BridgeError`, including normalization errors;
 counting a normalized plan returns `TokenizerError`. Reuse the plan for repeated queries to avoid
 cloning input payloads or rebuilding conditioning text. Normalization does not decode images.
 
@@ -89,10 +85,16 @@ legacy prompt/UC fields or V4/V5 captions.
 Request and stream-request `count_tokens` return independent `used` / `limit` values for each
 field. `PromptTokenUsage::over_limit` reports fields where `used > limit`; counts are not summed.
 
-An optional `Client::with_tokenizers(Arc<Tokenizers>)` enables checks after request normalization
-and before image-request construction or transport. Strict requests return
-`InvalidRequest::PromptTokenLimitExceeded`; non-strict requests log a warning without truncation.
-Missing encoders and encoding failures return `BridgeError::Tokenizer` in either mode.
+`PromptField::generation_field()` identifies the same editable location used by normalization.
+Token-limit errors carry `RequestField::Generation`, including the original character index and
+whether the offending text is positive or negative. Display labels use the complete editable path.
+
+An optional `Client::with_tokenizers(Arc<Tokenizers>)` enables checks on normalized conditioning
+before transport. For raw requests the check runs before image preparation; prepared requests use
+the text retained by their normalized plan. `request.policy = ValidationPolicy::Reject` returns
+`InvalidRequest::PromptTokenLimitExceeded` on overflow. `ValidationPolicy::Normalize` emits a
+structured tracing warning without truncating the text. Missing encoders and encoding failures
+return `BridgeError::Tokenizer` under either policy.
 
 Without an injected registry, generation skips token checks. Explicit `Client::count_tokens`
 still reports a missing encoder and never performs network I/O.

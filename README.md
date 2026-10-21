@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`Client` accepts a shared transport, including `Arc<dyn Transport>`. Cloning a client shares the transport and sampled account state; the transport itself does not need to implement `Clone`. HTTP credentials and timeout belong to `ReqwestOptions`, while service routing belongs to `ClientConfig`.
+`Client` accepts a shared transport, including `Arc<dyn Transport>`. Cloning a client shares the transport and sampled account state; the transport itself does not need to implement `Clone`. HTTP credentials, timeout and response budgets belong to `ReqwestOptions`, while service routing belongs to `ClientConfig`. `ApiEndpoint` supplies the same method, headers and route used by the client and offline tools.
 
 ## Cargo features
 
@@ -50,7 +50,7 @@ Tokenizer-only consumers do not compile generation, pixel processing or ZIP. Req
 
 ## Prepare once
 
-Editable input becomes an immutable effective plan. Reject policy rejects invalid input; Normalize policy clamps or removes unsupported fields and records typed diagnostics.
+Editable input becomes an immutable effective plan. All generation, director and vibe inputs use `ValidationPolicy`: `Reject` rejects unsupported or out-of-range values; `Normalize` adjusts them and exposes diagnostics. Field identities remain typed through validation and preparation errors.
 
 ```rust
 use novelai_bridge::{
@@ -72,15 +72,17 @@ println!("{} bytes; seed {}", body.len(), prepared.resolved_seed());
 
 Normalization resolves conditioning text, enabled characters, coordinates and reference decisions once. Preparation transforms cached image pixels and resolves an automatic seed from the system random source. Encoding exposes read-only bytes for offline inspection or custom senders. `GenerationDelivery::Stream(mode)` selects streaming wire encoding and checks model support.
 
-`Client::generate_prepared` and `generate_stream_prepared` reuse this result. Director and vibe requests likewise expose `prepare()` and their prepared values expose `encode()`, without constructing a client.
+`Client::generate_prepared` and `generate_stream_prepared` reuse this result. Director and vibe requests likewise expose `prepare()` and `encode()`. Send inspected values through `run_director_tool_prepared` or `encode_vibe_prepared` without repeating preparation.
 
 ## Images and references
 
 `EncodedImage::from_bytes` and `from_base64` validate image bytes and cache decoded pixels. Custom `ImagePreprocessor` implementations can borrow `EncodedImage::pixels()`; operations carry their target canvas, and preparation rejects an output whose dimensions differ.
 
-`DirectorCommand` binds each operation to its valid parameters. Opaque `VibeEncoding` is distinct from image input. Generation reference support is resolved through the model descriptor for the actual request mode.
+`GenerationInput` distinguishes text-to-image, `ImageToImageInput` and `InpaintingInput`. Inpainting requires a mask and exposes only its valid parameters; choose it with the builder's `inpainting(...)` method. `DirectorCommand` binds each director operation to its valid parameters. Opaque `VibeEncoding` is distinct from image input. Generation reference support is resolved through the model descriptor for the actual request mode.
 
-Generated images accept valid PNG, JPEG or WebP, raw or inside a bounded ZIP. Invalid image candidates reject the response. Metadata failures on an otherwise valid image remain visible through `GeneratedImageMetadata`. Request seeds and embedded per-image seeds are distinct.
+Generated images accept valid PNG, JPEG or WebP, raw or inside a bounded ZIP. Complete PNG structure and pixels must validate; recoverable text interpretation problems remain visible through `GeneratedImageMetadata`. `GeneratedImage` exposes read-only bytes, format and metadata, so its validation cannot become stale. Request seeds and embedded per-image seeds are distinct.
+
+`ImageDecodePolicy` bounds encoded bytes, dimensions, pixels, decoded bytes and text; standalone media helpers have explicit policy variants. Prepared requests recheck default request budgets using cached resource measurements. `ResponseLimits` bounds HTTP bodies and SSE frames before buffering; oversized error bodies retain a marked prefix.
 
 ## Local tokenization
 
@@ -88,7 +90,7 @@ Load caller-provided assets with `Tokenizers::with_clip_merges`, `with_t5_senten
 
 `TokenEncoder` is the encoding capability. `Tokenizers::register(kind, Arc<dyn TokenEncoder>)` accepts an already loaded implementation; built-in encoders implement the same interface. Model descriptors select the encoder kind and field limit.
 
-Attach the registry with `Client::with_tokenizers` to check effective conditioning before sending. Strict requests reject overflow; non-strict requests warn without truncating. Without injection, sending skips local token checks. See [tokenization](docs/image-tokenizers.md).
+Attach the registry with `Client::with_tokenizers` to check effective conditioning before sending. `Reject` requests reject overflow; `Normalize` requests warn without truncating. Without injection, sending skips local token checks. See [tokenization](docs/image-tokenizers.md).
 
 ## Accounts and observation
 
@@ -96,7 +98,9 @@ Attach the registry with `Client::with_tokenizers` to check effective conditioni
 
 The optional `CreditObserver` receives operation-specific summaries, estimates and terminal outcomes, plus sampled subscriptions. The library does not persist these events.
 
-Streaming settles on actual EOF, failure or explicit `GenerateImageStream::cancel().await`. Its successful count represents distinct samples received. Dropping a stream cannot run asynchronous callbacks and does not invent a terminal result.
+Streaming settles on actual EOF, failure or explicit `GenerateImageStream::cancel().await`. Its successful count represents distinct samples received. A cancelled polling future retains any pending terminal callback in the stream handle; explicit cancellation waits for that delivery. Dropping a stream cannot run asynchronous callbacks and does not invent a terminal result.
+
+The library emits structured `tracing` spans and events without installing a subscriber. Request identifiers connect client operations, streams and credit events. Debug summaries omit prompt and image contents; callers receive typed errors with their original causes.
 
 ## Further reading
 

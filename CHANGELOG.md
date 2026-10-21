@@ -1,35 +1,36 @@
 # Changelog
 
-## Unreleased (draft)
+## Unreleased
 
 ### Changed
 
-- Reorganize backend modules around request planning, media processing, encoding, protocol
-  adaptation and client execution, with one owner for each capability and its effective data.
-- Expose prepared generation, director and vibe payloads for offline inspection and custom senders.
-- Separate tokenizer encoders from generation and allow callers to register encoding implementations.
-- Separate account snapshots from optional credit observation and share request settlement logic.
-- Consolidate payload decoding, character geometry and byte-level BPE execution.
-- Replace the standalone strict Clippy alias with the Rusteward formatting and lint workflow.
-- Move pure domain and asset-integrity tests beside their implementations, retaining independent upstream token-ID fixtures.
-- Configure rumdl for structural Markdown checks without line-length enforcement or automatic prose reflow.
+- Model generation input as distinct text-to-image, image-to-image and inpainting variants. Keep resolved model identity, conditioning, pricing and wire preparation on one immutable effective plan.
+- Compose wire requests from required common fields and mode/protocol components; retain reference records until final serialization.
+- Share typed request fields and `ValidationPolicy` across generation, director and vibe preparation. Preserve local preparation failures separately from invalid input.
+- Share complete PNG validation and media resource policies across inputs, metadata, custom preprocessors and responses. Expose generated images through immutable getters and a common format mapping.
+- Complete prepared Director/Vibe client entry points and centralize HTTP method, headers and routing in `ApiEndpoint`.
+- Use structured tracing with stable request context and safe Debug summaries. The library emits events; xtask owns its subscriber and application error context.
 
 ### Fixed
 
-- Make independent image-processing and tokenizer feature boundaries usable without generation-only types.
-- Validate custom image-preprocessor output dimensions and expose cached input pixels to implementations.
-- Reject malformed subscription responses before updating sampled account state.
-- Preserve vibe-reference array indices when an individual metadata value is invalid.
-- Resolve automatic generation seeds from the system random source and preserve failures.
+- Bound actual HTTP body reads, retained error prefixes and raw SSE frames before their buffers grow. Mark truncated API error bodies explicitly.
+- Reject incomplete or corrupt PNG structures instead of accepting them through a less strict pixel-decoding fallback. Bound decoded pixels and text as well as encoded bytes.
+- Retain pending stream terminal callbacks when a polling future is cancelled; explicit cancellation completes the existing settlement exactly once.
+- Correct T5 overlapping user-defined symbol scoring to match SentencePiece 0.2.2. Preserve tokenizer parser and regex error causes, including companion-config identity.
+- Reject non-finite or unrepresentable metadata numbers with field diagnostics and retain source indices when pairing character prompts.
+- Require the exact final base64 marker in image data URLs. Reject body edits on bodyless inspection operations.
+- Remove unreachable canvas-area shrinking, ineffective pricing sample branches and tests that did not exercise their stated behavior.
 
-### Breaking
+### Migration
 
-- Replace client and reqwest construction with explicit shared-transport and adapter configuration.
-- Replace concrete tokenizer dispatch and generation-shaped observation records with capability
-  interfaces and operation-specific data.
-- Remove obsolete constructors and configuration rather than retaining RC compatibility wrappers.
-- Replace ambiguous pricing-mode fields with `PricingMode` and expose typed normalization field paths.
-- Distinguish request encoding errors from response decoding errors and simplify the SSE transport response contract.
+- Replace `Img2ImgRequest` and `.img2img(...)` with `ImageToImageInput` and `.image_to_image(...)`. For masked requests use `InpaintingInput::new(image, mask, strength, noise)` and `.inpainting(...)`; `GenerateImageRequest::operation` stores the selected `GenerationInput`. Inpainting does not accept color correction or an extra noise seed.
+- Replace `strict_mode` and `NormalizationPolicy` with `policy: ValidationPolicy` or `.policy(...)`. Unsupported noise schedules now obey Reject/Normalize consistently. Generation request deserialization rejects unknown fields, including removed request fields.
+- Match `RequestField` in validation errors instead of comparing path strings. Token diagnostics use the same editable locations. Custom `ImagePreprocessor::prepare` now receives `RequestField` by value.
+- Handle `BridgeError::Preparation` for random-source, image-encoding and custom-preprocessor dimension failures. `TokenizerError::EncodingFailed` carries `source` instead of `reason`.
+- Read generated images with `bytes()`, `format()`, `mime_type()` and `metadata()`, or consume `into_bytes()`. Generated-image results no longer deserialize unchecked bytes and metadata; decode media to recreate validated results.
+- Use `PngMetadata::characters` records with `source_index`, `prompt` and `negative_prompt` instead of parallel character arrays. Match the diagnostic fields carried by `PngMetadataWarning::InvalidCommentJson` and numeric warnings.
+- Construct `ApiError` from its status using `new(status, endpoint)` or `from_response_parts`; read `status()` and `kind()`. Custom transports provide `TransportRequest::content_type` and `TransportResponse::body_truncated`; use `ApiEndpoint::request` for built-in operations. Configure adapter budgets with `ReqwestOptions::response_limits`.
+- Match `ImageStreamEventType` or use `as_str()` when inspecting stream event names; unknown names remain available. Use `run_director_tool_prepared` and `encode_vibe_prepared` after inspecting those prepared payloads.
 
 ## 0.5.0-rc.2 - 2026-09-04
 

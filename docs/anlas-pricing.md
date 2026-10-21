@@ -8,6 +8,15 @@ This document describes the generation-cost estimate used by `novelai-bridge` fo
 3, NAI 4, NAI 4.5, and NAI 5 model families. Legacy pricing paths are outside the scope of this
 formula. Director and upscale operations use a separate pricing rule.
 
+The independent `estimate_anlas_cost(AnlasEstimateInput)` function remains available without the
+`generation` feature. Request and client helpers first normalize the editable request using its
+`ValidationPolicy`, then project its effective values into that same formula. A normalized plan's
+pricing helpers reuse the plan directly. The selected `GenerationInput` supplies one operation;
+its source or inpainting strength is projected into the corresponding `PricingMode`.
+
+The independent calculator evaluates pricing fields directly. Request helpers reject non-finite
+values and apply model capabilities and range policy before estimating.
+
 ## Per-image cost
 
 Let:
@@ -80,14 +89,13 @@ $$
 \text{api\_samples} = \operatorname{clamp}(n_{\text{samples}}, 1, 4)
 $$
 
-The resolution-dependent pricing limit is:
+The effective resolution limit is the selected model's sample maximum when `P` is within its
+pricing pixel ceiling, and zero otherwise:
 
 $$
 \text{resolution\_limit}(P) =
 \begin{cases}
-8 & P \le 360{,}448 \\
-6 & P \le 409{,}600 \\
-4 & P \le 3{,}145{,}728 \\
+\text{model\_sample\_maximum} & P \le \text{model\_pixel\_ceiling} \\
 0 & \text{otherwise}
 \end{cases}
 $$
@@ -99,8 +107,10 @@ $$
 = \min(\text{api\_samples}, \text{resolution\_limit}(P))
 $$
 
-Because the current API accepts at most four images, the effective cap is four for supported
-resolutions up to 3,145,728 pixels. A larger canvas produces zero priced samples.
+Current model descriptors cap generation at four images. Requests beyond the pricing pixel
+ceiling produce zero priced samples in the independent calculator; a zero total in that case
+does not mean the request qualifies for free generation. Editable generation requests also apply
+the descriptor's per-axis canvas constraints during normalization.
 
 ## Opus first-image allowance
 
@@ -198,7 +208,11 @@ $$
 = 2 \times \max(\text{vibe\_reference\_count} - 4, 0)
 $$
 
-For unsupported models, both vibe charges are zero.
+Pending encoding calls are priced when the model implements encode-vibe. The active-reference
+overage additionally follows reference availability for the selected operation and the
+character-reference precedence rule. For unsupported models, both vibe charges are zero.
+Normalized generation requests already contain encoded vibe data, so their projected
+`pending_vibe_encodes` is zero.
 
 ## Total estimate
 

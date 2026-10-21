@@ -21,22 +21,34 @@ Request factories read `model.descriptor().defaults()`; basic parameter values d
 
 ## Request availability
 
-`request.mode()` derives TextToImage, ImageToImage or Inpainting from its input. `descriptor.model_id_for(mode)` returns the corresponding supported identifier.
+`GenerateImageRequest::operation` selects one `GenerationInput` variant:
+
+- `TextToImage` has no source image.
+- `ImageToImage(ImageToImageInput)` carries a source image and its color-correction and noise-seed options.
+- `Inpainting(InpaintingInput)` carries a source image and a required mask. It has its own strength range and source-preservation option.
+
+Use the builder's `operation`, `image_to_image` or `inpainting` method to select the operation. Inpainting is selected explicitly and always requires a mask. Image-to-image-only options cannot be set on `InpaintingInput`.
+
+`request.mode()` delegates to the selected input. `descriptor.model_id_for(mode)` queries the supported API identity; normalization resolves it once, exposed as `NormalizedGeneration::model_id()`. Unsupported operations are rejected rather than converted to another operation.
+
+Editable generation requests and operation envelopes reject unknown serialized fields. The operation uses a `mode` tag and an `input` object for image-to-image or inpainting. Unknown keys are rejected rather than ignored. See the [release notes](../CHANGELOG.md) for migration details.
 
 `descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unimplemented input, unsupported mode and conflict with character references.
 
-Character support is resolved first. Unsupported character input cannot suppress valid vibe input. Empty reference subgroups are treated consistently before availability and retained-value validation. Reject policy turns unavailable input into an error; Normalize removes it and records diagnostics.
+Character support is resolved first. Unsupported character input cannot suppress valid vibe input. Empty reference subgroups are treated consistently before availability and retained-value validation. `request.policy` uses the shared `ValidationPolicy`: `Reject` turns unavailable reference input into an error; `Normalize` removes it and records diagnostics. `normalize_with(policy)` overrides the editable request policy for the resulting plan.
 
-V3 retains provider-only legacy vibe metadata knowledge, but its generation input and encode-vibe operation are not implemented. Use `can_encode_vibe()` for encoding capability. V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
+V3 exposes legacy vibe metadata, but this bridge cannot use those vibe references for generation or encode new V3 vibe data. Use `can_encode_vibe()` for encoding capability. V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
 
 ## Effective plans
 
 Normalization assembles effective positive/negative text and enabled character conditioning once. Each resolved character retains its original index and effective coordinate. V4/V4.5 use the five-by-five grid; V5 keeps normalized freeform coordinates. Wire adaptation uses these values without projecting coordinates again.
 
-V5 allows 32 enabled character prompts; V4/V4.5 allow six. Normalize disables enabled overflow while preserving original indices; Reject reports it. Disabled characters do not participate in validation, token counting or wire conditioning.
+The selected prompt profile supplies the enabled-character limit. Normalize disables enabled overflow while preserving original indices; Reject reports it. Disabled characters do not participate in validation, token counting or wire conditioning.
 
-Quality presets, transparency, furry mode and sampling support follow the selected descriptor. Native noise scheduling on V4+ retains its Karras fallback and reports the change.
+Quality presets, transparency, furry mode and sampling support follow the selected descriptor. When a model does not support native noise scheduling, Normalize selects its Karras fallback and records the change; Reject returns an unsupported-feature error.
 
-`NormalizationDiagnostic::field` is a typed `GenerationField`. Its display value is the complete editable request path, including original character indices. Conflict diagnostics identify the retained field with the same type.
+`NormalizationDiagnostic::field` is a typed `GenerationField`. Local request errors and image preprocessing use the common `RequestField`, with generation locations carried by `RequestField::Generation`. Token-limit errors use these same locations. Display values identify the editable request path, including original character indices and image fields such as `operation.input.mask`. Conflict diagnostics identify the retained field with a `GenerationField`.
+
+Preparation resolves automatic seeds and transforms image pixels. Failures to obtain a random seed, encode a prepared image or satisfy its required canvas use `BridgeError::Preparation`. Debug summaries omit prompt text and image payloads.
 
 Persist models and editable requests. Registry descriptors and prepared values are not writable configuration; edit a request and normalize it again to change effective behavior.

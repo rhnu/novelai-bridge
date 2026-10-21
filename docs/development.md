@@ -34,9 +34,11 @@ cargo xtask shape t2i --model nai-diffusion-5-full
 cargo xtask shape stream --seed 123
 ```
 
-`shape` consumes the same prepared payload as the client and does not construct a transport or require credentials. Vibe shape inspection covers the encode-vibe request; generation with that encoding needs its response.
+`shape` consumes the same prepared payload and `ApiEndpoint` request description as the client and does not construct a transport or require credentials. Vibe shape inspection covers the encode-vibe request; generation with that encoding needs its response.
 
-`cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation. Setting can add an object field; missing parent paths and removal targets are errors.
+`cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation. Setting can add an object field; missing parent paths, removal targets and body edits on a bodyless operation are errors. Synthetic image dimensions and pixel storage are checked before allocation.
+
+The tool installs a tracing subscriber on stderr with an `info` default; `RUST_LOG` selects another filter and invalid filters fail at startup. Inspection output deliberately includes prompt text. Client tracing uses content-free summaries and does not log server error bodies, which may echo user data.
 
 `scripts/probe_user_api.py` remains an exploratory tool for raw user-service endpoints, including endpoints outside the typed client's API. It prints redacted response shapes and is not part of library execution or automated verification.
 
@@ -47,3 +49,13 @@ cargo xtask shape stream --seed 123
 `scripts/tokenizer-golden.py` regenerates exact token-ID references using independent upstream Python implementations. Its dependencies are listed in the script. Keep asset provenance, licenses and reference fixtures aligned when changing a pinned revision.
 
 The asset package owns embedded bytes and integrity checks. Runtime parsing and encoder caches belong to the main library.
+
+## Backend boundaries
+
+Editable requests, normalized plans and prepared payloads represent different guarantees. Normalize once to decide model identity, applicable mode fields, conditioning and pricing inputs; wire serialization projects that immutable state. Operation-specific input variants prevent image-to-image options from silently disappearing when a mask is added.
+
+Media budgets are shared below metadata and pixel processing. PNG validation must reach the end of the file; a pixel decoder that stops after the first frame cannot establish complete PNG validity. Structural failures reject media, while supported text that cannot be interpreted produces a diagnostic. Prepared media retains measurements so a custom constructor cannot bypass a stricter request budget or force another pixel decode.
+
+A stream handle owns both consumption and terminal callback delivery. Its settlement future must survive cancellation of a single `next()` future; explicit cancellation completes an existing settlement instead of replacing its outcome. Do not move that future into a temporary polling wrapper or infer success from connection setup.
+
+Domain and tokenizer layers retain error sources and typed field locations. Client operation boundaries own failure logging and span context; the executable owns subscriber configuration. API error bodies remain available on returned errors but stay out of logs because a server can echo submitted content.
