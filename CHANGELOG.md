@@ -2,6 +2,11 @@
 
 ## 0.6.0 - 2026-10-21
 
+### Changed
+
+- Upgrade the workspace's outdated dependencies to their latest stable releases, including SHA-2 0.11 and ZIP 9. Adapt asset hash formatting to SHA-2's new digest output type while preserving the pinned checksums, and propagate ZIP entry-name decoding errors through the existing response error chain.
+- Update the locked ChaCha20 dependency from the withdrawn 0.10.1 release to 0.10.2.
+
 ### Fixed
 
 - Model official `intermediate`, `final` and `error` stream events explicitly. Validate final image bytes and require every expected sample's final image before successful EOF; previews, unknown extensions, duplicate finals and out-of-range sample indices cannot establish success.

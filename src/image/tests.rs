@@ -52,6 +52,35 @@ fn response_decoder_accepts_valid_raw_image_and_rejects_arbitrary_bytes() {
 }
 
 #[test]
+fn zip_response_decodes_unicode_names_and_stored_or_deflated_images() {
+    let first = create_png_bytes(2, 2);
+    let second = create_png_bytes(3, 1);
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    let mut writer = zip::ZipWriter::new(&mut cursor);
+    for (name, compression, bytes) in [
+        (
+            "图像/first.PNG",
+            zip::CompressionMethod::Deflated,
+            first.as_slice(),
+        ),
+        (
+            "second.png",
+            zip::CompressionMethod::Stored,
+            second.as_slice(),
+        ),
+    ] {
+        let options = zip::write::SimpleFileOptions::default().compression_method(compression);
+        writer.start_file(name, options).unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    writer.finish().unwrap();
+    let images = decode_generated_images(cursor.into_inner()).unwrap();
+    assert_eq!(images.len(), 2);
+    assert_eq!(images[0].bytes(), first);
+    assert_eq!(images[1].bytes(), second);
+}
+
+#[test]
 fn one_invalid_image_candidate_rejects_the_whole_archive() {
     let mut cursor = std::io::Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut cursor);

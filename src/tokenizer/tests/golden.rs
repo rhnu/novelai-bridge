@@ -47,8 +47,14 @@ fn read_fixture(name: &str) -> Fixture {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
     use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(bytes))
+    let mut digest = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(digest, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    digest
 }
 
 /// Runs every fixture case against an encoder, asserting exact ID sequences under both policies.

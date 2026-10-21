@@ -1,5 +1,6 @@
 //! Explicit, reproducible asset preparation. Never runs during library builds or encoding.
 use std::{
+    fmt::Write as _,
     io::{Read, Write},
     path::Path,
 };
@@ -45,7 +46,10 @@ pub async fn fetch() -> crate::TaskResult<()> {
             .error_for_status()?
             .bytes()
             .await?;
-        let digest = format!("{:x}", Sha256::digest(&upstream));
+        let mut digest = String::with_capacity(64);
+        for byte in Sha256::digest(&upstream) {
+            write!(digest, "{byte:02x}").expect("writing to a String cannot fail");
+        }
         if digest != asset.sha256 {
             anyhow::bail!("SHA-256 mismatch for {}: {digest}", asset.url);
         }

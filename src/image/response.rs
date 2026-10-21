@@ -56,7 +56,7 @@ fn decode_zip(
     let mut images = Vec::new();
     for index in 0..archive.len() {
         let mut file = archive.by_index(index).map_err(response_error)?;
-        let name = file.name().to_owned();
+        let name = file.name().map_err(response_error)?.into_owned();
         if ImageMediaFormat::from_extension(&name).is_none() {
             continue;
         }

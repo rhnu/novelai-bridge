@@ -1,4 +1,4 @@
-use std::{format, io::Read, vec::Vec};
+use std::{fmt::Write as _, io::Read, string::String, vec::Vec};
 
 use sha2::{Digest, Sha256};
 
@@ -32,10 +32,10 @@ fn embedded_assets_match_pinned_upstream_hashes() {
         } else {
             decoded.as_slice()
         };
-        assert_eq!(
-            format!("{:x}", Sha256::digest(upstream)),
-            record["sha256"].as_str().unwrap(),
-            "{name}"
-        );
+        let mut digest = String::with_capacity(64);
+        for byte in Sha256::digest(upstream) {
+            write!(digest, "{byte:02x}").expect("writing to a String cannot fail");
+        }
+        assert_eq!(digest, record["sha256"].as_str().unwrap(), "{name}");
     }
 }
