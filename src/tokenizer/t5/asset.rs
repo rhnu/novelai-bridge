@@ -29,9 +29,7 @@ impl PieceType {
     }
 
     /// Returns `true` when the piece may be produced by ordinary segmentation.
-    const fn is_segmentable(self) -> bool {
-        matches!(self, Self::Normal | Self::UserDefined)
-    }
+    const fn is_segmentable(self) -> bool { matches!(self, Self::Normal | Self::UserDefined) }
 }
 
 pub(super) fn load(bytes: &[u8]) -> Result<T5Asset, TokenizerError> {
@@ -121,22 +119,22 @@ fn parse_model_proto(bytes: &[u8]) -> Result<(Vec<Piece>, Normalizer, String), T
                             if trainer.varint()? != 1 {
                                 return Err(malformed("T5 requires a Unigram model"));
                             }
-                        }
+                        },
                         (24, 0) => suffix = trainer.varint()? != 0,
                         (35, 0) => {
                             if trainer.varint()? != 0 {
                                 return Err(malformed("T5 byte fallback is unsupported"));
                             }
-                        }
+                        },
                         (47, 2) => {
                             std::str::from_utf8(trainer.length_delimited()?)
                                 .map_err(|source| invalid_data("EOS piece text", source))?
                                 .clone_into(&mut eos_piece);
-                        }
+                        },
                         (_, wire) => trainer.skip(wire)?,
                     }
                 }
-            }
+            },
             (3, 2) => normalizer = Normalizer::parse(reader.length_delimited()?)?,
             (_, wire) => reader.skip(wire)?,
         }
@@ -161,15 +159,15 @@ fn parse_piece(bytes: &[u8]) -> Result<Piece, TokenizerError> {
                         .map_err(|source| invalid_data("piece text", source))?
                         .to_owned(),
                 );
-            }
+            },
             (2, 5) => {
                 let raw = reader.take(4)?;
                 score = f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
-            }
+            },
             (3, 0) => {
                 let raw = reader.varint()?;
                 kind = PieceType::from_wire(raw)?;
-            }
+            },
             (_, wire_type) => reader.skip(wire_type)?,
         }
     }

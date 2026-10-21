@@ -1,4 +1,6 @@
-use super::Client;
+use tracing::Instrument;
+
+use super::{Client, diagnostics::report_failure};
 #[cfg(feature = "tokenizer")]
 use crate::InvalidRequest;
 use crate::{
@@ -17,10 +19,18 @@ impl<T: Transport + ?Sized> Client<T> {
         &self,
         request: GenerateImageRequest,
     ) -> Result<GenerateImageResult, BridgeError> {
-        let normalized = request.normalize()?;
-        #[cfg(feature = "tokenizer")]
-        self.check_prompt_tokens(&normalized)?;
-        self.send_prepared(normalized.prepare()?).await
+        let request_id = self.next_request_id();
+        async {
+            tracing::Span::current().record("model", request.core.model.as_str());
+            let normalized = request.normalize().inspect_err(report_failure)?;
+            #[cfg(feature = "tokenizer")]
+            self.check_prompt_tokens(&normalized)
+                .inspect_err(report_failure)?;
+            let prepared = normalized.prepare().inspect_err(report_failure)?;
+            self.send_prepared(prepared, request_id).await
+        }
+        .instrument(Self::request_span("generate", request_id))
+        .await
     }
 
     /// Sends a prepared request without resolving its seed or preprocessing images again.
@@ -31,20 +41,37 @@ impl<T: Transport + ?Sized> Client<T> {
         &self,
         prepared: PreparedGeneration,
     ) -> Result<GenerateImageResult, BridgeError> {
-        #[cfg(feature = "tokenizer")]
-        self.check_prompt_tokens(prepared.normalized())?;
-        self.send_prepared(prepared).await
+        let request_id = self.next_request_id();
+        async {
+            tracing::Span::current()
+                .record("model", prepared.normalized().request().core.model.as_str());
+            #[cfg(feature = "tokenizer")]
+            self.check_prompt_tokens(prepared.normalized())
+                .inspect_err(report_failure)?;
+            self.send_prepared(prepared, request_id).await
+        }
+        .instrument(Self::request_span("generate", request_id))
+        .await
     }
 
     async fn send_prepared(
         &self,
         prepared: PreparedGeneration,
+        request_id: u64,
     ) -> Result<GenerateImageResult, BridgeError> {
-        let body = prepared.encode(GenerationDelivery::Images)?;
+        let body = prepared
+            .encode(GenerationDelivery::Images)
+            .inspect_err(report_failure)?;
         let resolved_seed = prepared.resolved_seed();
-        let observation = self.observe_generation(prepared.normalized(), false).await;
+        let observation = self
+            .observe_generation(
+                prepared.normalized(),
+                GenerationDelivery::Images,
+                request_id,
+            )
+            .await;
         self.execute_encoded(
-            crate::protocol::Endpoint::GenerateImage,
+            crate::protocol::ApiEndpoint::GenerateImage,
             body,
             observation,
             |payload| {
@@ -74,11 +101,19 @@ impl<T: Transport + ?Sized> Client<T> {
     where
         T: StreamingTransport,
     {
-        let normalized = request.base.normalize()?;
-        #[cfg(feature = "tokenizer")]
-        self.check_prompt_tokens(&normalized)?;
-        self.send_stream_prepared(normalized.prepare()?, request.stream)
-            .await
+        let request_id = self.next_request_id();
+        async {
+            tracing::Span::current().record("model", request.base.core.model.as_str());
+            let normalized = request.base.normalize().inspect_err(report_failure)?;
+            #[cfg(feature = "tokenizer")]
+            self.check_prompt_tokens(&normalized)
+                .inspect_err(report_failure)?;
+            let prepared = normalized.prepare().inspect_err(report_failure)?;
+            self.send_stream_prepared(prepared, request.stream, request_id)
+                .await
+        }
+        .instrument(Self::request_span("generate_stream", request_id))
+        .await
     }
 
     /// Starts a stream without resolving its seed or preprocessing images again.
@@ -94,9 +129,17 @@ impl<T: Transport + ?Sized> Client<T> {
     where
         T: StreamingTransport,
     {
-        #[cfg(feature = "tokenizer")]
-        self.check_prompt_tokens(prepared.normalized())?;
-        self.send_stream_prepared(prepared, mode).await
+        let request_id = self.next_request_id();
+        async {
+            tracing::Span::current()
+                .record("model", prepared.normalized().request().core.model.as_str());
+            #[cfg(feature = "tokenizer")]
+            self.check_prompt_tokens(prepared.normalized())
+                .inspect_err(report_failure)?;
+            self.send_stream_prepared(prepared, mode, request_id).await
+        }
+        .instrument(Self::request_span("generate_stream", request_id))
+        .await
     }
 
     #[cfg(feature = "streaming")]
@@ -104,17 +147,35 @@ impl<T: Transport + ?Sized> Client<T> {
         &self,
         prepared: PreparedGeneration,
         mode: StreamMode,
+        request_id: u64,
     ) -> Result<GenerateImageStream, BridgeError>
     where
         T: StreamingTransport,
     {
-        let body = prepared.encode(GenerationDelivery::Stream(mode))?;
+        tracing::Span::current().record(
+            "endpoint",
+            crate::protocol::ApiEndpoint::GenerateImageStream.path(),
+        );
+        let body = prepared
+            .encode(GenerationDelivery::Stream(mode))
+            .inspect_err(report_failure)?;
         let resolved_seed = prepared.resolved_seed();
-        let observation = self.observe_generation(prepared.normalized(), true).await;
-        let endpoint = self.image_endpoint(crate::protocol::Endpoint::GenerateImageStream);
-        match crate::protocol::post_sse(&*self.transport, &endpoint, body).await {
-            Ok(stream) => Ok(GenerateImageStream::new(resolved_seed, stream, observation)),
+        let observation = self
+            .observe_generation(
+                prepared.normalized(),
+                GenerationDelivery::Stream(mode),
+                request_id,
+            )
+            .await;
+        let request = crate::protocol::ApiEndpoint::GenerateImageStream
+            .request(&self.config.image_base_url, Some(body));
+        match crate::protocol::post_sse(&*self.transport, request).await {
+            Ok(stream) => {
+                tracing::debug!("image stream opened");
+                Ok(GenerateImageStream::new(resolved_seed, stream, observation))
+            },
             Err(error) => {
+                report_failure(&error);
                 observation.fail(&error).await;
                 Err(error)
             },
@@ -128,14 +189,14 @@ impl<T: Transport + ?Sized> Client<T> {
         };
         for (field, count) in params.count_tokens(tokenizers)?.over_limit() {
             let error = InvalidRequest::PromptTokenLimitExceeded {
-                field: field.label(),
+                field: field.generation_field().into(),
                 used: count.used,
                 limit: count.limit,
             };
-            if params.request().strict_mode {
+            if params.request().policy.is_reject() {
                 return Err(error.into());
             }
-            log::warn!("{error}");
+            tracing::warn!(field = %field.generation_field(), used = count.used, limit = count.limit, model = %params.request().core.model.as_str(), "prompt exceeds token limit");
         }
         Ok(())
     }

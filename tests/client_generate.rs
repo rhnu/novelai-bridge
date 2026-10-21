@@ -6,8 +6,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use novelai_bridge::{
     BridgeError, Character, CharacterPosition, CharacterReference, CharacterReferenceType,
     CharacterSet, Client, ClientConfig, EncodedImage, GenerateImageRequest, GeneratedImageMetadata,
-    GuidanceParams, ImageFormat, ImageSize, Img2ImgRequest, InvalidRequest, Model, QualityPreset,
-    ReferenceSet, UcPreset, VibeEncoding, VibeReference, VibeTransferConfig,
+    GenerationField, GuidanceField, GuidanceParams, ImageFormat, ImageSize, ImageToImageInput,
+    InpaintingInput, InvalidRequest, Model, QualityPreset, ReferenceSet, RequestField, UcPreset,
+    ValidationPolicy, VibeEncoding, VibeReference, VibeTransferConfig,
 };
 use serde_json::{Value, json};
 

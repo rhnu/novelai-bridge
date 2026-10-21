@@ -22,9 +22,7 @@ pub struct Tokenizers {
 impl Tokenizers {
     /// Creates an empty registry.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Loads the CLIP encoder from `bpe_simple_vocab_16e6.txt.gz`, compressed or expanded.
     ///
@@ -100,9 +98,7 @@ impl Tokenizers {
 
     /// Returns `true` when no encoder is loaded.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.encoders.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.encoders.is_empty() }
 }
 
 impl std::fmt::Debug for Tokenizers {

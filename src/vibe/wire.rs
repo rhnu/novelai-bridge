@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub(super) struct VibeRequestBody {
     pub image: String,
     pub information_extracted: f32,

@@ -10,7 +10,8 @@ const ELIDE_ABOVE_CHARS: usize = 128;
 
 /// Renders a request body with long base64 payloads elided.
 pub fn to_readable_json(value: &Value) -> String {
-    serde_json::to_string_pretty(&elide(value)).unwrap_or_else(|_| value.to_string())
+    serde_json::to_string_pretty(&elide(value))
+        .expect("serializing a JSON Value to a String cannot fail")
 }
 
 /// Only base64-looking blobs are elided. Prompt text stays readable however long it is, because
@@ -46,78 +47,75 @@ fn elide(value: &Value) -> Value {
 /// Numeric segments index into arrays. Returns `false` when the path does not resolve, so the
 /// caller can warn instead of silently doing nothing.
 pub fn set_path(root: &mut Value, path: &str, replacement: Value) -> bool {
-    let mut segments = path.split('.').peekable();
-    let mut cursor = root;
-
-    while let Some(segment) = segments.next() {
-        let is_last = segments.peek().is_none();
-        match cursor {
-            Value::Object(entries) => {
-                if is_last {
-                    entries.insert(segment.to_owned(), replacement);
-                    return true;
-                }
-                let Some(next) = entries.get_mut(segment) else {
-                    return false;
-                };
-                cursor = next;
-            },
-            Value::Array(items) => {
-                let Ok(index) = segment.parse::<usize>() else {
-                    return false;
-                };
-                let Some(next) = items.get_mut(index) else {
-                    return false;
-                };
-                if is_last {
-                    *next = replacement;
-                    return true;
-                }
-                cursor = next;
-            },
-            _ => return false,
-        }
-    }
-
-    false
-}
-
-/// Removes a dotted path. Returns `false` when the path does not resolve.
-pub fn remove_path(root: &mut Value, path: &str) -> bool {
-    let Some((parent_path, leaf)) = path.rsplit_once('.') else {
-        return match root {
-            Value::Object(entries) => entries.remove(path).is_some(),
-            _ => false,
-        };
+    let Some((parent, leaf)) = parent_mut(root, path) else {
+        return false;
     };
-
-    let mut cursor = root;
-    for segment in parent_path.split('.') {
-        cursor = match cursor {
-            Value::Object(entries) => match entries.get_mut(segment) {
-                Some(next) => next,
-                None => return false,
-            },
-            Value::Array(items) => {
-                match segment.parse::<usize>().ok().and_then(|i| items.get_mut(i)) {
-                    Some(next) => next,
-                    None => return false,
-                }
-            },
-            _ => return false,
-        };
-    }
-
-    match cursor {
-        Value::Object(entries) => entries.remove(leaf).is_some(),
-        Value::Array(items) => leaf
-            .parse::<usize>()
-            .ok()
-            .filter(|index| *index < items.len())
-            .map(|index| items.remove(index))
-            .is_some(),
+    match parent {
+        Value::Object(entries) => {
+            entries.insert(leaf.to_owned(), replacement);
+            true
+        },
+        Value::Array(items) => {
+            let Some(slot) = leaf
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| items.get_mut(index))
+            else {
+                return false;
+            };
+            *slot = replacement;
+            true
+        },
         _ => false,
     }
+}
+
+/// Removes a dotted path. Missing parents and removal targets are errors to the caller.
+pub fn remove_path(root: &mut Value, path: &str) -> bool {
+    let Some((parent, leaf)) = parent_mut(root, path) else {
+        return false;
+    };
+    match parent {
+        Value::Object(entries) => entries.remove(leaf).is_some(),
+        Value::Array(items) => {
+            let Some(index) = leaf
+                .parse::<usize>()
+                .ok()
+                .filter(|index| *index < items.len())
+            else {
+                return false;
+            };
+            items.remove(index);
+            true
+        },
+        _ => false,
+    }
+}
+
+fn parent_mut<'value, 'path>(
+    root: &'value mut Value,
+    path: &'path str,
+) -> Option<(&'value mut Value, &'path str)> {
+    let (parent, leaf) = path
+        .rsplit_once('.')
+        .map_or((None, path), |(parent, leaf)| (Some(parent), leaf));
+    if leaf.is_empty() {
+        return None;
+    }
+    let mut cursor = root;
+    if let Some(parent) = parent {
+        for segment in parent.split('.') {
+            if segment.is_empty() {
+                return None;
+            }
+            cursor = match cursor {
+                Value::Object(entries) => entries.get_mut(segment)?,
+                Value::Array(items) => items.get_mut(segment.parse::<usize>().ok()?)?,
+                _ => return None,
+            };
+        }
+    }
+    Some((cursor, leaf))
 }
 
 /// Parses a `path=value` override. The value is JSON when it parses, otherwise a plain string.
@@ -152,5 +150,9 @@ pub fn subscription_summary(info: &novelai_bridge::SubscriptionInfo) -> String {
             Value::Object(entry)
         }),
     );
-    serde_json::to_string_pretty(&Value::Object(summary)).unwrap_or_default()
+    serde_json::to_string_pretty(&Value::Object(summary))
+        .expect("serializing a JSON Value to a String cannot fail")
 }
+
+#[cfg(test)]
+mod tests;

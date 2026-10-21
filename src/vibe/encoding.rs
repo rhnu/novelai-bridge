@@ -3,13 +3,13 @@ use std::sync::Arc;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
-use crate::{BridgeError, InvalidRequest};
+use crate::{BridgeError, InvalidRequest, RequestField};
 
 #[cfg(test)]
 mod tests;
 
 /// Opaque vibe encoding bytes, distinct from an image payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct VibeEncoding(Arc<[u8]>);
 
 impl VibeEncoding {
@@ -22,7 +22,7 @@ impl VibeEncoding {
         let bytes = bytes.into();
         if bytes.is_empty() {
             return Err(InvalidRequest::EmptyField {
-                field: "vibe_encoding".to_owned(),
+                field: RequestField::VibeEncoding,
             }
             .into());
         }
@@ -35,7 +35,10 @@ impl VibeEncoding {
     ///
     /// Returns an invalid-request error for empty or malformed base64.
     pub fn from_base64(value: &str) -> Result<Self, BridgeError> {
-        Self::from_bytes(crate::payload::decode_base64("vibe_encoding", value)?)
+        Self::from_bytes(crate::payload::decode_base64(
+            RequestField::VibeEncoding,
+            value,
+        )?)
     }
 
     #[must_use]
@@ -43,6 +46,14 @@ impl VibeEncoding {
 
     #[must_use]
     pub fn to_base64(&self) -> String { STANDARD.encode(&self.0) }
+}
+
+impl std::fmt::Debug for VibeEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VibeEncoding")
+            .field("bytes", &self.0.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Serialize for VibeEncoding {

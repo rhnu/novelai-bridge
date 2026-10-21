@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use novelai_bridge::{GenerateImageStreamRequest, ImageStreamChunk};
+use novelai_bridge::{GenerateImageStreamRequest, ImageStreamChunk, ImageStreamEventType};
 
 use super::*;
 
@@ -7,7 +7,7 @@ use super::*;
 async fn generate_stream_parses_chunk() {
     let transport = MockTransport::default();
     transport.set_sse_chunks(vec![ImageStreamChunk {
-        event_type: "step".to_owned(),
+        event_type: "step".into(),
         samp_ix: 0,
         step_ix: Some(1),
         gen_id: 1,
@@ -30,7 +30,7 @@ async fn generate_stream_parses_chunk() {
             .unwrap()
     );
     let item = stream.next().await.unwrap().unwrap();
-    assert_eq!(item.event_type, "step");
+    assert_eq!(item.event_type, ImageStreamEventType::Step);
     assert_eq!(item.step_ix, Some(1));
     assert_eq!(
         transport.last_path().as_deref(),
@@ -77,7 +77,7 @@ async fn generate_stream_rejects_v3_models_before_transport() {
         assert!(matches!(
             error,
             BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-                if feature == "delivery.stream"
+                if *feature == RequestField::StreamDelivery
         ));
         assert!(transport.last_path().is_none());
     }

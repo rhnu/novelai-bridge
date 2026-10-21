@@ -10,12 +10,18 @@ use crate::{BridgeError, Transport, TransportError, TransportRequest, TransportR
 
 struct Ordinary {
     responses: Mutex<VecDeque<Vec<u8>>>,
+    requests: Mutex<Vec<TransportRequest>>,
 }
 
 #[async_trait]
 impl Transport for Ordinary {
-    async fn execute(&self, _: TransportRequest) -> Result<TransportResponse, TransportError> {
+    async fn execute(
+        &self,
+        request: TransportRequest,
+    ) -> Result<TransportResponse, TransportError> {
+        self.requests.lock().unwrap().push(request);
         Ok(TransportResponse {
+            body_truncated: false,
             status: 200,
             headers: Vec::new(),
             body: self
@@ -31,6 +37,7 @@ impl Transport for Ordinary {
 #[test]
 fn cloning_a_client_does_not_require_a_cloneable_transport() {
     let transport: Arc<dyn Transport> = Arc::new(Ordinary {
+        requests: Mutex::default(),
         responses: Mutex::new(VecDeque::new()),
     });
     let client = Client::new(transport, ClientConfig::default());
@@ -42,6 +49,7 @@ fn cloning_a_client_does_not_require_a_cloneable_transport() {
 #[tokio::test]
 async fn account_cache_is_shared_and_an_invalid_response_does_not_replace_it() {
     let transport = Arc::new(Ordinary {
+        requests: Mutex::default(),
         responses: Mutex::new(VecDeque::from([
             br#"{"tier":3,"active":true,"trainingStepsLeft":{"fixedTrainingStepsLeft":55}}"#
                 .to_vec(),
@@ -80,6 +88,7 @@ impl crate::CreditObserver for Observer {
 async fn common_execution_settles_decode_failure_and_success_with_distinct_identifiers() {
     let observer = Arc::new(Observer::default());
     let transport = Arc::new(Ordinary {
+        requests: Mutex::default(),
         responses: Mutex::new(VecDeque::from([b"invalid".to_vec(), b"payload".to_vec()])),
     });
     let client =
@@ -90,10 +99,16 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
             .build()
             .normalize()
             .unwrap();
-    let pending = client.observe_generation(&normalized, false).await;
+    let pending = client
+        .observe_generation(
+            &normalized,
+            crate::GenerationDelivery::Images,
+            client.next_request_id(),
+        )
+        .await;
     let result: Result<(), BridgeError> = client
         .execute_encoded(
-            crate::protocol::Endpoint::GenerateImage,
+            crate::protocol::ApiEndpoint::GenerateImage,
             Vec::new(),
             pending,
             |_| {
@@ -106,10 +121,16 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
         )
         .await;
     assert!(matches!(result, Err(BridgeError::Decode(_))));
-    let pending = client.observe_generation(&normalized, false).await;
+    let pending = client
+        .observe_generation(
+            &normalized,
+            crate::GenerationDelivery::Images,
+            client.next_request_id(),
+        )
+        .await;
     let result = client
         .execute_encoded(
-            crate::protocol::Endpoint::GenerateImage,
+            crate::protocol::ApiEndpoint::GenerateImage,
             Vec::new(),
             pending,
             |_| Ok(((), 2)),
@@ -126,4 +147,58 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
     } if fingerprint.request_id == 2));
     assert!(!format!("{events:?}").contains("private prompt"));
     drop(events);
+}
+
+fn source_image() -> Vec<u8> {
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgba8(2, 2)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner()
+}
+
+#[tokio::test]
+async fn director_prepared_and_raw_calls_share_transport_and_decode_behavior() {
+    let png = source_image();
+    let transport = Arc::new(Ordinary {
+        requests: Mutex::default(),
+        responses: Mutex::new(VecDeque::from([png.clone(), png.clone()])),
+    });
+    let client = Client::new(Arc::<Ordinary>::clone(&transport), ClientConfig::default());
+    let request = crate::RunDirectorToolRequest {
+        image: crate::EncodedImage::from_bytes(png.clone()).unwrap(),
+        command: crate::DirectorCommand::Lineart,
+        policy: crate::ValidationPolicy::Reject,
+    };
+    let prepared = request.clone().prepare().unwrap();
+    let raw_result = client.run_director_tool(request).await.unwrap();
+    let prepared_result = client.run_director_tool_prepared(prepared).await.unwrap();
+    assert_eq!(raw_result.bytes(), png);
+    assert_eq!(raw_result, prepared_result);
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0], requests[1]);
+}
+
+#[tokio::test]
+async fn vibe_prepared_and_raw_calls_share_transport_and_decode_behavior() {
+    let transport = Arc::new(Ordinary {
+        requests: Mutex::default(),
+        responses: Mutex::new(VecDeque::from([b"opaque".to_vec(), b"opaque".to_vec()])),
+    });
+    let client = Client::new(Arc::<Ordinary>::clone(&transport), ClientConfig::default());
+    let request = crate::EncodeVibeRequest {
+        image: crate::EncodedImage::from_bytes(source_image()).unwrap(),
+        information_extracted: 1.0,
+        model: crate::Model::NaiDiffusion45Full,
+        policy: crate::ValidationPolicy::Reject,
+    };
+    let prepared = request.clone().prepare().unwrap();
+    let raw_result = client.encode_vibe(request).await.unwrap();
+    let prepared_result = client.encode_vibe_prepared(prepared).await.unwrap();
+    assert_eq!(raw_result.as_bytes(), b"opaque");
+    assert_eq!(raw_result, prepared_result);
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0], requests[1]);
 }

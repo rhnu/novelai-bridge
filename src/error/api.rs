@@ -5,29 +5,60 @@ use std::{error::Error as StdError, fmt, time::Duration};
 #[non_exhaustive]
 pub struct ApiError {
     /// Category derived from the HTTP status code.
-    pub kind: ApiErrorKind,
+    kind: ApiErrorKind,
     /// HTTP status code returned by the API.
-    pub status: u16,
+    status: u16,
     /// Full endpoint URL used for the request.
     pub endpoint: String,
     /// Parsed reason extracted from known API error payload shapes.
     pub server_reason: Option<ApiErrorReason>,
     /// Raw response body text when present.
     pub raw_body: Option<String>,
+    /// Whether the transport retained only a prefix of the error body.
+    pub raw_body_truncated: bool,
 }
 
 impl ApiError {
-    /// Constructs an API failure; optional response details may be assigned through public fields.
+    /// Constructs a failure with a category derived from its HTTP status.
     #[must_use]
-    pub fn new(kind: ApiErrorKind, status: u16, endpoint: impl Into<String>) -> Self {
+    pub fn new(status: u16, endpoint: impl Into<String>) -> Self {
+        Self::from_response_parts(status, endpoint, None, None, None, false)
+    }
+
+    /// Constructs a classified failure from bounded protocol response details.
+    #[must_use]
+    pub fn from_response_parts(
+        status: u16,
+        endpoint: impl Into<String>,
+        retry_after: Option<Duration>,
+        server_reason: Option<ApiErrorReason>,
+        raw_body: Option<String>,
+        raw_body_truncated: bool,
+    ) -> Self {
+        let kind = match status {
+            400 => ApiErrorKind::InvalidRequest,
+            401 => ApiErrorKind::AuthenticationFailed,
+            402 => ApiErrorKind::InsufficientCredit,
+            409 => ApiErrorKind::RequestConflict,
+            429 => ApiErrorKind::RateLimited { retry_after },
+            500..=599 => ApiErrorKind::ServerError,
+            _ => ApiErrorKind::UnexpectedStatus,
+        };
         Self {
             kind,
             status,
             endpoint: endpoint.into(),
-            server_reason: None,
-            raw_body: None,
+            server_reason,
+            raw_body,
+            raw_body_truncated,
         }
     }
+
+    #[must_use]
+    pub const fn kind(&self) -> &ApiErrorKind { &self.kind }
+
+    #[must_use]
+    pub const fn status(&self) -> u16 { self.status }
 }
 
 impl fmt::Display for ApiError {

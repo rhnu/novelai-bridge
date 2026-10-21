@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use super::{CharacterSet, GenerateImageRequestBuilder, Img2ImgRequest, ReferenceSet};
+use super::{CharacterSet, GenerateImageRequestBuilder, GenerationInput, ReferenceSet};
 use crate::{
     GenerationMode, ImageFormat, ImageSize, Model, ModelDescriptor, QualityPreset, SamplingParams,
-    StreamMode, UcPreset,
+    StreamMode, UcPreset, ValidationPolicy,
 };
 
 /// Prompt, model and canvas fields shared by every generation request.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationCore {
     /// Positive prompt text.
     pub prompt: String,
@@ -36,6 +36,21 @@ pub struct GenerationCore {
     pub furry_mode: bool,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
+}
+
+impl std::fmt::Debug for GenerationCore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GenerationCore")
+            .field("model", &self.model)
+            .field("size", &self.size)
+            .field("seed", &self.seed)
+            .field("n_samples", &self.n_samples)
+            .field("quality", &self.quality)
+            .field("transparent_background", &self.transparent_background)
+            .field("furry_mode", &self.furry_mode)
+            .field("uc_preset", &self.uc_preset)
+            .finish_non_exhaustive()
+    }
 }
 
 impl GenerationCore {
@@ -107,6 +122,7 @@ pub struct OutputParams {
 /// Fields are grouped by capability: an optional group is only accepted when
 /// [`Model::descriptor`] reports support for it.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct GenerateImageRequest {
     /// Prompt, model, canvas and seed.
     pub core: GenerationCore,
@@ -116,14 +132,14 @@ pub struct GenerateImageRequest {
     pub characters: Option<CharacterSet>,
     /// Guidance toggles.
     pub guidance: GuidanceParams,
-    /// Optional image-to-image or inpainting input.
-    pub img2img: Option<Img2ImgRequest>,
+    /// Operation and its mode-specific input.
+    pub operation: GenerationInput,
     /// Optional reference images.
     pub references: Option<ReferenceSet>,
     /// Output encoding options.
     pub output: OutputParams,
-    /// Rejects unsupported or out-of-range values instead of normalizing them.
-    pub strict_mode: bool,
+    /// Handling of unsupported and out-of-range editable values.
+    pub policy: ValidationPolicy,
 }
 
 impl GenerateImageRequest {
@@ -139,17 +155,12 @@ impl GenerateImageRequest {
 
     /// Returns the generation mode represented by the raw request shape.
     #[must_use]
-    pub const fn mode(&self) -> GenerationMode {
-        match self.img2img.as_ref() {
-            None => GenerationMode::TextToImage,
-            Some(input) if input.is_infill() => GenerationMode::Inpainting,
-            Some(_) => GenerationMode::ImageToImage,
-        }
-    }
+    pub const fn mode(&self) -> GenerationMode { self.operation.mode() }
 }
 
 /// Generation input and delivery options for incremental image output.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct GenerateImageStreamRequest {
     /// Base image-generation request.
     pub base: GenerateImageRequest,
@@ -175,10 +186,10 @@ impl Default for GenerateImageRequest {
             sampling: model.descriptor().defaults().sampling,
             characters: None,
             guidance: GuidanceParams::default(),
-            img2img: None,
+            operation: GenerationInput::TextToImage,
             references: None,
             output: OutputParams::default(),
-            strict_mode: false,
+            policy: ValidationPolicy::Normalize,
         }
     }
 }

@@ -1,27 +1,37 @@
-#[cfg(feature = "credit-observer")]
 use std::{
     collections::BTreeSet,
-    sync::{Arc, Mutex},
-};
-use std::{
+    future::Future,
     pin::Pin,
     task::{Context, Poll},
+    time::Instant,
 };
 
 use futures_core::Stream;
+use tracing::Instrument;
 
 use super::observe::PendingObservation;
-use crate::{BridgeError, ImageStreamChunk};
+pub use crate::protocol::{ImageStreamItem, ImageStreamResult};
 
-pub type ImageStreamItem = Result<ImageStreamChunk, BridgeError>;
-pub type ImageStreamResult = Pin<Box<dyn Stream<Item = ImageStreamItem> + Send>>;
+type SettlementFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+/// The handle retains terminal delivery when a polling future is cancelled.
+enum Lifecycle {
+    Active(PendingObservation),
+    Settling {
+        future: SettlementFuture,
+        terminal: Option<ImageStreamItem>,
+    },
+    Settled,
+}
 
 /// Parsed image-generation stream and the request seed actually sent.
 pub struct GenerateImageStream {
     pub resolved_seed: i64,
-    stream: ImageStreamResult,
-    #[cfg(feature = "credit-observer")]
-    observation: Arc<Mutex<Option<PendingObservation>>>,
+    stream: Option<ImageStreamResult>,
+    lifecycle: Lifecycle,
+    samples: BTreeSet<u32>,
+    span: tracing::Span,
+    started: Instant,
 }
 
 impl GenerateImageStream {
@@ -30,44 +40,67 @@ impl GenerateImageStream {
         stream: ImageStreamResult,
         observation: PendingObservation,
     ) -> Self {
-        #[cfg(feature = "credit-observer")]
-        {
-            let observation = Arc::new(Mutex::new(Some(observation)));
-            let stream = observed_stream(stream, Arc::clone(&observation));
-            Self {
-                resolved_seed,
-                stream,
-                observation,
-            }
-        }
-        #[cfg(not(feature = "credit-observer"))]
-        {
-            let _ = observation;
-            Self {
-                resolved_seed,
-                stream,
-            }
+        Self {
+            resolved_seed,
+            stream: Some(stream),
+            lifecycle: Lifecycle::Active(observation),
+            samples: BTreeSet::new(),
+            span: tracing::Span::current(),
+            started: Instant::now(),
         }
     }
 
     /// Returns the parsed stream, retaining its lifecycle observation.
-    pub fn into_inner(self) -> ImageStreamResult { self.stream }
+    pub fn into_inner(self) -> ImageStreamResult { Box::pin(self) }
 
-    /// Stops consumption before awaiting the explicit cancellation notification.
+    /// Stops consumption and completes an already started terminal notification, if any.
     ///
-    /// Dropping a stream emits no asynchronous terminal notification.
-    pub async fn cancel(self) {
-        #[cfg(feature = "credit-observer")]
-        let pending = self
-            .observation
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        drop(self.stream);
-        #[cfg(feature = "credit-observer")]
-        if let Some(pending) = pending {
-            pending.cancel().await;
+    /// An active stream reports cancellation. An EOF or failure already being settled retains
+    /// that outcome. Dropping a stream emits no asynchronous terminal notification.
+    pub async fn cancel(mut self) {
+        drop(self.stream.take());
+        let lifecycle = std::mem::replace(&mut self.lifecycle, Lifecycle::Settled);
+        let span = self.span.clone();
+        let elapsed_secs = self.started.elapsed().as_secs_f64();
+        async move {
+            match lifecycle {
+                Lifecycle::Active(pending) => {
+                    tracing::debug!(outcome = "cancelled", elapsed_secs, "image stream stopped");
+                    pending.cancel().await;
+                },
+                Lifecycle::Settling { future, .. } => future.await,
+                Lifecycle::Settled => {},
+            }
         }
+        .instrument(span)
+        .await;
+    }
+
+    fn begin_settlement(&mut self, terminal: Option<ImageStreamItem>) {
+        drop(self.stream.take());
+        let Lifecycle::Active(pending) = std::mem::replace(&mut self.lifecycle, Lifecycle::Settled)
+        else {
+            return;
+        };
+        let future: SettlementFuture = if let Some(Err(error)) = &terminal {
+            tracing::debug!(
+                outcome = "failed",
+                elapsed_secs = self.started.elapsed().as_secs_f64(),
+                "image stream stopped"
+            );
+            super::diagnostics::report_failure(error);
+            Box::pin(pending.fail(error))
+        } else {
+            let image_count = u32::try_from(self.samples.len()).unwrap_or(u32::MAX);
+            tracing::debug!(
+                outcome = "succeeded",
+                image_count,
+                elapsed_secs = self.started.elapsed().as_secs_f64(),
+                "image stream exhausted"
+            );
+            Box::pin(pending.succeed(image_count))
+        };
+        self.lifecycle = Lifecycle::Settling { future, terminal };
     }
 }
 
@@ -75,36 +108,38 @@ impl Stream for GenerateImageStream {
     type Item = ImageStreamItem;
 
     fn poll_next(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.stream.as_mut().poll_next(context)
-    }
-}
-
-#[cfg(feature = "credit-observer")]
-fn observed_stream(
-    mut input: ImageStreamResult,
-    observation: Arc<Mutex<Option<PendingObservation>>>,
-) -> ImageStreamResult {
-    Box::pin(async_stream::stream! {
-        let mut samples = BTreeSet::new();
-        while let Some(item) = futures_util::StreamExt::next(&mut input).await {
-            match item {
-                Ok(chunk) => {
-                    if !chunk.image.is_empty() { samples.insert(chunk.samp_ix); }
-                    yield Ok(chunk);
-                }
-                Err(error) => {
-                    let pending = observation.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
-                    if let Some(pending) = pending { pending.fail(&error).await; }
-                    yield Err(error);
-                    return;
-                }
+        // This guard is confined to a synchronous poll and never crosses an await boundary.
+        let span = self.span.clone();
+        let _entered = span.enter();
+        loop {
+            match &mut self.lifecycle {
+                Lifecycle::Active(_) => {
+                    let Some(input) = &mut self.stream else {
+                        return Poll::Ready(None);
+                    };
+                    match input.as_mut().poll_next(context) {
+                        Poll::Ready(Some(Ok(chunk))) => {
+                            if !chunk.image.is_empty() {
+                                self.samples.insert(chunk.samp_ix);
+                            }
+                            return Poll::Ready(Some(Ok(chunk)));
+                        },
+                        Poll::Ready(terminal) => self.begin_settlement(terminal),
+                        Poll::Pending => return Poll::Pending,
+                    }
+                },
+                Lifecycle::Settling { future, terminal } => {
+                    if future.as_mut().poll(context).is_pending() {
+                        return Poll::Pending;
+                    }
+                    let terminal = terminal.take();
+                    self.lifecycle = Lifecycle::Settled;
+                    return Poll::Ready(terminal);
+                },
+                Lifecycle::Settled => return Poll::Ready(None),
             }
         }
-        let pending = observation.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
-        if let Some(pending) = pending {
-            pending.succeed(u32::try_from(samples.len()).unwrap_or(u32::MAX)).await;
-        }
-    })
+    }
 }
 
 #[cfg(all(test, feature = "credit-observer"))]

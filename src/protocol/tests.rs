@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use futures_util::{StreamExt, stream};
 
-use super::post_sse;
+use super::{ApiEndpoint, post_sse};
 use crate::{
     ApiErrorKind, BridgeError, StreamingTransport, Transport, TransportError, TransportHeader,
     TransportRequest, TransportResponse, TransportSseEvent, TransportSseResponse,
@@ -37,6 +37,7 @@ impl StreamingTransport for Backend {
 async fn an_http_error_preserves_api_details_before_stream_decoding() {
     let backend = Backend(Mutex::new(Some(TransportSseResponse::Http(
         TransportResponse {
+            body_truncated: false,
             status: 429,
             headers: vec![TransportHeader {
                 name: "retry-after".to_owned(),
@@ -45,9 +46,13 @@ async fn an_http_error_preserves_api_details_before_stream_decoding() {
             body: br#"{"message":"slow down"}"#.to_vec(),
         },
     ))));
-    let result = post_sse(&backend, "https://example.test/stream", Vec::new()).await;
+    let result = post_sse(
+        &backend,
+        ApiEndpoint::GenerateImageStream.request("https://example.test", Some(Vec::new())),
+    )
+    .await;
     assert!(matches!(result, Err(BridgeError::Api(api))
-        if matches!(api.kind, ApiErrorKind::RateLimited { .. })
+        if matches!(api.kind(), ApiErrorKind::RateLimited { .. })
             && api.server_reason.as_ref().is_some_and(|reason| reason.as_str() == "slow down")));
 }
 
@@ -55,13 +60,18 @@ async fn an_http_error_preserves_api_details_before_stream_decoding() {
 async fn a_successful_ordinary_http_body_is_not_accepted_as_an_event_stream() {
     let backend = Backend(Mutex::new(Some(TransportSseResponse::Http(
         TransportResponse {
+            body_truncated: false,
             status: 200,
             headers: Vec::new(),
             body: b"{}".to_vec(),
         },
     ))));
     assert!(matches!(
-        post_sse(&backend, "https://example.test/stream", Vec::new()).await,
+        post_sse(
+            &backend,
+            ApiEndpoint::GenerateImageStream.request("https://example.test", Some(Vec::new()))
+        )
+        .await,
         Err(BridgeError::Decode(_))
     ));
 }
@@ -78,12 +88,34 @@ async fn malformed_chunk_terminates_the_decoded_stream() {
             }),
         ]),
     )))));
-    let mut output = post_sse(&backend, "https://example.test/stream", Vec::new())
-        .await
-        .unwrap();
+    let mut output = post_sse(
+        &backend,
+        ApiEndpoint::GenerateImageStream.request("https://example.test", Some(Vec::new())),
+    )
+    .await
+    .unwrap();
     assert!(matches!(
         output.next().await,
         Some(Err(BridgeError::Decode(_)))
     ));
     assert!(output.next().await.is_none());
+}
+
+#[tokio::test]
+async fn unknown_event_types_cross_the_wire_boundary_without_losing_their_name() {
+    let backend = Backend(Mutex::new(Some(TransportSseResponse::Events(Box::pin(
+        stream::iter([Ok(TransportSseEvent {
+            data: r#"{"event_type":"future-event","samp_ix":1,"gen_id":2,"image":""}"#.to_owned(),
+        })]),
+    )))));
+    let mut output = post_sse(
+        &backend,
+        ApiEndpoint::GenerateImageStream.request("https://example.test", Some(Vec::new())),
+    )
+    .await
+    .unwrap();
+    let chunk = output.next().await.unwrap().unwrap();
+    assert!(
+        matches!(chunk.event_type, crate::ImageStreamEventType::Unknown(ref name) if name == "future-event")
+    );
 }

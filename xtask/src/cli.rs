@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use novelai_bridge::{Model, ValidationPolicy};
 
 #[derive(Parser)]
 #[command(
@@ -72,8 +73,8 @@ pub struct RunArgs {
     pub preset: Preset,
 
     /// Model identifier, for example `nai-diffusion-5-full`.
-    #[arg(long, default_value = "nai-diffusion-5-full")]
-    pub model: String,
+    #[arg(long, value_parser = parse_model)]
+    pub model: Option<Model>,
 
     #[arg(long, default_value = "1girl, cat ears, looking at viewer")]
     pub prompt: String,
@@ -144,3 +145,15 @@ pub struct RunArgs {
     #[arg(long, requires = "out")]
     pub save_inputs: bool,
 }
+
+impl RunArgs {
+    pub const fn policy(&self) -> ValidationPolicy {
+        if self.strict {
+            ValidationPolicy::Reject
+        } else {
+            ValidationPolicy::Normalize
+        }
+    }
+}
+
+fn parse_model(raw: &str) -> Result<Model, serde_json::Error> { serde_json::from_value(raw.into()) }

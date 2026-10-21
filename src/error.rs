@@ -4,6 +4,7 @@ mod api;
 mod decode;
 mod encode;
 mod metadata;
+mod preparation;
 mod request;
 mod transport;
 
@@ -11,6 +12,7 @@ pub use api::{ApiError, ApiErrorKind, ApiErrorReason};
 pub use decode::{DecodeError, DecodeTarget};
 pub use encode::{EncodeError, EncodeTarget};
 pub use metadata::MetadataError;
+pub use preparation::PreparationError;
 pub use request::{DataUrlError, InvalidRequest};
 pub use transport::{TransportError, TransportOperation};
 
@@ -18,6 +20,9 @@ pub use transport::{TransportError, TransportOperation};
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum BridgeError {
+    /// Valid input could not be prepared for execution.
+    #[error(transparent)]
+    Preparation(#[from] PreparationError),
     /// Local tokenizer loading or encoding failed.
     #[cfg(feature = "tokenizer")]
     #[error(transparent)]

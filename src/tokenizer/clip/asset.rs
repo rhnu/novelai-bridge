@@ -36,13 +36,13 @@ pub(super) fn parse(bytes: &[u8]) -> Result<ClipAsset, TokenizerError> {
         match (parts.next(), parts.next(), parts.next()) {
             (Some(left), Some(right), None) if !left.is_empty() && !right.is_empty() => {
                 pairs.push((left.to_owned(), right.to_owned()));
-            }
+            },
             _ => {
                 return Err(TokenizerError::MalformedAsset {
                     asset: TokenizerAsset::ClipMerges,
                     reason: format!("merge line {line:?} is not an exact symbol pair"),
                 });
-            }
+            },
         }
     }
 

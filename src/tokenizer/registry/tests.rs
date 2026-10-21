@@ -10,9 +10,7 @@ impl TokenEncoder for CharacterEncoder {
         Ok(text.chars().map(u32::from).collect())
     }
 
-    fn vocabulary_size(&self) -> usize {
-        128
-    }
+    fn vocabulary_size(&self) -> usize { 128 }
 }
 
 #[test]

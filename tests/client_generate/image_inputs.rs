@@ -5,11 +5,11 @@ async fn img2img_request_uses_img2img_action_and_flat_fields() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 0.7, 0.2);
+    let mut img2img = ImageToImageInput::new(png_data_url(400, 600), 0.7, 0.2);
     img2img.extra_noise_seed = Some(999);
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .seed(42)
-        .img2img(img2img)
+        .image_to_image(img2img)
         .build();
 
     let _ = client.generate(params).await.unwrap();
@@ -32,7 +32,7 @@ async fn img2img_defaults_extra_noise_seed_to_resolved_seed() {
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .seed(1234)
-        .img2img(Img2ImgRequest::new(png_data_url(64, 64), 0.7, 0.0))
+        .image_to_image(ImageToImageInput::new(png_data_url(64, 64), 0.7, 0.0))
         .build();
 
     let _ = client.generate(params).await.unwrap();
@@ -41,14 +41,13 @@ async fn img2img_defaults_extra_noise_seed_to_resolved_seed() {
 }
 
 #[tokio::test]
-async fn masked_img2img_request_uses_infill_action_and_inpainting_model() {
+async fn inpainting_request_uses_infill_action_and_inpainting_model() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 1.0, 0.1);
-    img2img.mask = Some(png_data_url(400, 600));
+    let img2img = InpaintingInput::new(png_data_url(400, 600), png_data_url(400, 600), 1.0, 0.1);
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-        .img2img(img2img)
+        .inpainting(img2img)
         .build();
 
     let _ = client.generate(params).await.unwrap();
@@ -90,10 +89,10 @@ async fn infill_uses_inpainting_model_for_each_family() {
             "nai-diffusion-furry-3-inpainting",
         ),
     ] {
-        let mut img2img = Img2ImgRequest::new(png_data_url(128, 128), 0.6, 0.0);
-        img2img.mask = Some(png_data_url(128, 128));
+        let img2img =
+            InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128), 0.6, 0.0);
         let params = GenerateImageRequest::builder("1girl", model)
-            .img2img(img2img)
+            .inpainting(img2img)
             .build();
 
         let _ = client.generate(params).await.unwrap();
@@ -103,15 +102,14 @@ async fn infill_uses_inpainting_model_for_each_family() {
 }
 
 #[tokio::test]
-async fn img2img_source_and_mask_are_fitted_to_the_requested_canvas() {
+async fn inpainting_source_and_mask_are_fitted_to_the_requested_canvas() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let mut img2img = Img2ImgRequest::new(png_data_url(300, 100), 0.7, 0.0);
-    img2img.mask = Some(png_data_url(50, 50));
+    let img2img = InpaintingInput::new(png_data_url(300, 100), png_data_url(50, 50), 0.7, 0.0);
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .size(ImageSize::square())
-        .img2img(img2img)
+        .inpainting(img2img)
         .build();
 
     let _ = client.generate(params).await.unwrap();
@@ -200,7 +198,7 @@ async fn generate_serializes_character_reference_director_fields() {
 }
 
 #[tokio::test]
-async fn generate_rejects_character_references_on_v4_in_strict_mode() {
+async fn generate_rejects_character_references_on_v4_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -211,20 +209,20 @@ async fn generate_rejects_character_references_on_v4_in_strict_mode() {
             fidelity: 0.5,
             strength: 0.6,
         }])
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "references.character_references"
+            if *feature == RequestField::Generation(GenerationField::CharacterReferences)
     ));
     assert!(transport.last_path().is_none());
 }
 
 #[tokio::test]
-async fn generate_drops_character_references_on_v4_when_not_strict() {
+async fn generate_drops_character_references_on_v4_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -243,7 +241,7 @@ async fn generate_drops_character_references_on_v4_when_not_strict() {
 }
 
 #[tokio::test]
-async fn generate_drops_references_on_v5_when_not_strict() {
+async fn generate_drops_references_on_v5_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -262,7 +260,7 @@ async fn generate_drops_references_on_v5_when_not_strict() {
 }
 
 #[tokio::test]
-async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
+async fn generate_rejects_vibe_transfer_on_v5_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -274,14 +272,14 @@ async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
             }],
             strength: 0.8,
         })
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "references.vibe_transfer"
+            if *feature == RequestField::Generation(GenerationField::VibeTransfer)
     ));
     assert!(transport.last_path().is_none());
 }
@@ -352,10 +350,9 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let mut img2img = Img2ImgRequest::new(png_data_url(128, 128), 0.6, 0.0);
-    img2img.mask = Some(png_data_url(128, 128));
+    let img2img = InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128), 0.6, 0.0);
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-        .img2img(img2img)
+        .inpainting(img2img)
         .vibe_transfer(VibeTransferConfig {
             strength: 1.0,
             references: vec![VibeReference {
@@ -372,7 +369,7 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
 }
 
 #[tokio::test]
-async fn generate_clamps_reference_numeric_values_when_not_strict() {
+async fn generate_clamps_reference_numeric_values_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -396,7 +393,7 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
 }
 
 #[tokio::test]
-async fn generate_rejects_reference_numeric_values_when_strict() {
+async fn generate_rejects_reference_numeric_values_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -408,14 +405,14 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
                 vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
             }],
         })
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "references.vibe_transfer.references[0].strength"
+            if *field == RequestField::Generation(GenerationField::VibeReferenceStrength(0))
     ));
     assert!(transport.last_path().is_none());
 }

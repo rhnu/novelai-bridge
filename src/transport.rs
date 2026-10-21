@@ -2,6 +2,9 @@ use async_trait::async_trait;
 
 use crate::TransportError;
 
+mod limits;
+pub use limits::{ResponseLimitExceeded, ResponseLimits};
+
 #[cfg(feature = "reqwest-transport")]
 mod reqwest;
 #[cfg(feature = "reqwest-transport")]
@@ -14,12 +17,26 @@ pub enum TransportMethod {
 }
 
 /// Encoded HTTP request; authentication is owned by the transport.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TransportRequest {
     pub method: TransportMethod,
     pub endpoint: String,
     pub accept: Option<String>,
+    pub content_type: Option<String>,
     pub body: Option<Vec<u8>>,
+}
+
+impl std::fmt::Debug for TransportRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TransportRequest")
+            .field("method", &self.method)
+            .field("endpoint", &self.endpoint)
+            .field("accept", &self.accept)
+            .field("content_type", &self.content_type)
+            .field("body_bytes", &self.body.as_ref().map(Vec::len))
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,17 +46,41 @@ pub struct TransportHeader {
 }
 
 /// Complete ordinary HTTP response, including non-success status bodies.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TransportResponse {
     pub status: u16,
     pub headers: Vec<TransportHeader>,
     pub body: Vec<u8>,
+    /// Whether an error response body was cut short at its configured limit.
+    pub body_truncated: bool,
+}
+
+impl std::fmt::Debug for TransportResponse {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TransportResponse")
+            .field("status", &self.status)
+            .field("header_count", &self.headers.len())
+            .field("body_bytes", &self.body.len())
+            .field("body_truncated", &self.body_truncated)
+            .finish()
+    }
 }
 
 #[cfg(feature = "streaming")]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TransportSseEvent {
     pub data: String,
+}
+
+#[cfg(feature = "streaming")]
+impl std::fmt::Debug for TransportSseEvent {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TransportSseEvent")
+            .field("data_bytes", &self.data.len())
+            .finish()
+    }
 }
 
 #[cfg(feature = "streaming")]

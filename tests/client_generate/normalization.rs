@@ -9,7 +9,7 @@ async fn generate_rejects_empty_prompt_locally() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
-            if field == "core.prompt"
+            if *field == RequestField::Generation(GenerationField::Prompt)
     ));
     assert!(transport.last_path().is_none());
 }
@@ -21,20 +21,20 @@ async fn generate_rejects_invalid_scale_locally() {
 
     let params = GenerateImageRequest::builder("1girl", Model::default())
         .scale(11.0)
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "sampling.scale"
+            if *field == RequestField::Generation(GenerationField::Scale)
     ));
     assert!(transport.last_path().is_none());
 }
 
 #[tokio::test]
-async fn generate_clamps_invalid_numeric_values_when_not_strict() {
+async fn generate_clamps_invalid_numeric_values_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -44,7 +44,7 @@ async fn generate_clamps_invalid_numeric_values_when_not_strict() {
             width: 17,
             height: 1599,
         })
-        .img2img(Img2ImgRequest::new(png_data_url(64, 64), 5.0, -0.5))
+        .image_to_image(ImageToImageInput::new(png_data_url(64, 64), 5.0, -0.5))
         .build();
     params.sampling.cfg_rescale = -0.5;
     params.core.n_samples = 9;
@@ -58,27 +58,6 @@ async fn generate_clamps_invalid_numeric_values_when_not_strict() {
     assert_eq!(body["parameters"]["height"], json!(1600));
     assert!((body["parameters"]["strength"].as_f64().unwrap() - 0.99).abs() < 1e-6);
     assert_eq!(body["parameters"]["noise"], json!(0.0));
-}
-
-#[tokio::test]
-async fn generate_shrinks_canvas_over_the_pixel_budget_when_not_strict() {
-    let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
-
-    let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-        .size(ImageSize {
-            width: 1600,
-            height: 1600,
-        })
-        .build();
-
-    let _ = client.generate(params).await.unwrap();
-    let body = transport.last_body().expect("generate body");
-    let width = body["parameters"]["width"].as_u64().unwrap();
-    let height = body["parameters"]["height"].as_u64().unwrap();
-    assert!(width * height <= 3_145_728, "{width}x{height}");
-    assert_eq!(width % 64, 0);
-    assert_eq!(height % 64, 0);
 }
 
 #[tokio::test]
@@ -117,20 +96,20 @@ async fn light_quality_preset_falls_back_to_standard_off_v5() {
 }
 
 #[tokio::test]
-async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
+async fn light_quality_preset_is_rejected_off_v5_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .quality(QualityPreset::Light)
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "core.quality"
+            if *feature == RequestField::Generation(GenerationField::Quality)
     ));
     assert!(transport.last_path().is_none());
 }
@@ -175,7 +154,7 @@ async fn transparent_background_hint_tracks_the_request_value() {
 }
 
 #[tokio::test]
-async fn transparent_background_is_dropped_off_v5_when_not_strict() {
+async fn transparent_background_is_dropped_off_v5_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -193,20 +172,20 @@ async fn transparent_background_is_dropped_off_v5_when_not_strict() {
 }
 
 #[tokio::test]
-async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
+async fn transparent_background_is_rejected_off_v5_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .transparent_background(true)
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "core.transparent_background"
+            if *feature == RequestField::Generation(GenerationField::TransparentBackground)
     ));
     assert!(transport.last_path().is_none());
 }
@@ -238,7 +217,7 @@ async fn furry_mode_prepends_the_dataset_tag_for_v4_and_later_models() {
 }
 
 #[tokio::test]
-async fn furry_mode_is_dropped_for_v3_when_not_strict() {
+async fn furry_mode_is_dropped_for_v3_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
@@ -253,19 +232,19 @@ async fn furry_mode_is_dropped_for_v3_when_not_strict() {
 }
 
 #[tokio::test]
-async fn furry_mode_is_rejected_for_v3_in_strict_mode() {
+async fn furry_mode_is_rejected_for_v3_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .furry_mode(true)
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "core.furry_mode"
+            if *feature == RequestField::Generation(GenerationField::FurryMode)
     ));
     assert!(transport.last_path().is_none());
 }

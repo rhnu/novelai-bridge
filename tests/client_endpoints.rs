@@ -51,7 +51,7 @@ async fn encode_vibe_returns_base64() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
@@ -79,7 +79,7 @@ async fn encode_vibe_observation_reports_a_fixed_cost() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
@@ -97,7 +97,7 @@ fn encoded_image_rejects_invalid_base64_at_construction() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
-            if field == "image"
+            if *field == novelai_bridge::RequestField::Image
     ));
 }
 
@@ -111,7 +111,7 @@ async fn encode_vibe_rejects_models_without_vibe_support() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion5Full,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .expect_err("V5 has no vibe support");
@@ -119,7 +119,7 @@ async fn encode_vibe_rejects_models_without_vibe_support() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "encode_vibe"
+            if *feature == novelai_bridge::RequestField::EncodeVibe
     ));
     assert!(transport.last_path().is_none());
 }
@@ -135,7 +135,7 @@ async fn encode_vibe_clamps_information_extracted_when_not_strict() {
             image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
@@ -154,7 +154,7 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
             image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
-            strict_mode: true,
+            policy: novelai_bridge::ValidationPolicy::Reject,
         })
         .await
         .unwrap_err();
@@ -162,7 +162,7 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "information_extracted"
+            if *field == novelai_bridge::RequestField::VibeInformationExtracted
     ));
     assert!(transport.last_path().is_none());
 }
@@ -177,7 +177,7 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
         .run_director_tool(RunDirectorToolRequest {
             image: EncodedImage::from_base64(&image_base64).unwrap(),
             command: DirectorCommand::Lineart,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
@@ -201,11 +201,11 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
             command: DirectorCommand::Sketch,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
-    assert_eq!(generated.bytes, crate::support::create_png_bytes(2, 2));
+    assert_eq!(generated.bytes(), crate::support::create_png_bytes(2, 2));
 
     let raw_png = crate::support::create_png_bytes(2, 2);
     let transport_raw = MockTransport::with_bytes_response(raw_png.clone());
@@ -214,12 +214,12 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
             command: DirectorCommand::Sketch,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
-    assert_eq!(fallback.bytes, raw_png);
-    assert_eq!(fallback.mime_type.as_deref(), Some("image/png"));
+    assert_eq!(fallback.bytes(), raw_png);
+    assert_eq!(Some(fallback.mime_type()), Some("image/png"));
 }
 
 #[tokio::test]
@@ -234,7 +234,7 @@ async fn director_tool_clamps_defry_when_not_strict() {
                 prompt: None,
                 defry: 9,
             },
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();
@@ -254,7 +254,7 @@ async fn director_emotion_requires_nonempty_prompt_and_preserves_valid_parameter
                 prompt: "  ".to_owned(),
                 defry: 0,
             },
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap_err();
@@ -272,7 +272,7 @@ async fn director_emotion_requires_nonempty_prompt_and_preserves_valid_parameter
                 prompt: " happy ".to_owned(),
                 defry: 3,
             },
-            strict_mode: true,
+            policy: novelai_bridge::ValidationPolicy::Reject,
         })
         .await
         .unwrap();
@@ -293,14 +293,14 @@ async fn director_rejects_out_of_range_defry_in_strict_mode() {
                 prompt: None,
                 defry: 6,
             },
-            strict_mode: true,
+            policy: novelai_bridge::ValidationPolicy::Reject,
         })
         .await
         .unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "command.defry"
+            if *field == novelai_bridge::RequestField::DirectorDefry
     ));
     assert!(transport.last_path().is_none());
 }
@@ -340,7 +340,7 @@ async fn custom_base_urls_route_image_service_endpoints() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
-            strict_mode: false,
+            policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
         .unwrap();

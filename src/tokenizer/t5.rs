@@ -79,9 +79,7 @@ impl T5Tokenizer {
 
     /// Returns the number of pieces in the model.
     #[must_use]
-    pub const fn vocabulary_size(&self) -> usize {
-        self.pieces.len()
-    }
+    pub const fn vocabulary_size(&self) -> usize { self.pieces.len() }
 
     /// Encodes text into T5 token IDs.
     ///
@@ -111,7 +109,6 @@ impl T5Tokenizer {
     #[expect(
         clippy::cast_precision_loss,
         clippy::float_cmp,
-        clippy::suboptimal_flops,
         reason = "SentencePiece segmentation requires upstream f32 arithmetic and exact score ties"
     )]
     fn viterbi(&self, text: &str) -> Vec<TokenId> {
@@ -150,7 +147,7 @@ impl T5Tokenizer {
                 let candidate = (score, start, id);
                 match best[end] {
                     Some((existing, _, existing_id))
-                        if existing > score || (existing == score && existing_id <= id) => {}
+                        if existing > score || (existing == score && existing_id <= id) => {},
                     _ => best[end] = Some(candidate),
                 }
             }
@@ -195,7 +192,5 @@ impl super::TokenEncoder for T5Tokenizer {
         Ok(Self::encode(self, text, framing))
     }
 
-    fn vocabulary_size(&self) -> usize {
-        Self::vocabulary_size(self)
-    }
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }

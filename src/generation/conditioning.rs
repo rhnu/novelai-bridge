@@ -16,7 +16,7 @@ const FURRY_DATASET_TAG: &str = "fur dataset";
 ///
 /// Obtain a value through [`GenerateImageRequest::resolve_prompts`].
 #[non_exhaustive]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedPrompts {
     /// Positive prompt including the furry prefix, transparency tag and quality tags.
     pub prompt: String,
@@ -34,7 +34,7 @@ pub struct ResolvedPrompts {
 ///
 /// Character prompts receive neither quality tags nor UC preset text; they are sent as written.
 #[non_exhaustive]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedCharacterPrompt {
     /// Index in the originating [`crate::CharacterSet::characters`].
     pub index: usize,
@@ -44,6 +44,24 @@ pub struct ResolvedCharacterPrompt {
     pub prompt: String,
     /// Negative character prompt, empty when unset.
     pub negative_prompt: String,
+}
+
+impl std::fmt::Debug for ResolvedPrompts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedPrompts")
+            .field("characters", &self.characters.len())
+            .field("use_coords", &self.use_coords)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for ResolvedCharacterPrompt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedCharacterPrompt")
+            .field("index", &self.index)
+            .field("position", &self.position)
+            .finish_non_exhaustive()
+    }
 }
 
 impl GenerationCore {

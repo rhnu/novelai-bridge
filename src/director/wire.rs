@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub(super) struct DirectorRequestBody {
     pub req_type: &'static str,
     pub width: u32,

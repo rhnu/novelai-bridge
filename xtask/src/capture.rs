@@ -17,7 +17,7 @@ impl RequestEdits {
         Ok(Self {
             overrides: overrides
                 .iter()
-                .map(|raw| render::parse_override(raw))
+                .map(|raw| render::parse_override(raw).map_err(anyhow::Error::msg))
                 .collect::<Result<_, _>>()?,
             removals,
         })
@@ -25,17 +25,27 @@ impl RequestEdits {
 
     pub fn apply(&self, mut request: TransportRequest) -> Result<TransportRequest, TransportError> {
         println!("{:?} {}", request.method, request.endpoint);
+        if request.body.is_none() && (!self.overrides.is_empty() || !self.removals.is_empty()) {
+            return Err(TransportError::new(
+                TransportOperation::SendRequest,
+                Some(request.endpoint.clone()),
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "cannot apply body edits to an endpoint without a request body",
+                )),
+            ));
+        }
         if let Some(body) = request.body.take() {
             let rewrite = || -> TaskResult<Vec<u8>> {
                 let mut value: Value = serde_json::from_slice(&body)?;
                 for (path, replacement) in &self.overrides {
                     if !render::set_path(&mut value, path, replacement.clone()) {
-                        return Err(format!("--set path does not exist: {path}").into());
+                        anyhow::bail!("--set parent path does not exist: {path}");
                     }
                 }
                 for path in &self.removals {
                     if !render::remove_path(&mut value, path) {
-                        return Err(format!("--unset path does not exist: {path}").into());
+                        anyhow::bail!("--unset path does not exist: {path}");
                     }
                 }
                 println!("{}", render::to_readable_json(&value));
@@ -45,7 +55,7 @@ impl RequestEdits {
                 TransportError::new(
                     TransportOperation::SendRequest,
                     Some(request.endpoint.clone()),
-                    source,
+                    source.into_boxed_dyn_error(),
                 )
             })?);
         }
@@ -81,3 +91,6 @@ impl<T: StreamingTransport> StreamingTransport for CaptureTransport<T> {
         self.inner.execute_sse(self.edits.apply(request)?).await
     }
 }
+
+#[cfg(test)]
+mod tests;

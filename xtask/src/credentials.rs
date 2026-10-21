@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use anyhow::Context as _;
 use novelai_bridge::{ApiKeySource, ReqwestOptions};
 
 use crate::TaskResult;
@@ -10,7 +11,8 @@ pub fn options() -> TaskResult<ReqwestOptions> {
         return Ok(options);
     }
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.env");
-    let contents = std::fs::read_to_string(&file)?;
+    let contents = std::fs::read_to_string(&file)
+        .with_context(|| format!("read credentials from {}", file.display()))?;
     for line in contents.lines() {
         let line = line.trim().trim_start_matches("export ").trim();
         if let Some((key, value)) = line.split_once('=')
@@ -22,5 +24,5 @@ pub fn options() -> TaskResult<ReqwestOptions> {
             return Ok(options);
         }
     }
-    Err(format!("NOVELAI_API_KEY is missing from {}", file.display()).into())
+    anyhow::bail!("NOVELAI_API_KEY is missing from {}", file.display())
 }

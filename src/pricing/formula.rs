@@ -8,12 +8,6 @@ const FREE_VIBE_REFERENCE_COUNT: u32 = 4;
 const OPUS_FREE_PIXELS: u64 = 1024 * 1024;
 /// Opus free-generation step ceiling.
 const OPUS_FREE_STEPS: u32 = 28;
-/// Maximum number of images in the pricing formula's resolution table.
-///
-/// The formula documents an 8-image cap for very small canvases, but the current generation API
-/// accepts only 1–4 in `n_samples`. The effective cap exposed by the estimator is therefore the
-/// smaller of this table value and the model's request sample constraint.
-const MAX_PRICING_SAMPLES: u32 = 8;
 /// Highest per-image price accepted by the web client.
 const MAX_PER_IMAGE_COST: u32 = 140;
 /// Linear area term of the `NovelAI` NAI 3, 4, 4.5, 5 cost function.
@@ -63,7 +57,11 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     let requested_samples = input.n_samples;
     let sample_range = descriptor.constraints().samples;
     let api_samples = requested_samples.clamp(sample_range.min, sample_range.max);
-    let sample_limit = pricing_sample_limit(pixels).min(sample_range.max);
+    let sample_limit = if pixels <= descriptor.constraints().canvas.max_pixels {
+        sample_range.max
+    } else {
+        0
+    };
     let priced_samples = api_samples.min(sample_limit);
     let character_reference_count = chargeable_character_reference_count(&input);
     let character_reference = character_reference_count
@@ -155,19 +153,6 @@ const fn is_free_first_image_eligible(
             crate::OpusAllowance::Metered
         ) && input.context.v5_usage_is_negative)
         && capped_samples > 0
-}
-
-/// Returns the pricing formula's resolution-dependent image-count cap before the request API cap.
-const fn pricing_sample_limit(pixels: u64) -> u32 {
-    if pixels <= 360_448 {
-        MAX_PRICING_SAMPLES
-    } else if pixels <= 409_600 {
-        6
-    } else if pixels <= 3_145_728 {
-        4
-    } else {
-        0
-    }
 }
 
 #[expect(

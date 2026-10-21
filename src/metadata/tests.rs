@@ -65,9 +65,8 @@ fn malformed_comment_is_recoverable_and_diagnostic() {
         create_png_with_text_chunks(&[("Comment", "{not-json"), ("prompt", "fallback prompt")]);
     let metadata = parse_png_metadata_from_bytes(&png).expect("valid png");
     assert_eq!(metadata.prompt.as_deref(), Some("fallback prompt"));
-    assert_eq!(
-        metadata.warnings,
-        vec![PngMetadataWarning::InvalidCommentJson]
+    assert!(
+        matches!(metadata.warnings.as_slice(), [PngMetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
     );
 }
 
@@ -157,7 +156,14 @@ fn parse_comment_extracts_regular_fields() {
     assert_eq!(metadata.height, Some(1216));
     assert_eq!(metadata.uc_preset, Some(1));
     assert_eq!(metadata.quality_toggle, Some(true));
-    assert_eq!(metadata.character_prompts, vec!["alice".to_owned()]);
+    assert_eq!(
+        metadata.characters,
+        vec![crate::metadata::CharacterMetadata {
+            source_index: 0,
+            prompt: Some("alice".to_owned()),
+            negative_prompt: None
+        }]
+    );
     assert!(metadata.has_generation_data());
 }
 
@@ -263,4 +269,188 @@ fn malformed_reference_strength_does_not_shift_later_values() {
     let metadata = parse_png_metadata_from_bytes(&png).unwrap();
     assert_eq!(metadata.vibe_entries[0].strength, None);
     assert_eq!(metadata.vibe_entries[1].strength, Some(0.7));
+}
+
+#[test]
+fn character_metadata_preserves_empty_slots_and_pairs_source_indices() {
+    let comment = serde_json::json!({
+        "v4_prompt": {"caption": {"char_captions": [{"char_caption": "alice"}, {"char_caption": "bob"}]}},
+        "v4_negative_prompt": {"caption": {"char_captions": [{"char_caption": ""}, {"char_caption": "bad bob"}]}}
+    });
+    let metadata = parse_png_metadata_from_bytes(&create_png_with_text_chunks(&[(
+        "Comment",
+        &comment.to_string(),
+    )]))
+    .unwrap();
+    assert_eq!(metadata.characters.len(), 2);
+    assert_eq!(metadata.characters[0].source_index, 0);
+    assert_eq!(metadata.characters[0].negative_prompt, None);
+    assert_eq!(metadata.characters[1].source_index, 1);
+    assert_eq!(metadata.characters[1].prompt.as_deref(), Some("bob"));
+    assert_eq!(
+        metadata.characters[1].negative_prompt.as_deref(),
+        Some("bad bob")
+    );
+}
+
+#[test]
+fn non_finite_and_unrepresentable_numeric_metadata_is_diagnostic() {
+    let comment = r#"{"scale":1e40,"cfg_rescale":"NaN","reference_image_multiple":["AQID"],"reference_strength_multiple":["inf"]}"#;
+    let metadata =
+        parse_png_metadata_from_bytes(&create_png_with_text_chunks(&[("Comment", comment)]))
+            .unwrap();
+    assert_eq!(metadata.scale, None);
+    assert_eq!(metadata.cfg_rescale, None);
+    assert_eq!(metadata.vibe_entries[0].strength, None);
+    assert_eq!(
+        metadata
+            .warnings
+            .iter()
+            .filter(|warning| matches!(warning, PngMetadataWarning::InvalidNumericValue { .. }))
+            .count(),
+        3
+    );
+    assert!(metadata.raw_comment_json.is_some());
+
+    let metadata = parse_png_metadata_from_bytes(&create_png_with_text_chunks(&[(
+        "parameters",
+        "cat\nSteps: 20, CFG scale: NaN",
+    )]))
+    .unwrap();
+    assert_eq!(metadata.scale, None);
+    assert!(matches!(
+        metadata.warnings.as_slice(),
+        [PngMetadataWarning::InvalidNumericValue {
+            field: super::MetadataField::Scale,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn text_total_budget_is_checked_before_png_metadata_is_retained() {
+    let bytes = create_png_with_text_chunks(&[("one", "abcd"), ("two", "efgh")]);
+    let policy = crate::media_policy::ImageDecodePolicy {
+        max_total_text_bytes: 7,
+        ..crate::media_policy::ImageDecodePolicy::default()
+    };
+    let error = super::parse_png_metadata_from_bytes_with_policy(&bytes, policy).unwrap_err();
+    let mut error: &(dyn std::error::Error + 'static) = &error;
+    loop {
+        if let Some(error) = error.downcast_ref::<crate::media_policy::ImagePolicyError>() {
+            assert_eq!(error.limit, crate::media_policy::ImageLimit::TotalTextBytes);
+            break;
+        }
+        error = error.source().expect("resource rejection keeps its source");
+    }
+}
+
+#[test]
+fn inspection_keeps_the_complete_failure_chain() {
+    let inspected = inspect_generated_image_metadata(b"invalid", Some("image/png"));
+    assert!(
+        matches!(inspected, GeneratedImageMetadata::Invalid { message } if message.contains("invalid PNG signature"))
+    );
+    let bytes = create_png_with_text_chunks(&[("Comment", r#""{broken""#)]);
+    let parsed = parse_png_metadata_from_bytes(&bytes).unwrap();
+    assert!(
+        matches!(parsed.warnings.as_slice(), [PngMetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
+    );
+}
+
+#[test]
+fn compressed_ascii_text_uses_the_full_configured_budget() {
+    let expected = "x".repeat(1024 * 1024 + 1);
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .add_ztxt_chunk("prompt".to_owned(), expected.clone())
+        .unwrap();
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&[0]).unwrap();
+    writer.finish().unwrap();
+    let metadata = parse_png_metadata_from_bytes(&bytes).unwrap();
+    assert_eq!(metadata.prompt.as_deref(), Some(expected.as_str()));
+    assert_eq!(metadata.warnings, []);
+}
+
+#[test]
+fn metadata_debug_does_not_disclose_prompt_or_vibe_payloads() {
+    let secret = "private prompt marker";
+    let bytes = create_png_with_text_chunks(&[
+        ("prompt", secret),
+        ("NovelAI_Vibe_Encoding_Base64", "c2VjcmV0IGVuY29kaW5n"),
+    ]);
+    let metadata = parse_png_metadata_from_bytes(&bytes).unwrap();
+    let view = format!("{metadata:?}");
+    assert!(!view.contains(secret));
+    assert!(!view.contains("c2VjcmV0IGVuY29kaW5n"));
+    assert!(!format!("{:?}", metadata.vibe_entries).contains("c2VjcmV0IGVuY29kaW5n"));
+}
+
+#[test]
+fn corrupted_post_image_text_crc_is_a_fatal_structure_error() {
+    let mut bytes = create_png_with_post_image_text_chunks(&[png::text_metadata::TEXtChunk::new(
+        "prompt", "cat",
+    )]);
+    let offset = bytes.windows(4).position(|bytes| bytes == b"tEXt").unwrap();
+    bytes[offset + 4] ^= 1;
+    assert!(parse_png_metadata_from_bytes(&bytes).is_err());
+    #[cfg(feature = "image-processing")]
+    {
+        assert!(crate::decode_generated_images(bytes.clone()).is_err());
+        assert!(crate::EncodedImage::from_bytes(bytes).is_err());
+    }
+}
+
+#[test]
+fn compressed_latin1_expansion_is_recoverable_and_does_not_consume_text_budget() {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .add_ztxt_chunk("oversize".to_owned(), "éé".to_owned())
+        .unwrap();
+    encoder
+        .add_ztxt_chunk("prompt".to_owned(), "cat".to_owned())
+        .unwrap();
+    encoder
+        .add_ztxt_chunk("extra".to_owned(), "x".to_owned())
+        .unwrap();
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&[0]).unwrap();
+    writer.finish().unwrap();
+    let policy = crate::ImageDecodePolicy {
+        max_text_chunk_bytes: 3,
+        max_total_text_bytes: 4,
+        ..Default::default()
+    };
+    let parsed = super::parse_png_metadata_from_bytes_with_policy(&bytes, policy).unwrap();
+    assert_eq!(parsed.prompt.as_deref(), Some("cat"));
+    assert_eq!(parsed.text_chunks["extra"], ["x"]);
+    assert!(!parsed.text_chunks.contains_key("oversize"));
+    assert!(
+        matches!(parsed.warnings.as_slice(), [PngMetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "oversize")
+    );
+}
+
+#[test]
+fn uncompressed_itxt_budget_counts_text_without_header_fields() {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder
+        .add_itxt_chunk("prompt".to_owned(), "a".to_owned())
+        .unwrap();
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&[0]).unwrap();
+    writer.finish().unwrap();
+    let policy = crate::ImageDecodePolicy {
+        max_text_chunk_bytes: 1,
+        max_total_text_bytes: 1,
+        ..Default::default()
+    };
+    let parsed = super::parse_png_metadata_from_bytes_with_policy(&bytes, policy).unwrap();
+    assert_eq!(parsed.prompt.as_deref(), Some("a"));
 }

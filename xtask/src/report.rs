@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use novelai_bridge::{GenerateImageResult, GeneratedImageMetadata};
 
 use crate::{RunArgs, TaskResult};
@@ -9,7 +10,7 @@ pub fn generation(result: &GenerateImageResult, args: &RunArgs) -> TaskResult<St
         result.images.len()
     )];
     for (index, image) in result.images.iter().enumerate() {
-        let metadata = match &image.metadata {
+        let metadata = match image.metadata() {
             GeneratedImageMetadata::Parsed(parsed) => format!(
                 "parsed (generation data: {}, {} warning(s))",
                 parsed.has_generation_data(),
@@ -21,19 +22,17 @@ pub fn generation(result: &GenerateImageResult, args: &RunArgs) -> TaskResult<St
         };
         lines.push(format!(
             "  [{index}] {} bytes, mime {:?}, embedded seed {:?}, metadata {metadata}",
-            image.bytes.len(),
-            image.mime_type,
+            image.bytes().len(),
+            image.mime_type(),
             image.seed(),
         ));
         if let Some(directory) = &args.out {
-            let extension = match image.mime_type.as_deref() {
-                Some("image/jpeg") => "jpg",
-                Some("image/webp") => "webp",
-                _ => "png",
-            };
-            std::fs::create_dir_all(directory)?;
+            let extension = image.format().extension();
+            std::fs::create_dir_all(directory)
+                .with_context(|| format!("create output directory {}", directory.display()))?;
             let path = directory.join(format!("probe-{index}.{extension}"));
-            std::fs::write(&path, &image.bytes)?;
+            std::fs::write(&path, image.bytes())
+                .with_context(|| format!("write generated image {}", path.display()))?;
             lines.push(format!("       wrote {}", path.display()));
         }
     }

@@ -1,19 +1,39 @@
-use std::io::Cursor;
-
 use image::{
-    DynamicImage, ImageFormat, Rgba, RgbaImage,
+    DynamicImage, Rgba, RgbaImage,
     imageops::{self, FilterType},
 };
 
-use crate::{BridgeError, ImageSize, InvalidRequest};
+use crate::{BridgeError, ImageSize, InvalidRequest, RequestField};
 const REFERENCE_TARGETS: [(u32, u32); 3] = [(1024, 1536), (1536, 1024), (1472, 1472)];
 
 pub(super) fn fit_decoded(
-    field: &str,
+    field: RequestField,
     decoded: &DynamicImage,
     size: ImageSize,
     filter: FilterType,
 ) -> Result<Vec<u8>, BridgeError> {
+    let policy = crate::media_policy::ImageDecodePolicy::default();
+    policy
+        .check_dimensions(size.width, size.height)
+        .and_then(|()| {
+            policy.check(
+                crate::media_policy::ImageLimit::DecodedBytes,
+                u64::from(size.width) * u64::from(size.height) * 4,
+            )
+        })
+        .map_err(|source| InvalidRequest::UndecodableImage {
+            field,
+            source: Box::new(source),
+        })?;
+    policy
+        .check(
+            crate::media_policy::ImageLimit::DecodedBytes,
+            u64::from(decoded.width()) * u64::from(decoded.height()) * 4,
+        )
+        .map_err(|source| InvalidRequest::UndecodableImage {
+            field,
+            source: Box::new(source),
+        })?;
     let source = decoded.to_rgba8();
     let (scaled_width, scaled_height) =
         fit_within(source.width(), source.height(), size.width, size.height);
@@ -25,14 +45,7 @@ pub(super) fn fit_decoded(
         i64::from((size.width - scaled_width) / 2),
         i64::from((size.height - scaled_height) / 2),
     );
-    let mut output = Cursor::new(Vec::new());
-    DynamicImage::ImageRgba8(canvas)
-        .write_to(&mut output, ImageFormat::Png)
-        .map_err(|source| InvalidRequest::ImageEncodingFailed {
-            field: field.to_owned(),
-            source: Box::new(source),
-        })?;
-    Ok(output.into_inner())
+    super::codec::encode_png(&DynamicImage::ImageRgba8(canvas), field, policy)
 }
 
 fn fit_within(sw: u32, sh: u32, tw: u32, th: u32) -> (u32, u32) {

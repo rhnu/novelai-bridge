@@ -148,6 +148,7 @@ impl Transport for MockTransport {
         state.last_path = Some(request.endpoint.clone());
         if request.method == TransportMethod::Get {
             return Ok(TransportResponse {
+                body_truncated: false,
                 status: 200,
                 headers: Vec::new(),
                 body: serde_json::to_vec(&state.json_response)
@@ -168,6 +169,7 @@ impl Transport for MockTransport {
             state.bytes_response.clone()
         };
         Ok(TransportResponse {
+            body_truncated: false,
             status: 200,
             headers: Vec::new(),
             body,

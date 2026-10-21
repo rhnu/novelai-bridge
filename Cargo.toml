@@ -25,6 +25,7 @@ members = ["crates/tokenizer-assets", "xtask"]
 resolver = "3"
 
 [workspace.dependencies]
+anyhow = "1.0.104"
 async-stream = "0.3.6"
 async-trait = "0.1.92"
 base64 = "0.23.1"
@@ -37,7 +38,8 @@ futures-util = "0.3.34"
 getrandom = { version = "0.4.3", features = ["std"] }
 httpdate = "1.0.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
-log = "0.4.33"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 novelai-bridge = { path = ".", version = "0.5.0-rc.2" }
 novelai-bridge-tokenizer-assets = { path = "crates/tokenizer-assets", version = "=0.1.0" }
 png = "0.18.1"
@@ -65,7 +67,7 @@ futures-util = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
 httpdate = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
-log = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 novelai-bridge-tokenizer-assets = { workspace = true, optional = true }
 png = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
@@ -95,7 +97,7 @@ client = [
     "generation",
     "dep:async-trait",
     "dep:httpdate",
-    "dep:log",
+    "dep:tracing",
     "dep:serde_json",
 ]
 # Default ordinary HTTP adapter. Streaming remains a separate capability.

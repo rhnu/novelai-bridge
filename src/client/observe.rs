@@ -1,8 +1,5 @@
 #[cfg(feature = "credit-observer")]
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Arc;
 
 use super::Client;
 use crate::{BridgeError, NormalizedGeneration};
@@ -27,18 +24,26 @@ impl PendingObservation {
         let _ = image_count;
     }
 
-    pub(super) async fn fail(self, error: &BridgeError) {
+    pub(super) fn fail(self, error: &BridgeError) -> impl Future<Output = ()> + Send + 'static {
         #[cfg(feature = "credit-observer")]
-        self.settle(RequestOutcome::Failed {
-            failure: RequestFailure::from_error(error),
-        })
-        .await;
+        let failure = RequestFailure::from_error(error);
         #[cfg(not(feature = "credit-observer"))]
         let _ = error;
+        async move {
+            #[cfg(feature = "credit-observer")]
+            self.settle(RequestOutcome::Failed { failure }).await;
+            #[cfg(not(feature = "credit-observer"))]
+            let _ = self;
+        }
     }
 
-    #[cfg(all(feature = "streaming", feature = "credit-observer"))]
-    pub(super) async fn cancel(self) { self.settle(RequestOutcome::Cancelled).await; }
+    #[cfg(feature = "streaming")]
+    pub(super) async fn cancel(self) {
+        #[cfg(feature = "credit-observer")]
+        self.settle(RequestOutcome::Cancelled).await;
+        #[cfg(not(feature = "credit-observer"))]
+        let _ = self;
+    }
 
     #[cfg(feature = "credit-observer")]
     async fn settle(self, outcome: RequestOutcome) {
@@ -57,25 +62,20 @@ impl PendingObservation {
 #[derive(Clone)]
 pub(super) struct ObservationContext {
     observer: Arc<dyn CreditObserver>,
-    counter: Arc<AtomicU64>,
 }
 
 #[cfg(feature = "credit-observer")]
 impl ObservationContext {
-    pub(super) fn new(observer: Arc<dyn CreditObserver>) -> Self {
-        Self {
-            observer,
-            counter: Arc::new(AtomicU64::new(1)),
-        }
-    }
+    pub(super) fn new(observer: Arc<dyn CreditObserver>) -> Self { Self { observer } }
 
     pub(super) async fn begin(
         &self,
+        request_id: u64,
         operation: ObservedOperation,
         estimate: RequestCostEstimate,
     ) -> PendingObservation {
         let fingerprint = RequestFingerprint {
-            request_id: self.counter.fetch_add(1, Ordering::Relaxed),
+            request_id,
             operation,
         };
         self.observer
@@ -102,38 +102,42 @@ impl<T: crate::Transport + ?Sized> Client<T> {
     pub(super) async fn observe_generation(
         &self,
         normalized: &NormalizedGeneration,
-        streaming: bool,
+        delivery: crate::GenerationDelivery,
+        request_id: u64,
     ) -> PendingObservation {
         #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
             let pricing = normalized.anlas_estimate_input(self.last_pricing_context());
             let summary = generation_summary(normalized, pricing);
-            let operation = if streaming {
-                #[cfg(feature = "streaming")]
-                {
-                    ObservedOperation::GenerateImageStream(summary)
-                }
-                #[cfg(not(feature = "streaming"))]
-                {
-                    ObservedOperation::GenerateImage(summary)
-                }
-            } else {
-                ObservedOperation::GenerateImage(summary)
+            let operation = match delivery {
+                crate::GenerationDelivery::Images => ObservedOperation::GenerateImage(summary),
+                crate::GenerationDelivery::Stream(_) => {
+                    #[cfg(feature = "streaming")]
+                    {
+                        ObservedOperation::GenerateImageStream(summary)
+                    }
+                    #[cfg(not(feature = "streaming"))]
+                    {
+                        return PendingObservation::default();
+                    }
+                },
             };
             return context
                 .begin(
+                    request_id,
                     operation,
                     RequestCostEstimate::Generation(crate::estimate_anlas_cost(pricing)),
                 )
                 .await;
         }
-        let _ = (normalized, streaming);
+        let _ = (normalized, delivery, request_id);
         PendingObservation::default()
     }
 
     pub(super) async fn observe_director(
         &self,
         prepared: &crate::PreparedDirector,
+        request_id: u64,
     ) -> PendingObservation {
         #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
@@ -148,6 +152,7 @@ impl<T: crate::Transport + ?Sized> Client<T> {
             let size = prepared.image_size();
             return context
                 .begin(
+                    request_id,
                     ObservedOperation::AugmentImage { tool, size },
                     RequestCostEstimate::Fixed {
                         anlas: crate::estimate_director_tool_cost(
@@ -158,15 +163,20 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 )
                 .await;
         }
-        let _ = prepared;
+        let _ = (prepared, request_id);
         PendingObservation::default()
     }
 
-    pub(super) async fn observe_vibe(&self, prepared: &crate::PreparedVibe) -> PendingObservation {
+    pub(super) async fn observe_vibe(
+        &self,
+        prepared: &crate::PreparedVibe,
+        request_id: u64,
+    ) -> PendingObservation {
         #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
             return context
                 .begin(
+                    request_id,
                     ObservedOperation::EncodeVibe {
                         model: prepared.model(),
                     },
@@ -176,7 +186,7 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 )
                 .await;
         }
-        let _ = prepared;
+        let _ = (prepared, request_id);
         PendingObservation::default()
     }
 }

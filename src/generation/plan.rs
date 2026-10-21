@@ -1,8 +1,8 @@
 use super::{
-    GenerateImageRequest, NormalizationDiagnostic, NormalizationPolicy, PreparedGeneration,
-    ResolvedPrompts, normalize, prepare,
+    GenerateImageRequest, NormalizationDiagnostic, PreparedGeneration, ResolvedPrompts, normalize,
+    prepare,
 };
-use crate::{BridgeError, ImagePreprocessor};
+use crate::{BridgeError, ImagePreprocessor, ValidationPolicy};
 
 /// Validated effective input with conditioning text assembled exactly once.
 ///
@@ -25,34 +25,31 @@ use crate::{BridgeError, ImagePreprocessor};
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct NormalizedGeneration {
+    pub(super) model_id: &'static str,
     pub(super) request: GenerateImageRequest,
     pub(super) prompts: ResolvedPrompts,
     pub(super) diagnostics: Vec<NormalizationDiagnostic>,
 }
 
 impl GenerateImageRequest {
-    /// Normalizes this input according to `strict_mode`.
+    /// Normalizes this input according to `policy`.
     ///
     /// # Errors
     ///
     /// Returns local range, capability or request-shape errors.
     pub fn normalize(self) -> Result<NormalizedGeneration, BridgeError> {
-        let policy = if self.strict_mode {
-            NormalizationPolicy::Reject
-        } else {
-            NormalizationPolicy::Normalize
-        };
+        let policy = self.policy;
         self.normalize_with(policy)
     }
 
-    /// Normalizes this input with an explicit policy, overriding `strict_mode`.
+    /// Normalizes this input with an explicit policy, overriding `policy`.
     ///
     /// # Errors
     ///
     /// Returns local range, capability or request-shape errors.
     pub fn normalize_with(
         self,
-        policy: NormalizationPolicy,
+        policy: ValidationPolicy,
     ) -> Result<NormalizedGeneration, BridgeError> {
         normalize::normalize(self, policy)
     }
@@ -71,6 +68,10 @@ impl GenerateImageRequest {
 }
 
 impl NormalizedGeneration {
+    /// API identity resolved once for the selected effective operation.
+    #[must_use]
+    pub const fn model_id(&self) -> &'static str { self.model_id }
+
     /// Immutable effective input. Disabled characters retain their original, unvalidated data.
     #[must_use]
     pub const fn request(&self) -> &GenerateImageRequest { &self.request }
@@ -85,13 +86,7 @@ impl NormalizedGeneration {
 
     /// Policy used to construct this plan.
     #[must_use]
-    pub const fn policy(&self) -> NormalizationPolicy {
-        if self.request.strict_mode {
-            NormalizationPolicy::Reject
-        } else {
-            NormalizationPolicy::Normalize
-        }
-    }
+    pub const fn policy(&self) -> ValidationPolicy { self.request.policy }
 
     /// Returns editable effective input, discarding the cached prompts and diagnostics.
     #[must_use]

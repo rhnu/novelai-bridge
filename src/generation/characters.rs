@@ -13,7 +13,7 @@ impl Default for CharacterPosition {
 }
 
 /// Character prompt input used by V4 and later models.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Character {
     /// Positive prompt for the character.
     pub prompt: String,
@@ -23,6 +23,15 @@ pub struct Character {
     pub position: CharacterPosition,
     /// Whether this character is enabled.
     pub enabled: bool,
+}
+
+impl std::fmt::Debug for Character {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Character")
+            .field("position", &self.position)
+            .field("enabled", &self.enabled)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Character prompts and their positioning behavior.

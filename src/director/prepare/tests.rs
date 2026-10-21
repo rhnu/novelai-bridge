@@ -11,7 +11,7 @@ fn operation_normalizes_before_encoding_and_exposes_effective_command() {
             prompt: Some("  blue  ".to_owned()),
             defry: 9,
         },
-        strict_mode: false,
+        policy: crate::ValidationPolicy::Normalize,
     }
     .prepare()
     .unwrap();
@@ -23,6 +23,15 @@ fn operation_normalizes_before_encoding_and_exposes_effective_command() {
     assert_eq!(body["defry"], 5);
     assert_eq!(body["prompt"], "blue");
     assert_eq!(body["width"], prepared.image_size().width);
+    assert_eq!(
+        prepared.adjustments(),
+        &[crate::ValidationAdjustment {
+            field: crate::RequestField::DirectorDefry,
+            from: 9.0,
+            to: 5.0
+        }]
+    );
+    assert!(!format!("{prepared:?}").contains("blue"));
 }
 
 #[test]
@@ -47,7 +56,11 @@ fn emotion_requires_text_and_strict_defry_rejects_out_of_range_values() {
             RunDirectorToolRequest {
                 image: image(),
                 command,
-                strict_mode: strict
+                policy: if strict {
+                    crate::ValidationPolicy::Reject
+                } else {
+                    crate::ValidationPolicy::Normalize
+                }
             }
             .prepare()
             .is_err()
@@ -60,7 +73,7 @@ fn parameterless_command_omits_prompt_and_defry() {
     let prepared = RunDirectorToolRequest {
         image: image(),
         command: DirectorCommand::BgRemoval,
-        strict_mode: true,
+        policy: crate::ValidationPolicy::Reject,
     }
     .prepare()
     .unwrap();
@@ -68,4 +81,23 @@ fn parameterless_command_omits_prompt_and_defry() {
     assert_eq!(body["req_type"], "bg-removal");
     assert!(body.get("prompt").is_none());
     assert!(body.get("defry").is_none());
+}
+
+#[test]
+fn removed_policy_and_invalid_command_fields_cannot_be_silently_ignored() {
+    let request = RunDirectorToolRequest {
+        image: image(),
+        command: DirectorCommand::BgRemoval,
+        policy: crate::ValidationPolicy::Reject,
+    };
+    let mut value = serde_json::to_value(request).unwrap();
+    value.as_object_mut().unwrap().remove("policy");
+    value["strict_mode"] = true.into();
+    assert!(serde_json::from_value::<RunDirectorToolRequest>(value).is_err());
+    assert!(
+        serde_json::from_value::<DirectorCommand>(
+            serde_json::json!({"colorize":{"prompt":null,"defry":1,"noise":0.5}})
+        )
+        .is_err()
+    );
 }

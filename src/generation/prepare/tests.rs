@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::{
-    BridgeError, DefaultImagePreprocessor, EncodedImage, ImagePreparation, ImagePreprocessor,
-    ImageSize, Img2ImgRequest, Model, PreparedImage, StreamMode,
+    BridgeError, DefaultImagePreprocessor, EncodedImage, GenerationInput, ImagePreparation,
+    ImagePreprocessor, ImageSize, ImageToImageInput, InpaintingInput, Model, PreparedImage,
+    RequestField, StreamMode,
     generation::{
         Character, CharacterPosition, CharacterSet, GenerateImageRequest, GenerationDelivery,
         test_support::image,
@@ -23,7 +24,7 @@ fn one_preparation_reuses_images_and_seed_for_both_deliveries() {
     impl ImagePreprocessor for Counter {
         fn prepare(
             &self,
-            field: &str,
+            field: RequestField,
             image: &EncodedImage,
             operation: ImagePreparation,
         ) -> Result<PreparedImage, BridgeError> {
@@ -37,7 +38,7 @@ fn one_preparation_reuses_images_and_seed_for_both_deliveries() {
             height: 64,
         })
         .build();
-    input.img2img = Some(Img2ImgRequest::new(image(), 0.5, 0.0));
+    input.operation = GenerationInput::ImageToImage(ImageToImageInput::new(image(), 0.5, 0.0));
     let counter = Counter::default();
     let prepared = input.normalize().unwrap().prepare_with(&counter).unwrap();
     assert_ne!(prepared.resolved_seed(), 0);
@@ -134,4 +135,126 @@ fn wire_versions_select_required_and_omitted_fields() {
         assert_eq!(parameters.get("prompt").is_some(), !structured);
         assert_eq!(parameters.get("legacy_uc").is_some(), extensions);
     }
+}
+
+#[test]
+fn inpainting_requires_a_mask_and_cannot_accept_image_to_image_only_options() {
+    let source = image();
+    let input = InpaintingInput::new(source.clone(), source, 1.0, 0.2);
+    let mut serialized = serde_json::to_value(&input).unwrap();
+    serialized["extra_noise_seed"] = serde_json::json!(123);
+    assert!(serde_json::from_value::<InpaintingInput>(serialized).is_err());
+    let mut missing_mask = serde_json::to_value(&input).unwrap();
+    missing_mask.as_object_mut().unwrap().remove("mask");
+    assert!(serde_json::from_value::<InpaintingInput>(missing_mask).is_err());
+
+    let prepared = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
+        .size(ImageSize {
+            width: 64,
+            height: 64,
+        })
+        .seed(42)
+        .inpainting(input)
+        .build()
+        .normalize()
+        .unwrap()
+        .prepare()
+        .unwrap();
+    let body = payload(&prepared, GenerationDelivery::Images);
+    let parameters = &body["parameters"];
+    assert_eq!(body["action"], "infill");
+    assert!(parameters["mask"].is_string());
+    assert_eq!(parameters["inpaintImg2ImgStrength"], 1.0);
+    assert!(parameters.get("extra_noise_seed").is_none());
+    assert!(parameters.get("color_correct").is_none());
+    assert!(parameters.get("strength").is_none());
+}
+
+#[test]
+fn character_reference_projection_keeps_each_records_values_together() {
+    use crate::{CharacterReference, CharacterReferenceType};
+    let input = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
+        .seed(42)
+        .character_references(vec![
+            CharacterReference {
+                image: image(),
+                reference_type: CharacterReferenceType::Style,
+                fidelity: 0.25,
+                strength: 0.5,
+            },
+            CharacterReference {
+                image: image(),
+                reference_type: CharacterReferenceType::Character,
+                fidelity: 1.0,
+                strength: 0.75,
+            },
+        ])
+        .build();
+    let prepared = input.normalize().unwrap().prepare().unwrap();
+    let body = payload(&prepared, GenerationDelivery::Images);
+    let parameters = &body["parameters"];
+    assert_eq!(
+        parameters["director_reference_images"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    for (index, caption, secondary, strength) in
+        [(0, "style", 0.75, 0.5), (1, "character", 0.0, 0.75)]
+    {
+        assert_eq!(
+            parameters["director_reference_descriptions"][index]["caption"]["base_caption"],
+            caption
+        );
+        assert_eq!(
+            parameters["director_reference_secondary_strength_values"][index],
+            secondary
+        );
+        assert_eq!(
+            parameters["director_reference_strength_values"][index],
+            strength
+        );
+        assert_eq!(
+            parameters["director_reference_information_extracted"][index],
+            1.0
+        );
+    }
+}
+
+#[test]
+fn debug_summaries_do_not_expose_prompt_or_prepared_image_content() {
+    let source = image();
+    let private_image = source.to_base64();
+    let input = GenerateImageRequest::builder("private-positive-marker", Model::NaiDiffusion45Full)
+        .negative_prompt("private-negative-marker")
+        .characters(vec![Character {
+            prompt: "private-character-marker".to_owned(),
+            negative_prompt: None,
+            position: CharacterPosition::default(),
+            enabled: true,
+        }])
+        .image_to_image(ImageToImageInput::new(source, 0.5, 0.0))
+        .size(ImageSize {
+            width: 64,
+            height: 64,
+        })
+        .seed(42)
+        .build();
+    let raw_debug = format!("{input:?}");
+    let normalized = input.normalize().unwrap();
+    let normalized_debug = format!("{normalized:?}");
+    let prepared = normalized.prepare().unwrap();
+    let prepared_debug = format!("{prepared:?}");
+    for summary in [&raw_debug, &normalized_debug, &prepared_debug] {
+        for marker in [
+            "private-positive-marker",
+            "private-negative-marker",
+            "private-character-marker",
+            private_image.as_str(),
+        ] {
+            assert!(!summary.contains(marker));
+        }
+    }
+    assert!(prepared_debug.contains("NaiDiffusion45Full"));
 }

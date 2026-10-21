@@ -1,8 +1,11 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
-use image::{ImageFormat, imageops::FilterType};
+use image::imageops::FilterType;
 
 use super::EncodedImage;
-use crate::{BridgeError, ImageSize, InvalidRequest};
+use crate::{
+    BridgeError, ImageSize, InvalidRequest, RequestField,
+    media_policy::{ImageDecodePolicy, ImageLimit, ImageResourceUsage},
+};
 
 /// Semantic image preparation operation.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -36,10 +39,11 @@ impl ImagePreparation {
 }
 
 /// Prepared PNG payload returned by an [`ImagePreprocessor`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PreparedImage {
     bytes: Vec<u8>,
     size: ImageSize,
+    usage: ImageResourceUsage,
 }
 
 impl PreparedImage {
@@ -49,21 +53,76 @@ impl PreparedImage {
     ///
     /// Returns an invalid-request error when the payload is not a decodable PNG.
     pub fn from_png(bytes: impl Into<Vec<u8>>) -> Result<Self, BridgeError> {
+        Self::from_png_with_policy(bytes, ImageDecodePolicy::default())
+    }
+
+    /// Validates a caller-produced PNG within explicit media budgets.
+    ///
+    /// # Errors
+    /// Returns an invalid-request error for invalid PNG data or exceeded budgets.
+    pub fn from_png_with_policy(
+        bytes: impl Into<Vec<u8>>,
+        policy: ImageDecodePolicy,
+    ) -> Result<Self, BridgeError> {
         let bytes = bytes.into();
-        let decoded =
-            image::load_from_memory_with_format(&bytes, ImageFormat::Png).map_err(|source| {
-                InvalidRequest::UndecodableImage {
-                    field: "prepared_image".to_owned(),
-                    source: Box::new(source),
-                }
-            })?;
+        let report = crate::metadata::png::extract_png_text_chunks(&bytes, policy, false).map_err(
+            |source| InvalidRequest::UndecodableImage {
+                field: RequestField::PreparedImage,
+                source: Box::new(source),
+            },
+        )?;
         Ok(Self {
             bytes,
             size: ImageSize {
-                width: decoded.width(),
-                height: decoded.height(),
+                width: report.usage.width,
+                height: report.usage.height,
             },
+            usage: report.usage,
         })
+    }
+
+    /// Encodes trusted pixels once, without re-decoding the PNG it produces.
+    ///
+    /// # Errors
+    /// Returns a resource-budget or PNG-encoding error.
+    pub fn from_pixels(pixels: &image::DynamicImage) -> Result<Self, BridgeError> {
+        Self::from_pixels_with_policy(pixels, ImageDecodePolicy::default())
+    }
+
+    /// Encodes trusted pixels once within explicit media budgets.
+    ///
+    /// # Errors
+    /// Returns a resource-budget or PNG-encoding error.
+    pub fn from_pixels_with_policy(
+        pixels: &image::DynamicImage,
+        policy: ImageDecodePolicy,
+    ) -> Result<Self, BridgeError> {
+        let field = RequestField::PreparedImage;
+        let size = ImageSize {
+            width: pixels.width(),
+            height: pixels.height(),
+        };
+        validate_size(field, size)?;
+        policy
+            .check_dimensions(size.width, size.height)
+            .map_err(|source| invalid_policy(field, source))?;
+        let decoded_bytes = pixels.as_bytes().len() as u64;
+        policy
+            .check(ImageLimit::DecodedBytes, decoded_bytes)
+            .map_err(|source| invalid_policy(field, source))?;
+        let bytes = super::codec::encode_png(pixels, field, policy)?;
+        let usage = ImageResourceUsage {
+            encoded_bytes: bytes.len() as u64,
+            width: size.width,
+            height: size.height,
+            decoded_bytes,
+            text_chunk_bytes: 0,
+            total_text_bytes: 0,
+        };
+        usage
+            .validate(policy)
+            .map_err(|source| invalid_policy(field, source))?;
+        Ok(Self { bytes, size, usage })
     }
 
     /// Validated PNG bytes.
@@ -88,7 +147,7 @@ pub trait ImagePreprocessor: Send + Sync {
     /// Returns an image-preparation error without producing a partial payload.
     fn prepare(
         &self,
-        field: &str,
+        field: RequestField,
         image: &EncodedImage,
         operation: ImagePreparation,
     ) -> Result<PreparedImage, BridgeError>;
@@ -101,12 +160,13 @@ pub struct DefaultImagePreprocessor;
 impl ImagePreprocessor for DefaultImagePreprocessor {
     fn prepare(
         &self,
-        field: &str,
+        field: RequestField,
         image: &EncodedImage,
         operation: ImagePreparation,
     ) -> Result<PreparedImage, BridgeError> {
         let size = operation.target_size();
         validate_size(field, size)?;
+        image.validate_policy(field, ImageDecodePolicy::default())?;
         let filter = match operation {
             ImagePreparation::Mask(_) => FilterType::Nearest,
             ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => {
@@ -114,37 +174,72 @@ impl ImagePreprocessor for DefaultImagePreprocessor {
             },
         };
         let bytes = super::fit::fit_decoded(field, image.pixels(), size, filter)?;
-        Ok(PreparedImage { bytes, size })
+        let usage = ImageResourceUsage {
+            encoded_bytes: bytes.len() as u64,
+            width: size.width,
+            height: size.height,
+            decoded_bytes: u64::from(size.width) * u64::from(size.height) * 4,
+            text_chunk_bytes: 0,
+            total_text_bytes: 0,
+        };
+        usage
+            .validate(ImageDecodePolicy::default())
+            .map_err(|source| invalid_policy(field, source))?;
+        Ok(PreparedImage { bytes, size, usage })
     }
 }
 
 #[cfg(any(feature = "generation", test))]
 pub fn prepare_image(
     preprocessor: &dyn ImagePreprocessor,
-    field: &str,
+    field: RequestField,
     image: &EncodedImage,
     operation: ImagePreparation,
 ) -> Result<PreparedImage, BridgeError> {
     let expected = operation.target_size();
     validate_size(field, expected)?;
+    ImageDecodePolicy::default()
+        .check_dimensions(expected.width, expected.height)
+        .map_err(|source| invalid_policy(field, source))?;
+    image.validate_policy(field, ImageDecodePolicy::default())?;
     let prepared = preprocessor.prepare(field, image, operation)?;
     if prepared.size() != expected {
-        return Err(InvalidRequest::PreparedImageSizeMismatch {
-            field: field.to_owned(),
+        return Err(crate::PreparationError::ImageSizeMismatch {
+            field,
             expected,
             actual: prepared.size(),
         }
         .into());
     }
+    prepared
+        .usage
+        .validate(ImageDecodePolicy::default())
+        .map_err(|source| invalid_policy(field, source))?;
     Ok(prepared)
 }
 
-fn validate_size(field: &str, size: ImageSize) -> Result<(), BridgeError> {
+fn validate_size(field: RequestField, size: ImageSize) -> Result<(), BridgeError> {
     if size.width == 0 || size.height == 0 {
-        return Err(InvalidRequest::ZeroImageDimension {
-            field: field.to_owned(),
-        }
-        .into());
+        return Err(InvalidRequest::ZeroImageDimension { field }.into());
     }
     Ok(())
+}
+
+fn invalid_policy(
+    field: RequestField,
+    source: crate::media_policy::ImagePolicyError,
+) -> InvalidRequest {
+    InvalidRequest::UndecodableImage {
+        field,
+        source: Box::new(source),
+    }
+}
+
+impl std::fmt::Debug for PreparedImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedImage")
+            .field("size", &self.size)
+            .field("bytes", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
 }

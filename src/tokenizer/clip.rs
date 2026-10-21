@@ -57,9 +57,7 @@ impl ClipTokenizer {
 
     /// Returns the number of vocabulary entries.
     #[must_use]
-    pub fn vocabulary_size(&self) -> usize {
-        self.bpe.vocabulary_size()
-    }
+    pub fn vocabulary_size(&self) -> usize { self.bpe.vocabulary_size() }
 
     /// Encodes text into CLIP token IDs.
     ///
@@ -128,7 +126,5 @@ impl super::TokenEncoder for ClipTokenizer {
         Self::encode(self, text, framing)
     }
 
-    fn vocabulary_size(&self) -> usize {
-        Self::vocabulary_size(self)
-    }
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }

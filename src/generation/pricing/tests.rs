@@ -1,12 +1,12 @@
 use crate::{
     AnlasPricingContext, Model, PricingMode,
-    generation::{GenerateImageRequest, Img2ImgRequest, test_support::image},
+    generation::{GenerateImageRequest, GenerationInput, ImageToImageInput, test_support::image},
 };
 
 #[test]
 fn normalized_quote_basis_contains_one_effective_operation() {
     let mut request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full).build();
-    request.img2img = Some(Img2ImgRequest::new(image(), 2.0, 0.0));
+    request.operation = GenerationInput::ImageToImage(ImageToImageInput::new(image(), 2.0, 0.0));
     let normalized = request.normalize().unwrap();
     let basis = normalized.anlas_estimate_input(AnlasPricingContext::default());
     assert_eq!(basis.mode, PricingMode::ImageToImage { strength: 0.99 });

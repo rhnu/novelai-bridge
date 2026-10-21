@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     BridgeError, DefaultImagePreprocessor, EncodeError, EncodeTarget, ImagePreprocessor,
-    InvalidRequest, StreamMode,
+    InvalidRequest, RequestField, StreamMode,
 };
 
 /// Wire delivery selected after seed and image preparation.
@@ -23,11 +23,25 @@ pub enum GenerationDelivery {
 ///
 /// This type cannot be deserialized or mutated into an unvalidated request. It does not send
 /// network traffic or retry. Image preparation may allocate and decode image pixels.
-#[derive(Debug)]
 pub struct PreparedGeneration {
     normalized: NormalizedGeneration,
     body: ImageGenerationRequestBody,
     resolved_seed: i64,
+}
+
+impl std::fmt::Debug for PreparedGeneration {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let request = self.normalized.request();
+        formatter
+            .debug_struct("PreparedGeneration")
+            .field("model", &request.core.model)
+            .field("mode", &request.mode())
+            .field("size", &request.core.size)
+            .field("samples", &request.core.n_samples)
+            .field("resolved_seed", &self.resolved_seed)
+            .field("diagnostics", &self.normalized.diagnostics().len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl PreparedGeneration {
@@ -53,15 +67,15 @@ impl PreparedGeneration {
             GenerationDelivery::Stream(mode) => {
                 if !self.normalized.request().descriptor().support().streaming {
                     return Err(InvalidRequest::UnsupportedModelFeature {
-                        feature: "delivery.stream".to_owned(),
+                        feature: RequestField::StreamDelivery,
                         required_model: "a model supporting streaming".to_owned(),
                     }
                     .into());
                 }
                 let body = StreamImageGenerationRequestBody {
-                    action: &self.body.action,
+                    action: self.body.action,
                     input: &self.body.input,
-                    model: &self.body.model,
+                    model: self.body.model,
                     use_new_shared_trial: self.body.use_new_shared_trial,
                     parameters: ImageStreamParameters {
                         base: &self.body.parameters,

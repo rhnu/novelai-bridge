@@ -53,6 +53,7 @@ pub struct RequestFingerprint {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RequestFailure {
     InvalidRequest,
+    Preparation,
     Api { status: u16 },
     Transport,
     Encode,
@@ -67,7 +68,10 @@ impl RequestFailure {
             #[cfg(feature = "tokenizer")]
             BridgeError::Tokenizer(_) => Self::InvalidRequest,
             BridgeError::InvalidRequest(_) => Self::InvalidRequest,
-            BridgeError::Api(api) => Self::Api { status: api.status },
+            BridgeError::Preparation(_) => Self::Preparation,
+            BridgeError::Api(api) => Self::Api {
+                status: api.status(),
+            },
             BridgeError::Transport(_) => Self::Transport,
             BridgeError::Encode(_) => Self::Encode,
             BridgeError::Decode(_) => Self::Decode,

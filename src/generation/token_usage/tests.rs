@@ -93,3 +93,27 @@ fn field_limits_are_independent_and_inclusive() {
     );
     assert_eq!(TokenCount::new(4, 3).remaining(), 0);
 }
+
+#[test]
+fn token_fields_use_editable_request_locations() {
+    assert_eq!(
+        PromptField::Prompt.generation_field(),
+        GenerationField::Prompt
+    );
+    assert_eq!(
+        PromptField::NegativePrompt.generation_field(),
+        GenerationField::NegativePrompt
+    );
+    let field = PromptField::Character {
+        index: 3,
+        negative: true,
+    };
+    assert_eq!(
+        field.generation_field(),
+        GenerationField::Character {
+            index: 3,
+            field: CharacterField::NegativePrompt
+        }
+    );
+    assert_eq!(field.label(), "characters.characters[3].negative_prompt");
+}

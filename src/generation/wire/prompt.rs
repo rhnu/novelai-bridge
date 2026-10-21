@@ -15,12 +15,12 @@ pub(super) fn build_character_captions(
     resolved
         .iter()
         .map(|character| V4CharacterCaption {
-            centers: Some(vec![center_point(character)]),
-            char_caption: Some(if negative {
+            centers: vec![center_point(character)],
+            char_caption: if negative {
                 character.negative_prompt.clone()
             } else {
                 character.prompt.clone()
-            }),
+            },
         })
         .collect()
 }

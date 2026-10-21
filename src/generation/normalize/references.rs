@@ -1,8 +1,8 @@
 use super::{Field, Normalizer};
 use crate::{
-    BridgeError, GenerateImageRequest, InvalidRequest, ModelDescriptor, ReferenceAvailability,
-    ReferenceIntent, ReferenceSet, VibeTransferConfig,
-    generation::{CharacterReferenceField, ImageInputField, NormalizationChange},
+    BridgeError, CharacterReferenceField, GenerateImageRequest, ImageInputField, InvalidRequest,
+    ModelDescriptor, ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeTransferConfig,
+    generation::NormalizationChange,
 };
 
 impl Normalizer {
@@ -75,10 +75,10 @@ impl Normalizer {
         &mut self,
         retained_field: Field,
     ) -> Result<bool, BridgeError> {
-        if self.reject {
+        if self.policy.is_reject() {
             return Err(InvalidRequest::UnsupportedFieldCombination {
-                left: Field::VibeTransfer.to_string(),
-                right: retained_field.to_string(),
+                left: Field::VibeTransfer.into(),
+                right: retained_field.into(),
             }
             .into());
         }

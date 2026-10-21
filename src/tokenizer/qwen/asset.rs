@@ -133,7 +133,7 @@ fn parse_merges(model: &Value) -> Result<Vec<(String, String)>, TokenizerError> 
                     (Some(left), Some(right)) => Some((left.to_owned(), right.to_owned())),
                     _ => None,
                 }
-            }
+            },
             Value::String(text) => text
                 .split_once(' ')
                 .map(|(left, right)| (left.to_owned(), right.to_owned())),

@@ -41,6 +41,7 @@ impl CreditObserver for Observer {
 async fn observed(input: ImageStreamResult, observer: Arc<Observer>) -> GenerateImageStream {
     let pending = ObservationContext::new(observer)
         .begin(
+            1,
             ObservedOperation::EncodeVibe {
                 model: Model::NaiDiffusion45Full,
             },
@@ -52,7 +53,7 @@ async fn observed(input: ImageStreamResult, observer: Arc<Observer>) -> Generate
 
 fn chunk(sample: u32) -> ImageStreamChunk {
     ImageStreamChunk {
-        event_type: "step".to_owned(),
+        event_type: "step".into(),
         samp_ix: sample,
         step_ix: Some(1),
         gen_id: 1,
@@ -149,4 +150,88 @@ async fn explicit_cancel_drops_the_input_before_observer_notification() {
         .cancel()
         .await;
     assert_eq!(outcomes(&observer), [RequestOutcome::Cancelled]);
+}
+
+#[derive(Default)]
+struct DelayedObserver {
+    released: AtomicBool,
+    started: AtomicBool,
+    outcomes: Mutex<Vec<RequestOutcome>>,
+}
+
+#[async_trait]
+impl CreditObserver for DelayedObserver {
+    async fn observe(&self, event: CreditEvent) {
+        if let CreditEvent::RequestSettled { outcome, .. } = event {
+            self.started.store(true, Ordering::Relaxed);
+            futures_util::future::poll_fn(|_| {
+                if self.released.load(Ordering::Relaxed) {
+                    std::task::Poll::Ready(())
+                } else {
+                    std::task::Poll::Pending
+                }
+            })
+            .await;
+            self.outcomes
+                .lock()
+                .expect("observer mutex is not poisoned")
+                .push(outcome);
+        }
+    }
+}
+
+async fn cancel_during_settlement(input: ImageStreamResult, expected: RequestOutcome) {
+    let observer = Arc::new(DelayedObserver::default());
+    let pending = ObservationContext::new(Arc::<DelayedObserver>::clone(&observer))
+        .begin(
+            1,
+            ObservedOperation::EncodeVibe {
+                model: Model::NaiDiffusion45Full,
+            },
+            RequestCostEstimate::Fixed { anlas: 2 },
+        )
+        .await;
+    let mut output = GenerateImageStream::new(10, input, pending);
+    {
+        let mut next = Box::pin(output.next());
+        assert!(futures_util::poll!(next.as_mut()).is_pending());
+    }
+    assert!(observer.started.load(Ordering::Relaxed));
+    assert_eq!(
+        *observer
+            .outcomes
+            .lock()
+            .expect("observer mutex is not poisoned"),
+        []
+    );
+    observer.released.store(true, Ordering::Relaxed);
+    output.cancel().await;
+    assert_eq!(
+        *observer
+            .outcomes
+            .lock()
+            .expect("observer mutex is not poisoned"),
+        [expected]
+    );
+}
+
+#[tokio::test]
+async fn explicit_cancel_finishes_success_notification_after_next_is_abandoned() {
+    cancel_during_settlement(
+        Box::pin(stream::empty()),
+        RequestOutcome::Succeeded { image_count: 0 },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn explicit_cancel_finishes_failure_notification_after_next_is_abandoned() {
+    let error = DecodeError::new(DecodeTarget::StreamChunk, "invalid stream".into());
+    cancel_during_settlement(
+        Box::pin(stream::iter([Err(error.into())])),
+        RequestOutcome::Failed {
+            failure: crate::RequestFailure::Decode,
+        },
+    )
+    .await;
 }

@@ -142,20 +142,20 @@ async fn variety_boost_is_dropped_for_v5() {
 }
 
 #[tokio::test]
-async fn variety_boost_is_rejected_for_v5_in_strict_mode() {
+async fn variety_boost_is_rejected_for_v5_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .variety_boost(true)
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "guidance.variety_boost"
+            if *feature == RequestField::Generation(GenerationField::Guidance(GuidanceField::VarietyBoost))
     ));
     assert!(transport.last_path().is_none());
 }
@@ -222,12 +222,12 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
 
     assert_eq!(result.images.len(), 2);
     assert!(matches!(
-        result.images[0].metadata,
+        result.images[0].metadata(),
         GeneratedImageMetadata::NotPresent
     ));
     assert!(matches!(
-        &result.images[1].metadata,
+        result.images[1].metadata(),
         GeneratedImageMetadata::Parsed(metadata)
-            if metadata.warnings.contains(&novelai_bridge::PngMetadataWarning::InvalidCommentJson)
+            if metadata.warnings.iter().any(|warning| matches!(warning, novelai_bridge::PngMetadataWarning::InvalidCommentJson { .. }))
     ));
 }

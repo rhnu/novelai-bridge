@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{EncodedImage, Model, VibeEncoding};
+use crate::{EncodedImage, Model, ValidationPolicy, VibeEncoding};
 
 /// One vibe transfer reference.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -22,6 +22,7 @@ pub struct VibeTransferConfig {
 
 /// Editable input for a vibe-encoding operation.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct EncodeVibeRequest {
     /// Validated source image.
     pub image: EncodedImage,
@@ -30,5 +31,6 @@ pub struct EncodeVibeRequest {
     /// Target model for the encoded vibe payload.
     pub model: Model,
     /// Rejects out-of-range numeric values instead of clamping them.
-    pub strict_mode: bool,
+    #[serde(default)]
+    pub policy: ValidationPolicy,
 }

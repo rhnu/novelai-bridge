@@ -1,6 +1,6 @@
 use crate::{
-    FramingPolicy, GenerateImageRequest, GenerateImageStreamRequest, ImageTokenizerKind,
-    TokenCount, TokenizerError, Tokenizers,
+    CharacterField, FramingPolicy, GenerateImageRequest, GenerateImageStreamRequest,
+    GenerationField, ImageTokenizerKind, TokenCount, TokenizerError, Tokenizers,
 };
 
 /// Identifies which prompt field a token count belongs to.
@@ -93,17 +93,21 @@ impl PromptTokenUsage {
 impl PromptField {
     /// Returns a human-readable field name for diagnostics.
     #[must_use]
-    pub fn label(&self) -> String {
+    pub fn label(&self) -> String { self.generation_field().to_string() }
+
+    /// Typed editable location shared by validation and token diagnostics.
+    #[must_use]
+    pub const fn generation_field(&self) -> GenerationField {
         match self {
-            Self::Prompt => "prompt".to_owned(),
-            Self::NegativePrompt => "negative_prompt".to_owned(),
-            Self::Character { index, negative } => {
-                let suffix = if *negative {
-                    ".negative_prompt"
+            Self::Prompt => GenerationField::Prompt,
+            Self::NegativePrompt => GenerationField::NegativePrompt,
+            Self::Character { index, negative } => GenerationField::Character {
+                index: *index,
+                field: if *negative {
+                    CharacterField::NegativePrompt
                 } else {
-                    ".prompt"
-                };
-                format!("characters[{index}]{suffix}")
+                    CharacterField::Prompt
+                },
             },
         }
     }

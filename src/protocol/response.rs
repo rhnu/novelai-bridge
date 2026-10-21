@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-use crate::{ApiError, ApiErrorKind, ApiErrorReason, TransportHeader, TransportResponse};
+use crate::{ApiError, ApiErrorReason, TransportHeader, TransportResponse};
 
 pub(super) fn checked_body(
     response: TransportResponse,
@@ -14,6 +14,7 @@ pub(super) fn checked_body(
             &response.headers,
             &response.body,
             endpoint,
+            response.body_truncated,
         ))
     }
 }
@@ -23,29 +24,21 @@ pub fn map_status_error(
     headers: &[TransportHeader],
     body: &[u8],
     endpoint: &str,
+    body_truncated: bool,
 ) -> ApiError {
     let text = String::from_utf8_lossy(body);
     let trimmed = text.trim();
     let server_reason = (!trimmed.is_empty())
         .then(|| extract_error_reason(trimmed))
         .flatten();
-    ApiError {
-        kind: match status {
-            400 => ApiErrorKind::InvalidRequest,
-            401 => ApiErrorKind::AuthenticationFailed,
-            402 => ApiErrorKind::InsufficientCredit,
-            409 => ApiErrorKind::RequestConflict,
-            429 => ApiErrorKind::RateLimited {
-                retry_after: parse_retry_after(header(headers, "retry-after"), SystemTime::now()),
-            },
-            500..=599 => ApiErrorKind::ServerError,
-            _ => ApiErrorKind::UnexpectedStatus,
-        },
+    ApiError::from_response_parts(
         status,
-        endpoint: endpoint.to_owned(),
+        endpoint,
+        parse_retry_after(header(headers, "retry-after"), SystemTime::now()),
         server_reason,
-        raw_body: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
-    }
+        (!trimmed.is_empty()).then(|| trimmed.to_owned()),
+        body_truncated,
+    )
 }
 
 fn header<'a>(headers: &'a [TransportHeader], name: &str) -> Option<&'a str> {

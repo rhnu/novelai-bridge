@@ -62,7 +62,7 @@ async fn explicit_use_coords_false_keeps_center_positions() {
 }
 
 #[tokio::test]
-async fn characters_are_rejected_on_v3_in_strict_mode() {
+async fn characters_are_rejected_on_v3_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -73,14 +73,14 @@ async fn characters_are_rejected_on_v3_in_strict_mode() {
             position: CharacterPosition::default(),
             enabled: true,
         }])
-        .strict_mode(true)
+        .policy(ValidationPolicy::Reject)
         .build();
 
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "characters"
+            if *feature == RequestField::Generation(GenerationField::Characters)
     ));
     assert!(transport.last_path().is_none());
 }
@@ -91,7 +91,7 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
     let client = Client::new(Arc::new(transport), ClientConfig::default());
 
     let mut params = request_for("1girl", Model::NaiDiffusion45Full);
-    params.strict_mode = true;
+    params.policy = ValidationPolicy::Reject;
     params.references = Some(ReferenceSet {
         vibe_transfer: Some(VibeTransferConfig {
             strength: 1.0,
@@ -114,6 +114,6 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedFieldCombination {
             ref left,
             ref right,
-        }) if left == "references.vibe_transfer" && right == "references.character_references"
+        }) if *left == RequestField::Generation(GenerationField::VibeTransfer) && *right == RequestField::Generation(GenerationField::CharacterReferences)
     ));
 }

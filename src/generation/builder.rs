@@ -1,10 +1,10 @@
 use super::{
-    CharacterSet, GenerateImageRequest, GenerationCore, GuidanceParams, Img2ImgRequest,
-    ReferenceSet,
+    CharacterSet, GenerateImageRequest, GenerationCore, GenerationInput, GuidanceParams,
+    ImageToImageInput, InpaintingInput, ReferenceSet,
 };
 use crate::{
     Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule, QualityPreset,
-    Sampler, SamplingParams, UcPreset, VibeTransferConfig,
+    Sampler, SamplingParams, UcPreset, ValidationPolicy, VibeTransferConfig,
 };
 
 /// Builder for [`GenerateImageRequest`].
@@ -148,11 +148,23 @@ impl GenerateImageRequestBuilder {
         self
     }
 
-    /// Sets the image-to-image or inpainting input.
+    /// Selects the generation operation and its mode-specific input.
     #[must_use]
-    pub fn img2img(mut self, img2img: Img2ImgRequest) -> Self {
-        self.request.img2img = Some(img2img);
+    pub fn operation(mut self, operation: GenerationInput) -> Self {
+        self.request.operation = operation;
         self
+    }
+
+    /// Selects source-image generation.
+    #[must_use]
+    pub fn image_to_image(self, input: ImageToImageInput) -> Self {
+        self.operation(GenerationInput::ImageToImage(input))
+    }
+
+    /// Selects masked generation.
+    #[must_use]
+    pub fn inpainting(self, input: InpaintingInput) -> Self {
+        self.operation(GenerationInput::Inpainting(input))
     }
 
     /// Sets the vibe transfer configuration.
@@ -182,10 +194,10 @@ impl GenerateImageRequestBuilder {
         self
     }
 
-    /// Enables strict validation instead of normalization.
+    /// Chooses rejection or normalization of unsupported and out-of-range input.
     #[must_use]
-    pub const fn strict_mode(mut self, strict_mode: bool) -> Self {
-        self.request.strict_mode = strict_mode;
+    pub const fn policy(mut self, policy: ValidationPolicy) -> Self {
+        self.request.policy = policy;
         self
     }
 

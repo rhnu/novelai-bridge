@@ -2,33 +2,26 @@ use std::{error::Error as StdError, fmt};
 
 use thiserror::Error;
 
+use crate::RequestField;
+
 /// Strongly typed local request validation failures.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum InvalidRequest {
-    /// The operating system could not provide a generation seed.
-    #[error("failed to generate a request seed")]
-    SeedGenerationFailed {
-        #[source]
-        source: Box<dyn StdError + Send + Sync>,
-    },
     /// A final conditioning text exceeds the selected model's token limit.
     #[error("{field} uses {used} tokens but the model limit is {limit}")]
     PromptTokenLimitExceeded {
-        field: String,
+        field: RequestField,
         used: u32,
         limit: u32,
     },
     /// A required field was blank after trimming.
     #[error("{field} cannot be empty")]
-    EmptyField { field: String },
-    /// A required configuration value was not present.
-    #[error("{name} is not configured")]
-    MissingConfiguration { name: String },
+    EmptyField { field: RequestField },
     /// A finite numeric value was outside the API-supported range.
     #[error("{field} must be between {min} and {max}")]
     NumericOutOfRange {
-        field: String,
+        field: RequestField,
         value: f64,
         min: f64,
         max: f64,
@@ -36,7 +29,7 @@ pub enum InvalidRequest {
     /// An image dimension violated `NovelAI` size constraints.
     #[error("{field} must be in [{min},{max}] and multiple of {multiple_of}")]
     InvalidImageDimension {
-        field: String,
+        field: RequestField,
         value: u32,
         min: u32,
         max: u32,
@@ -44,57 +37,48 @@ pub enum InvalidRequest {
     },
     /// A numeric value was NaN or infinite.
     #[error("{field} must be finite")]
-    NonFiniteNumber { field: String, value: f64 },
+    NonFiniteNumber { field: RequestField, value: f64 },
     /// A data URL was malformed or unsupported.
     #[error("{field} data URL is invalid: {reason}")]
-    InvalidDataUrl { field: String, reason: DataUrlError },
+    InvalidDataUrl {
+        field: RequestField,
+        reason: DataUrlError,
+    },
     /// A base64 payload failed to decode.
     #[error("{field} must be valid base64 payload")]
     InvalidBase64 {
-        field: String,
+        field: RequestField,
         #[source]
         source: Box<dyn StdError + Send + Sync>,
     },
     /// A decoded payload was not a supported image.
     #[error("{field} must be a decodable image payload")]
     UndecodableImage {
-        field: String,
+        field: RequestField,
         #[source]
         source: Box<dyn StdError + Send + Sync>,
     },
     /// A request feature is only supported by a different model family.
     #[error("{feature} is only supported on {required_model}")]
     UnsupportedModelFeature {
-        feature: String,
+        feature: RequestField,
         required_model: String,
     },
     /// Two request fields or feature groups cannot be used together.
     #[error("{left} and {right} cannot be used together")]
-    UnsupportedFieldCombination { left: String, right: String },
-    /// A field cannot be supplied for the selected tool or mode.
-    #[error("{field} is not supported for {context}")]
-    UnsupportedFieldForContext { field: String, context: String },
+    UnsupportedFieldCombination {
+        left: RequestField,
+        right: RequestField,
+    },
     /// A required non-empty prompt was missing for a selected tool or mode.
     #[error("{context} requires non-empty {field}")]
-    RequiredFieldForContext { context: String, field: String },
+    RequiredFieldForContext {
+        context: String,
+        field: RequestField,
+    },
     /// An image had impossible dimensions after decoding.
     #[error("{field} image size cannot be zero")]
-    ZeroImageDimension { field: String },
-    /// An injected image preprocessor returned the wrong canvas.
-    #[cfg(feature = "image-processing")]
-    #[error("{field} image size {actual:?} differs from the required size {expected:?}")]
-    PreparedImageSizeMismatch {
-        field: String,
-        expected: crate::ImageSize,
-        actual: crate::ImageSize,
-    },
-    /// A local image preprocessing step failed while encoding PNG bytes.
-    #[error("{field} failed to encode as PNG")]
-    ImageEncodingFailed {
-        field: String,
-        #[source]
-        source: Box<dyn StdError + Send + Sync>,
-    },
+    ZeroImageDimension { field: RequestField },
 }
 
 /// Specific data URL validation failure.

@@ -1,9 +1,9 @@
 use futures_util::StreamExt;
 use novelai_bridge::{
-    CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE, EncodeVibeRequest,
-    GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery, ImageSize,
-    Img2ImgRequest, Model, ReferenceSet, StreamMode, StreamingTransport, TransportMethod,
-    TransportRequest, VibeReference, VibeTransferConfig,
+    ApiEndpoint, CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE,
+    EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
+    GenerationInput, ImageSize, ImageToImageInput, InpaintingInput, Model, ReferenceSet,
+    StreamMode, StreamingTransport, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -54,16 +54,15 @@ pub fn shape(
     size: ImageSize,
     edits: &RequestEdits,
 ) -> TaskResult<()> {
-    let (path, body, method) = match args.preset {
-        Preset::Subscription => ("/user/subscription", None, TransportMethod::Get),
+    let (endpoint, body) = match args.preset {
+        Preset::Subscription => (ApiEndpoint::Subscription, None),
         Preset::Vibe => (
-            "/ai/encode-vibe",
+            ApiEndpoint::EncodeVibe,
             Some(
                 encode_vibe_request(args, model, size)?
                     .prepare()?
                     .encode()?,
             ),
-            TransportMethod::Post,
         ),
         _ => {
             let delivery = if args.preset == Preset::Stream {
@@ -71,29 +70,23 @@ pub fn shape(
             } else {
                 GenerationDelivery::Images
             };
-            let path = if args.preset == Preset::Stream {
-                "/ai/generate-image-stream"
+            let endpoint = if args.preset == Preset::Stream {
+                ApiEndpoint::GenerateImageStream
             } else {
-                "/ai/generate-image"
+                ApiEndpoint::GenerateImage
             };
             (
-                path,
+                endpoint,
                 Some(
                     generation_request(args, model, size)?
                         .normalize()?
                         .prepare()?
                         .encode(delivery)?,
                 ),
-                TransportMethod::Post,
             )
         },
     };
-    edits.apply(TransportRequest {
-        method,
-        endpoint: format!("{DEFAULT_IMAGE_BASE}{path}"),
-        accept: None,
-        body,
-    })?;
+    edits.apply(endpoint.request(DEFAULT_IMAGE_BASE, body))?;
     Ok(())
 }
 
@@ -123,7 +116,9 @@ pub async fn execute<T: StreamingTransport + ?Sized>(
                 if chunks <= 3 {
                     println!(
                         "  chunk {chunks} type={} samp={} step={:?}",
-                        chunk.event_type, chunk.samp_ix, chunk.step_ix
+                        chunk.event_type.as_str(),
+                        chunk.samp_ix,
+                        chunk.step_ix
                     );
                 }
             }
@@ -164,7 +159,7 @@ fn encode_vibe_request(
         image: inputs::source(args, size)?,
         information_extracted: 1.0,
         model,
-        strict_mode: args.strict,
+        policy: args.policy(),
     })
 }
 
@@ -175,12 +170,20 @@ fn generation_request(
 ) -> TaskResult<GenerateImageRequest> {
     let mut request = base_request(args, model, size);
     match args.preset {
-        Preset::I2i | Preset::Infill => {
-            let mut input = Img2ImgRequest::new(inputs::source(args, size)?, args.strength, 0.0);
-            if args.preset == Preset::Infill {
-                input.mask = Some(inputs::mask(args, size)?);
-            }
-            request.img2img = Some(input);
+        Preset::I2i => {
+            request.operation = GenerationInput::ImageToImage(ImageToImageInput::new(
+                inputs::source(args, size)?,
+                args.strength,
+                0.0,
+            ));
+        },
+        Preset::Infill => {
+            request.operation = GenerationInput::Inpainting(InpaintingInput::new(
+                inputs::source(args, size)?,
+                inputs::mask(args, size)?,
+                args.strength,
+                0.0,
+            ));
         },
         Preset::Charref => {
             request.references = Some(ReferenceSet {
@@ -206,7 +209,7 @@ fn base_request(args: &RunArgs, model: Model, size: ImageSize) -> GenerateImageR
         .variety_boost(args.variety)
         .quality(args.quality.into())
         .transparent_background(args.transparent)
-        .strict_mode(args.strict);
+        .policy(args.policy());
 
     if let Some(negative) = args.negative.as_ref() {
         builder = builder.negative_prompt(negative);

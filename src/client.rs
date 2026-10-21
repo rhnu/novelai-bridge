@@ -1,9 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
+};
 
 use crate::{
     AnlasEstimate, AnlasPricingContext, BridgeError, GenerateImageRequest, SubscriptionInfo,
 };
 
+mod diagnostics;
 mod director;
 mod execute;
 mod generate;
@@ -38,6 +42,7 @@ pub struct Client<T: ?Sized> {
     transport: Arc<T>,
     config: ClientConfig,
     account: Arc<Mutex<Option<SubscriptionInfo>>>,
+    request_counter: Arc<AtomicU64>,
     #[cfg(feature = "tokenizer")]
     tokenizers: Option<Arc<crate::Tokenizers>>,
     #[cfg(feature = "credit-observer")]
@@ -50,6 +55,7 @@ impl<T: ?Sized> Clone for Client<T> {
             transport: Arc::clone(&self.transport),
             config: self.config.clone(),
             account: Arc::clone(&self.account),
+            request_counter: Arc::clone(&self.request_counter),
             #[cfg(feature = "tokenizer")]
             tokenizers: self.tokenizers.clone(),
             #[cfg(feature = "credit-observer")]
@@ -65,6 +71,7 @@ impl<T: ?Sized> Client<T> {
             transport,
             config,
             account: Arc::new(Mutex::new(None)),
+            request_counter: Arc::new(AtomicU64::new(1)),
             #[cfg(feature = "tokenizer")]
             tokenizers: None,
             #[cfg(feature = "credit-observer")]
@@ -132,11 +139,16 @@ impl<T: ?Sized> Client<T> {
             .map_or_else(AnlasPricingContext::default, AnlasPricingContext::from)
     }
 
-    fn image_endpoint(&self, endpoint: crate::protocol::Endpoint) -> String {
-        format!(
-            "{}{}",
-            self.config.image_base_url.trim_end_matches('/'),
-            endpoint.path()
+    fn next_request_id(&self) -> u64 { self.request_counter.fetch_add(1, Ordering::Relaxed) }
+
+    fn request_span(operation: &'static str, request_id: u64) -> tracing::Span {
+        tracing::info_span!(
+            "novelai.request",
+            operation,
+            request_id,
+            endpoint = tracing::field::Empty,
+            model = tracing::field::Empty,
+            tool = tracing::field::Empty
         )
     }
 }

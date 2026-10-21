@@ -1,8 +1,8 @@
 use super::{Field, Normalizer};
 use crate::{
-    BridgeError, Character, CharacterPositionProfile, CharacterSet, GenerateImageRequest,
-    InvalidRequest, ModelDescriptor,
-    generation::{CharacterField, NormalizationChange, characters::is_center_position},
+    BridgeError, Character, CharacterField, CharacterPositionProfile, CharacterSet,
+    GenerateImageRequest, InvalidRequest, ModelDescriptor,
+    generation::{NormalizationChange, characters::is_center_position},
 };
 
 impl Normalizer {
@@ -27,9 +27,9 @@ impl Normalizer {
 
         if let Some(set) = params.characters.as_mut() {
             let limit = descriptor.prompt().max_characters() as usize;
-            if set.enabled_count() > limit && self.reject {
+            if set.enabled_count() > limit && self.policy.is_reject() {
                 return Err(InvalidRequest::NumericOutOfRange {
-                    field: Field::Characters.to_string(),
+                    field: Field::Characters.into(),
                     value: f64::from(u32::try_from(set.enabled_count()).unwrap_or(u32::MAX)),
                     min: 0.0,
                     max: f64::from(descriptor.prompt().max_characters()),
@@ -71,7 +71,7 @@ impl Normalizer {
                         index,
                         field: CharacterField::Prompt,
                     }
-                    .to_string(),
+                    .into(),
                 }
                 .into());
             }

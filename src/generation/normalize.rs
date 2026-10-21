@@ -2,29 +2,33 @@ mod characters;
 mod references;
 mod values;
 
-use super::{
-    GenerationField as Field, GuidanceField, ImageInputField, NormalizationChange,
-    NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
-};
+use super::{NormalizationChange, NormalizationDiagnostic, NormalizedGeneration};
 use crate::{
-    BridgeError, GenerateImageRequest, GenerationConstraints, GuidanceParams, Img2ImgRequest,
-    InvalidRequest, ModelDescriptor, QualityPreset,
+    BridgeError, GenerateImageRequest, GenerationConstraints, GenerationField as Field,
+    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, ModelDescriptor, QualityPreset,
+    ValidationPolicy,
 };
 
 pub(super) fn normalize(
     mut request: GenerateImageRequest,
-    policy: NormalizationPolicy,
+    policy: ValidationPolicy,
 ) -> Result<NormalizedGeneration, BridgeError> {
-    request.strict_mode = policy == NormalizationPolicy::Reject;
+    request.policy = policy;
     let descriptor = request.descriptor();
     let mut normalizer = Normalizer {
         constraints: *descriptor.constraints(),
-        reject: request.strict_mode,
+        policy,
         diagnostics: Vec::new(),
     };
     validate_prompt(&request)?;
     normalizer.normalize_base_fields(&mut request)?;
     normalizer.apply_capability_gates(&mut request, descriptor)?;
+    let model_id = descriptor.model_id_for(request.mode()).ok_or_else(|| {
+        InvalidRequest::UnsupportedModelFeature {
+            feature: Field::ImageInput(ImageInputField::Mask).into(),
+            required_model: "models with an inpainting variant".to_owned(),
+        }
+    })?;
     if let Some(characters) = request.characters.as_mut() {
         Normalizer::validate_character_inputs(&characters.characters)?;
         if let Some(profile) = descriptor.prompt().characters {
@@ -35,16 +39,22 @@ pub(super) fn normalize(
         normalizer.normalize_character_references(references)?;
         normalizer.normalize_vibe_transfer(references.vibe_transfer.as_mut())?;
     }
-    normalizer.normalize_img2img(request.img2img.as_mut())?;
+    normalizer.normalize_operation(&mut request.operation)?;
     let schedule = descriptor
         .sampling()
         .resolve_noise_schedule(request.sampling.noise_schedule);
     if schedule != request.sampling.noise_schedule {
-        normalizer.record(Field::NoiseSchedule, NormalizationChange::Fallback);
+        normalizer.require_capability(
+            false,
+            Field::NoiseSchedule,
+            "a model supporting the selected noise schedule",
+            NormalizationChange::Fallback,
+        )?;
         request.sampling.noise_schedule = schedule;
     }
     let prompts = request.assemble_prompts();
     Ok(NormalizedGeneration {
+        model_id,
         request,
         prompts,
         diagnostics: normalizer.diagnostics,
@@ -53,7 +63,7 @@ pub(super) fn normalize(
 
 struct Normalizer {
     constraints: GenerationConstraints,
-    reject: bool,
+    policy: ValidationPolicy,
     diagnostics: Vec<NormalizationDiagnostic>,
 }
 
@@ -106,7 +116,6 @@ impl Normalizer {
             self.normalize_image_dimension(Field::Width, params.core.size.width)?;
         params.core.size.height =
             self.normalize_image_dimension(Field::Height, params.core.size.height)?;
-        params.core.size = self.normalize_canvas_area(params.core.size)?;
         Ok(())
     }
 
@@ -117,20 +126,6 @@ impl Normalizer {
         descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
         self.gate_characters(params, descriptor)?;
-        if params
-            .img2img
-            .as_ref()
-            .is_some_and(Img2ImgRequest::is_infill)
-            && !self.require_capability(
-                descriptor.support().inpainting.is_some(),
-                Field::ImageInput(ImageInputField::Mask),
-                "models with an inpainting variant",
-                NormalizationChange::Unsupported,
-            )?
-            && let Some(input) = params.img2img.as_mut()
-        {
-            input.mask = None;
-        }
         self.normalize_references(params, descriptor)?;
         if params.core.quality == QualityPreset::Light
             && !self.require_capability(
@@ -211,7 +206,7 @@ impl Normalizer {
         Ok(())
     }
 
-    /// Returns whether the feature should be kept, honoring `self.reject`.
+    /// Returns whether the feature should be kept, honoring the validation policy.
     fn require_capability(
         &mut self,
         supported: bool,
@@ -222,9 +217,9 @@ impl Normalizer {
         if supported {
             return Ok(true);
         }
-        if self.reject {
+        if self.policy.is_reject() {
             return Err(InvalidRequest::UnsupportedModelFeature {
-                feature: feature.to_string(),
+                feature: feature.into(),
                 required_model: required_model.to_owned(),
             }
             .into());
@@ -237,7 +232,7 @@ impl Normalizer {
 fn validate_prompt(params: &GenerateImageRequest) -> Result<(), BridgeError> {
     if params.core.prompt.trim().is_empty() {
         return Err(InvalidRequest::EmptyField {
-            field: Field::Prompt.to_string(),
+            field: Field::Prompt.into(),
         }
         .into());
     }

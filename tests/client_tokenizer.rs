@@ -3,9 +3,10 @@
 use std::sync::{Arc, LazyLock};
 
 use novelai_bridge::{
-    BridgeError, Character, CharacterSet, Client, ClientConfig, FramingPolicy,
-    GenerateImageRequest, GenerateImageStreamRequest, ImageTokenizerKind, InvalidRequest, Model,
-    QualityPreset, TokenCount, TokenEncoder, TokenId, TokenizerError, Tokenizers, UcPreset,
+    BridgeError, Character, CharacterField, CharacterSet, Client, ClientConfig, FramingPolicy,
+    GenerateImageRequest, GenerateImageStreamRequest, GenerationField, ImageTokenizerKind,
+    InvalidRequest, Model, QualityPreset, RequestField, TokenCount, TokenEncoder, TokenId,
+    TokenizerError, Tokenizers, UcPreset, ValidationPolicy,
 };
 
 use crate::support::MockTransport;
@@ -113,7 +114,7 @@ fn all_counting_entry_points_include_presets_and_use_the_same_framing() {
 }
 
 #[tokio::test]
-async fn strict_limits_reject_each_field_before_transport() {
+async fn reject_policy_token_limits_fail_before_transport() {
     for model in [
         Model::NaiDiffusion3,
         Model::NaiDiffusion45Full,
@@ -125,16 +126,16 @@ async fn strict_limits_reject_each_field_before_transport() {
             let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
                 .with_tokenizers(TOKENIZERS.clone());
             let mut params = request(model);
-            params.strict_mode = true;
+            params.policy = ValidationPolicy::Reject;
             if negative {
                 params.core.negative_prompt = Some("hello ".repeat(1600));
             } else {
                 params.core.prompt = "hello ".repeat(1600);
             }
-            let expected = if negative {
-                "negative_prompt"
+            let expected: RequestField = if negative {
+                GenerationField::NegativePrompt.into()
             } else {
-                "prompt"
+                GenerationField::Prompt.into()
             };
             assert!(
                 matches!(client.generate(params).await, Err(BridgeError::InvalidRequest(
@@ -148,13 +149,13 @@ async fn strict_limits_reject_each_field_before_transport() {
 
 #[cfg(feature = "streaming")]
 #[tokio::test]
-async fn streaming_shares_the_same_limit_check_and_non_strict_keeps_text() {
+async fn streaming_shares_token_limits_and_normalize_policy_keeps_text() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
         .with_tokenizers(TOKENIZERS.clone());
     let mut params = request(Model::NaiDiffusion5Curated);
     params.core.prompt = "hello ".repeat(1000);
-    params.strict_mode = true;
+    params.policy = ValidationPolicy::Reject;
     let stream = GenerateImageStreamRequest {
         base: params.clone(),
         ..Default::default()
@@ -166,7 +167,7 @@ async fn streaming_shares_the_same_limit_check_and_non_strict_keeps_text() {
         ))
     ));
     assert!(transport.last_body().is_none());
-    params.strict_mode = false;
+    params.policy = ValidationPolicy::Normalize;
     client.generate(params.clone()).await.unwrap();
     assert_eq!(
         transport.last_body().unwrap()["parameters"]["v4_prompt"]["caption"]["base_caption"],
@@ -186,7 +187,7 @@ async fn streaming_shares_the_same_limit_check_and_non_strict_keeps_text() {
 #[tokio::test]
 async fn enabled_characters_preserve_original_indices_and_positions() {
     let mut params = request(Model::NaiDiffusion5Curated);
-    params.strict_mode = true;
+    params.policy = ValidationPolicy::Reject;
     params.characters = Some(CharacterSet {
         use_coords: Some(true),
         characters: vec![
@@ -237,11 +238,15 @@ async fn enabled_characters_preserve_original_indices_and_positions() {
         let transport = MockTransport::default();
         let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
             .with_tokenizers(TOKENIZERS.clone());
-        let expected = if negative {
-            "characters[1].negative_prompt"
-        } else {
-            "characters[1].prompt"
-        };
+        let expected: RequestField = GenerationField::Character {
+            index: 1,
+            field: if negative {
+                CharacterField::NegativePrompt
+            } else {
+                CharacterField::Prompt
+            },
+        }
+        .into();
         assert!(
             matches!(client.generate(params).await, Err(BridgeError::InvalidRequest(
             InvalidRequest::PromptTokenLimitExceeded { field, .. })) if field == expected)
@@ -256,7 +261,7 @@ async fn no_tokenizers_preserves_generation_but_explicit_missing_registry_errors
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let mut params = request(Model::NaiDiffusion5Curated);
     params.core.prompt = "hello ".repeat(1000);
-    params.strict_mode = true;
+    params.policy = ValidationPolicy::Reject;
     assert!(matches!(
         client.count_tokens(&params),
         Err(BridgeError::Tokenizer(
@@ -278,7 +283,7 @@ async fn no_tokenizers_preserves_generation_but_explicit_missing_registry_errors
 }
 
 #[tokio::test]
-async fn non_strict_normalization_and_tokenizer_injection_do_not_change_wire() {
+async fn normalize_policy_and_tokenizer_injection_preserve_the_same_wire() {
     for model in [
         Model::NaiDiffusion3,
         Model::NaiDiffusion45Full,

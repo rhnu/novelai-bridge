@@ -17,7 +17,7 @@ pub enum VibeMetadataSource {
 }
 
 /// A single vibe-related metadata entry recovered from a PNG payload.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct VibeMetadataEntry {
     /// The source that produced this entry.
     pub source: VibeMetadataSource,
@@ -35,12 +35,31 @@ pub struct VibeMetadataEntry {
     pub has_image: bool,
 }
 
+impl std::fmt::Debug for VibeMetadataEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VibeMetadataEntry")
+            .field("source", &self.source)
+            .field("has_encoding", &self.encoding.is_some())
+            .field("model_encoding_count", &self.model_encodings.len())
+            .field("has_image", &self.has_image)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Recoverable issue encountered while interpreting PNG text metadata.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PngMetadataWarning {
     /// A non-empty `Comment` text chunk was present but was not valid supported JSON.
-    InvalidCommentJson,
+    InvalidCommentJson {
+        /// Complete parser diagnostic without retaining the comment payload.
+        message: String,
+    },
+    /// A recognized numeric field could not be represented as a finite value.
+    InvalidNumericValue {
+        field: MetadataField,
+        message: String,
+    },
     /// A compressed PNG text chunk could not be decoded within the supported limit.
     InvalidTextChunk {
         /// PNG text chunk keyword.
@@ -50,8 +69,26 @@ pub enum PngMetadataWarning {
     },
 }
 
+/// Recognized numeric metadata fields, independent of serialized spellings.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MetadataField {
+    Scale,
+    CfgRescale,
+    VibeStrength,
+    VibeInformationExtracted,
+}
+
+/// Character conditioning recovered without losing the source list's positions.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CharacterMetadata {
+    pub source_index: usize,
+    pub prompt: Option<String>,
+    pub negative_prompt: Option<String>,
+}
+
 /// Parsed metadata recovered from a PNG image payload.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct PngMetadata {
     /// Prompt text when present.
     pub prompt: Option<String>,
@@ -83,10 +120,8 @@ pub struct PngMetadata {
     pub source: Option<String>,
     /// Software text chunk value when present.
     pub software: Option<String>,
-    /// Extracted V4 character prompts.
-    pub character_prompts: Vec<String>,
-    /// Extracted V4 negative character prompts.
-    pub character_negative_prompts: Vec<String>,
+    /// V4 character prompts paired by source index, including empty entries.
+    pub characters: Vec<CharacterMetadata>,
     /// Recovered vibe metadata entries.
     pub vibe_entries: Vec<VibeMetadataEntry>,
     /// All text chunks grouped by key.
@@ -95,6 +130,18 @@ pub struct PngMetadata {
     pub raw_comment_json: Option<Value>,
     /// Recoverable interpretation issues; successfully decoded text chunks remain available.
     pub warnings: Vec<PngMetadataWarning>,
+}
+
+impl std::fmt::Debug for PngMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PngMetadata")
+            .field("has_generation_data", &self.has_generation_data())
+            .field("characters", &self.characters.len())
+            .field("vibe_entries", &self.vibe_entries.len())
+            .field("text_chunk_keys", &self.text_chunks.len())
+            .field("warnings", &self.warnings)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PngMetadata {
@@ -118,8 +165,7 @@ impl PngMetadata {
             || self.cfg_rescale.is_some()
             || self.uc_preset.is_some()
             || self.quality_toggle.is_some()
-            || !self.character_prompts.is_empty()
-            || !self.character_negative_prompts.is_empty()
+            || !self.characters.is_empty()
     }
 }
 

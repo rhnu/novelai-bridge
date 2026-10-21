@@ -1,10 +1,10 @@
 use crate::{
-    BridgeError, InvalidRequest, Model, NoiseSchedule, VibeEncoding, VibeReference,
-    VibeTransferConfig,
+    BridgeError, CharacterField, GenerationField, ImageInputField, InvalidRequest, Model,
+    NoiseSchedule, ValidationPolicy, VibeEncoding, VibeReference, VibeTransferConfig,
     generation::{
-        Character, CharacterField, CharacterPosition, CharacterReference, CharacterReferenceType,
-        CharacterSet, GenerateImageRequest, GenerationField, ImageInputField, Img2ImgRequest,
-        NormalizationChange, NormalizationPolicy, ReferenceSet, test_support::image,
+        Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
+        GenerateImageRequest, GenerationInput, ImageToImageInput, InpaintingInput,
+        NormalizationChange, ReferenceSet, test_support::image,
     },
 };
 
@@ -48,13 +48,11 @@ fn normalization_is_deterministic_and_idempotent() {
 #[test]
 fn explicit_policy_overrides_editable_policy_and_reports_exact_paths() {
     let mut input = request();
-    input.strict_mode = true;
+    input.policy = ValidationPolicy::Reject;
     input.sampling.steps = 0;
     assert!(input.clone().normalize().is_err());
-    let plan = input
-        .normalize_with(NormalizationPolicy::Normalize)
-        .unwrap();
-    assert_eq!(plan.policy(), NormalizationPolicy::Normalize);
+    let plan = input.normalize_with(ValidationPolicy::Normalize).unwrap();
+    assert_eq!(plan.policy(), ValidationPolicy::Normalize);
     assert_eq!(plan.request().sampling.steps, 1);
     assert_eq!(plan.diagnostics()[0].field, GenerationField::Steps);
     assert_eq!(plan.diagnostics()[0].field.to_string(), "sampling.steps");
@@ -81,7 +79,7 @@ fn disabled_and_overflow_entries_do_not_validate_and_keep_input_indices() {
     assert!(
         input
             .clone()
-            .normalize_with(NormalizationPolicy::Reject)
+            .normalize_with(ValidationPolicy::Reject)
             .is_err()
     );
     let plan = input.normalize().unwrap();
@@ -99,14 +97,14 @@ fn disabled_and_overflow_entries_do_not_validate_and_keep_input_indices() {
     )));
     assert!(
         plan.into_request()
-            .normalize_with(NormalizationPolicy::Reject)
+            .normalize_with(ValidationPolicy::Reject)
             .is_ok()
     );
 }
 
 #[test]
 fn finite_values_are_required_in_both_policies() {
-    for policy in [NormalizationPolicy::Reject, NormalizationPolicy::Normalize] {
+    for policy in [ValidationPolicy::Reject, ValidationPolicy::Normalize] {
         for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
             let mut input = request();
             input.sampling.scale = value;
@@ -123,7 +121,7 @@ fn finite_values_are_required_in_both_policies() {
 #[test]
 fn empty_vibe_is_always_absent_independent_of_other_reference_groups() {
     for character_present in [false, true] {
-        for policy in [NormalizationPolicy::Reject, NormalizationPolicy::Normalize] {
+        for policy in [ValidationPolicy::Reject, ValidationPolicy::Normalize] {
             let mut input = request();
             input.references = Some(ReferenceSet {
                 vibe_transfer: Some(VibeTransferConfig {
@@ -159,7 +157,7 @@ fn reference_conflict_uses_typed_fields_and_never_contains_payload_text() {
     assert!(
         input
             .clone()
-            .normalize_with(NormalizationPolicy::Reject)
+            .normalize_with(ValidationPolicy::Reject)
             .is_err()
     );
     let plan = input.normalize().unwrap();
@@ -192,27 +190,48 @@ fn request_with_references() -> GenerateImageRequest {
 #[test]
 fn image_and_mask_strengths_use_separate_bounds() {
     let mut ordinary = request();
-    ordinary.img2img = Some(Img2ImgRequest::new(image(), 1.0, 0.0));
-    assert!(
-        ordinary
-            .normalize_with(NormalizationPolicy::Reject)
-            .is_err()
-    );
+    ordinary.operation = GenerationInput::ImageToImage(ImageToImageInput::new(image(), 1.0, 0.0));
+    assert!(ordinary.normalize_with(ValidationPolicy::Reject).is_err());
     let mut masked = request();
-    let mut source = Img2ImgRequest::new(image(), 1.0, 0.0);
-    source.mask = Some(image());
-    masked.img2img = Some(source);
+    masked.operation =
+        GenerationInput::Inpainting(InpaintingInput::new(image(), image(), 1.0, 0.0));
     assert!(
         masked
             .clone()
-            .normalize_with(NormalizationPolicy::Reject)
+            .normalize_with(ValidationPolicy::Reject)
             .is_ok()
     );
-    masked.img2img.as_mut().unwrap().strength = 1.1;
+    let GenerationInput::Inpainting(input) = &mut masked.operation else {
+        unreachable!()
+    };
+    input.strength = 1.1;
     let plan = masked.normalize().unwrap();
     assert!(
         plan.diagnostics()
             .iter()
             .any(|entry| entry.field == GenerationField::ImageInput(ImageInputField::Strength))
+    );
+}
+
+#[test]
+fn unsupported_noise_schedule_obeys_the_same_policy_as_other_capabilities() {
+    let mut input = request();
+    input.sampling.noise_schedule = NoiseSchedule::Native;
+    let error = input
+        .clone()
+        .normalize_with(ValidationPolicy::Reject)
+        .unwrap_err();
+    assert!(
+        matches!(error, BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { feature, .. })
+        if feature == GenerationField::NoiseSchedule.into())
+    );
+    let normalized = input.normalize_with(ValidationPolicy::Normalize).unwrap();
+    assert_eq!(
+        normalized.request().sampling.noise_schedule,
+        NoiseSchedule::Karras
+    );
+    assert!(
+        matches!(normalized.diagnostics(), [entry] if entry.field == GenerationField::NoiseSchedule
+        && matches!(entry.change, NormalizationChange::Fallback))
     );
 }

@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use anyhow::Context as _;
 use flate2::{Compression, GzBuilder, read::GzDecoder};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -24,15 +25,17 @@ struct Asset {
 
 pub async fn fetch() -> crate::TaskResult<()> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/tokenizer-assets/assets");
-    let sources: Sources =
-        toml::from_str(&std::fs::read_to_string(directory.join("SOURCES.toml"))?)?;
+    let sources: Sources = toml::from_str(
+        &std::fs::read_to_string(directory.join("SOURCES.toml"))
+            .context("read tokenizer asset sources")?,
+    )?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()?;
     for asset in sources.asset {
         if Path::new(&asset.output).components().count() != 1 || asset.output.contains(['/', '\\'])
         {
-            return Err("asset output must be a filename".into());
+            anyhow::bail!("asset output must be a filename");
         }
         let target = directory.join(&asset.output);
         let upstream = client
@@ -44,7 +47,7 @@ pub async fn fetch() -> crate::TaskResult<()> {
             .await?;
         let digest = format!("{:x}", Sha256::digest(&upstream));
         if digest != asset.sha256 {
-            return Err(format!("SHA-256 mismatch for {}: {digest}", asset.url).into());
+            anyhow::bail!("SHA-256 mismatch for {}: {digest}", asset.url);
         }
         let bytes = if asset.upstream_gzip {
             // Read the entire stream, including its checksum, before accepting it.
@@ -62,15 +65,19 @@ pub async fn fetch() -> crate::TaskResult<()> {
         } else {
             upstream.to_vec()
         };
-        if target.exists() && std::fs::read(&target)? != bytes {
-            return Err(format!(
+        if target.exists()
+            && std::fs::read(&target)
+                .with_context(|| format!("read tokenizer asset {}", target.display()))?
+                != bytes
+        {
+            anyhow::bail!(
                 "refusing to overwrite changed asset {}; inspect it before updating",
                 target.display()
-            )
-            .into());
+            );
         }
         if !target.exists() {
-            std::fs::write(&target, bytes)?;
+            std::fs::write(&target, bytes)
+                .with_context(|| format!("write tokenizer asset {}", target.display()))?;
         }
         println!("verified {} ({digest})", asset.output);
     }

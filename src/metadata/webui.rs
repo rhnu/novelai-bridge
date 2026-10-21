@@ -18,7 +18,7 @@ pub(super) fn parse_parameters_payload(parsed: &mut PngMetadata) {
     let Some(parameters) = first_chunk_value_ci(&parsed.text_chunks, KEY_PARAMETERS) else {
         return;
     };
-    let fallback = parse_webui_parameters(parameters);
+    let fallback = parse_webui_parameters(parameters, &mut parsed.warnings);
 
     parsed.prompt = parsed.prompt.take().or(fallback.prompt);
     parsed.negative_prompt = parsed.negative_prompt.take().or(fallback.negative_prompt);
@@ -31,7 +31,10 @@ pub(super) fn parse_parameters_payload(parsed: &mut PngMetadata) {
     parsed.model = parsed.model.take().or(fallback.model);
 }
 
-fn parse_webui_parameters(input: &str) -> ParameterFallback {
+fn parse_webui_parameters(
+    input: &str,
+    warnings: &mut Vec<super::PngMetadataWarning>,
+) -> ParameterFallback {
     let mut fallback = ParameterFallback::default();
     let input = input.trim();
     if input.is_empty() {
@@ -79,7 +82,11 @@ fn parse_webui_parameters(input: &str) -> ParameterFallback {
         match key.as_str() {
             "steps" => fallback.steps = value.parse::<u32>().ok(),
             "sampler" => fallback.sampler = non_empty_string(value),
-            "cfg scale" | "cfg_scale" | "cfg" => fallback.scale = value.parse::<f32>().ok(),
+            "cfg scale" | "cfg_scale" | "cfg" => {
+                let raw = serde_json::Value::String(value.to_owned());
+                fallback.scale = super::value::value_to_f32(&raw);
+                super::value::numeric_diagnostic(&raw, super::MetadataField::Scale, warnings);
+            },
             "seed" => fallback.seed = value.parse::<i64>().ok(),
             "size" => {
                 if let Some((width, height)) = parse_size(value) {

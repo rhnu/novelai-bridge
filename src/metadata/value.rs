@@ -14,7 +14,10 @@ pub(super) fn extract_non_empty_string(
     })
 }
 
-pub(super) fn extract_v4_character_prompts(object: &Map<String, Value>, key: &str) -> Vec<String> {
+pub(super) fn extract_v4_character_prompts(
+    object: &Map<String, Value>,
+    key: &str,
+) -> Vec<Option<String>> {
     object
         .get(key)
         .and_then(Value::as_object)
@@ -25,7 +28,7 @@ pub(super) fn extract_v4_character_prompts(object: &Map<String, Value>, key: &st
         .map(|values| {
             values
                 .iter()
-                .filter_map(|value| {
+                .map(|value| {
                     value
                         .as_object()
                         .and_then(|item| item.get("char_caption"))
@@ -101,12 +104,27 @@ pub(super) fn value_to_u32(value: &Value) -> Option<u32> {
 }
 
 pub(super) fn value_to_f32(value: &Value) -> Option<f32> {
-    if let Some(raw) = value.as_f64() {
-        return Some(f64_to_f32(raw));
+    let number = if let Some(raw) = value.as_f64() {
+        f64_to_f32(raw)
+    } else {
+        value
+            .as_str()
+            .and_then(|raw| raw.trim().parse::<f32>().ok())?
+    };
+    number.is_finite().then_some(number)
+}
+
+pub(super) fn numeric_diagnostic(
+    value: &Value,
+    field: super::MetadataField,
+    warnings: &mut Vec<super::PngMetadataWarning>,
+) {
+    if !value.is_null() && value_to_f32(value).is_none() {
+        warnings.push(super::PngMetadataWarning::InvalidNumericValue {
+            field,
+            message: "value is not a finite representable f32".to_owned(),
+        });
     }
-    value
-        .as_str()
-        .and_then(|raw| raw.trim().parse::<f32>().ok())
 }
 
 #[expect(
@@ -132,16 +150,20 @@ pub(super) fn non_empty_string(value: &str) -> Option<String> {
 }
 
 pub(super) fn parse_json_payload(value: &str) -> Option<Value> {
+    parse_json_payload_result(value).ok().flatten()
+}
+
+pub(super) fn parse_json_payload_result(value: &str) -> Result<Option<Value>, serde_json::Error> {
     let text = value.trim();
     if text.is_empty() {
-        return None;
+        return Ok(None);
     }
-    let json = serde_json::from_str::<Value>(text).ok()?;
-    match json {
+    let json = serde_json::from_str::<Value>(text)?;
+    Ok(match json {
         Value::Object(_) => Some(json),
-        Value::String(inner) => serde_json::from_str::<Value>(inner.trim())
-            .ok()
-            .filter(Value::is_object),
+        Value::String(inner) => {
+            Some(serde_json::from_str::<Value>(inner.trim())?).filter(Value::is_object)
+        },
         _ => None,
-    }
+    })
 }

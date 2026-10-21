@@ -7,9 +7,12 @@ use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use secrecy::ExposeSecret;
 
+use super::{
+    ResponseLimits, Transport, TransportHeader, TransportMethod, TransportRequest,
+    TransportResponse, limits::BodyBuffer,
+};
 #[cfg(feature = "reqwest-streaming")]
 use super::{StreamingTransport, TransportSseEvent, TransportSseResponse};
-use super::{Transport, TransportHeader, TransportMethod, TransportRequest, TransportResponse};
 use crate::{TransportError, TransportOperation};
 
 mod credentials;
@@ -22,6 +25,7 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 pub struct ReqwestOptions {
     pub api_key_source: ApiKeySource,
     pub timeout_ms: u64,
+    pub response_limits: ResponseLimits,
 }
 
 impl Default for ReqwestOptions {
@@ -29,6 +33,7 @@ impl Default for ReqwestOptions {
         Self {
             api_key_source: ApiKeySource::Environment,
             timeout_ms: DEFAULT_TIMEOUT_MS,
+            response_limits: ResponseLimits::default(),
         }
     }
 }
@@ -36,6 +41,7 @@ impl Default for ReqwestOptions {
 /// Default HTTP backend with optional SSE framing.
 pub struct ReqwestTransport {
     client: reqwest::Client,
+    response_limits: ResponseLimits,
 }
 
 impl ReqwestTransport {
@@ -53,10 +59,6 @@ impl ReqwestTransport {
         authorization.set_sensitive(true);
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(reqwest::header::AUTHORIZATION, authorization);
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            reqwest::header::HeaderValue::from_static("application/json"),
-        );
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_millis(options.timeout_ms))
@@ -64,12 +66,27 @@ impl ReqwestTransport {
             .map_err(|source| {
                 TransportError::new(TransportOperation::BuildClient, None, Box::new(source))
             })?;
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            response_limits: options.response_limits,
+        })
     }
 
     /// Uses an already configured HTTP client, including its authentication and timeout.
     #[must_use]
-    pub const fn from_client(client: reqwest::Client) -> Self { Self { client } }
+    pub fn from_client(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            response_limits: ResponseLimits::default(),
+        }
+    }
+
+    /// Replaces response budgets independently of authentication and timeout settings.
+    #[must_use]
+    pub const fn with_response_limits(mut self, limits: ResponseLimits) -> Self {
+        self.response_limits = limits;
+        self
+    }
 
     async fn send(
         &self,
@@ -82,10 +99,11 @@ impl ReqwestTransport {
         if let Some(accept) = request.accept {
             builder = builder.header(reqwest::header::ACCEPT, accept);
         }
+        if let Some(content_type) = request.content_type {
+            builder = builder.header(reqwest::header::CONTENT_TYPE, content_type);
+        }
         if let Some(body) = request.body {
-            builder = builder
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(body);
+            builder = builder.body(body);
         }
         let endpoint = request.endpoint;
         let response = builder.send().await.map_err(|source| {
@@ -106,7 +124,7 @@ impl Transport for ReqwestTransport {
         request: TransportRequest,
     ) -> Result<TransportResponse, TransportError> {
         let (response, endpoint) = self.send(request).await?;
-        buffer_response(response, endpoint).await
+        buffer_response(response, endpoint, self.response_limits).await
     }
 }
 
@@ -119,11 +137,27 @@ impl StreamingTransport for ReqwestTransport {
     ) -> Result<TransportSseResponse, TransportError> {
         let (response, endpoint) = self.send(request).await?;
         if !response.status().is_success() || !is_event_stream(response.headers()) {
-            return buffer_response(response, endpoint)
+            return buffer_response(response, endpoint, self.response_limits)
                 .await
                 .map(TransportSseResponse::Http);
         }
-        let mut events = response.bytes_stream().eventsource();
+        let mut chunks = response.bytes_stream();
+        let mut budget = super::limits::SseFrameBudget::new(self.response_limits.sse_event_bytes);
+        // Check each raw chunk before eventsource-stream is allowed to append it to its buffers.
+        let bounded = async_stream::stream! {
+            while let Some(chunk) = chunks.next().await {
+                let chunk = match chunk {
+                    Ok(chunk) => chunk,
+                    Err(error) => { yield Err(SseInputError::Request(error)); return; },
+                };
+                if let Err(error) = budget.check(&chunk) {
+                    yield Err(SseInputError::Limit(error));
+                    return;
+                }
+                yield Ok(chunk);
+            }
+        };
+        let mut events = Box::pin(bounded).eventsource();
         let output = async_stream::try_stream! {
             while let Some(item) = events.next().await {
                 let event = item.map_err(|source| TransportError::new(
@@ -148,8 +182,9 @@ fn is_event_stream(headers: &reqwest::header::HeaderMap) -> bool {
 mod tests;
 
 async fn buffer_response(
-    response: reqwest::Response,
+    mut response: reqwest::Response,
     endpoint: String,
+    limits: ResponseLimits,
 ) -> Result<TransportResponse, TransportError> {
     let status = response.status().as_u16();
     let headers = response
@@ -160,16 +195,45 @@ async fn buffer_response(
             value: value.as_bytes().to_vec(),
         })
         .collect();
-    let body = response.bytes().await.map_err(|source| {
+    let successful = response.status().is_success();
+    let limit = if successful {
+        limits.success_body_bytes
+    } else {
+        limits.error_body_bytes
+    };
+    let mut body = BodyBuffer::new(limit, !successful);
+    let mut body_truncated = false;
+    while let Some(chunk) = response.chunk().await.map_err(|source| {
         TransportError::new(
             TransportOperation::ReadResponseBytes,
-            Some(endpoint),
+            Some(endpoint.clone()),
             Box::new(source),
         )
-    })?;
+    })? {
+        if !body.append(&chunk).map_err(|source| {
+            TransportError::new(
+                TransportOperation::ReadResponseBytes,
+                Some(endpoint.clone()),
+                Box::new(source),
+            )
+        })? {
+            body_truncated = true;
+            break;
+        }
+    }
     Ok(TransportResponse {
         status,
         headers,
-        body: body.to_vec(),
+        body: body.into_bytes(),
+        body_truncated,
     })
+}
+
+#[cfg(feature = "reqwest-streaming")]
+#[derive(Debug, thiserror::Error)]
+enum SseInputError {
+    #[error(transparent)]
+    Request(reqwest::Error),
+    #[error(transparent)]
+    Limit(super::ResponseLimitExceeded),
 }

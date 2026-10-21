@@ -1,36 +1,39 @@
 use super::{Field, Normalizer};
 use crate::{
-    BridgeError, ImageSize, Img2ImgRequest, InvalidRequest,
-    generation::ImageInputField,
+    BridgeError, GenerationInput, ImageInputField, InvalidRequest,
     parameters::bounds::{normalize_float, normalize_integer},
 };
 
 impl Normalizer {
-    pub(super) fn normalize_img2img(
+    pub(super) fn normalize_operation(
         &mut self,
-        img2img: Option<&mut Img2ImgRequest>,
+        operation: &mut GenerationInput,
     ) -> Result<(), BridgeError> {
-        let Some(img2img) = img2img else {
-            return Ok(());
+        let (strength, noise, limits) = match operation {
+            GenerationInput::TextToImage => return Ok(()),
+            GenerationInput::ImageToImage(input) => (
+                &mut input.strength,
+                &mut input.noise,
+                self.constraints.img2img_strength,
+            ),
+            GenerationInput::Inpainting(input) => (
+                &mut input.strength,
+                &mut input.noise,
+                self.constraints.inpaint_strength,
+            ),
         };
-
-        let limits = self.constraints;
-        let strength = if img2img.is_infill() {
-            limits.inpaint_strength
-        } else {
-            limits.img2img_strength
-        };
-        img2img.strength = self.normalize_f32_range(
+        *strength = self.normalize_f32_range(
             Field::ImageInput(ImageInputField::Strength),
-            img2img.strength,
-            strength.min,
-            strength.max,
+            *strength,
+            limits.min,
+            limits.max,
         )?;
-        img2img.noise = self.normalize_f32_range(
+        let limits = self.constraints.img2img_noise;
+        *noise = self.normalize_f32_range(
             Field::ImageInput(ImageInputField::Noise),
-            img2img.noise,
-            limits.img2img_noise.min,
-            limits.img2img_noise.max,
+            *noise,
+            limits.min,
+            limits.max,
         )?;
         Ok(())
     }
@@ -42,7 +45,7 @@ impl Normalizer {
         min: u32,
         max: u32,
     ) -> Result<u32, BridgeError> {
-        let effective = normalize_integer(&field.to_string(), value, min, max, self.reject)?;
+        let effective = normalize_integer(field.into(), value, min, max, self.policy)?;
         self.adjusted(field, f64::from(value), f64::from(effective));
         Ok(effective)
     }
@@ -54,7 +57,7 @@ impl Normalizer {
         min: f32,
         max: f32,
     ) -> Result<f32, BridgeError> {
-        let effective = normalize_float(&field.to_string(), value, min, max, self.reject)?;
+        let effective = normalize_float(field.into(), value, min, max, self.policy)?;
         self.adjusted(field, f64::from(value), f64::from(effective));
         Ok(effective)
     }
@@ -65,12 +68,12 @@ impl Normalizer {
         value: u32,
     ) -> Result<u32, BridgeError> {
         let limits = self.constraints.canvas;
-        if self.reject
+        if self.policy.is_reject()
             && (!(limits.dimension.min..=limits.dimension.max).contains(&value)
                 || !value.is_multiple_of(limits.multiple))
         {
             return Err(InvalidRequest::InvalidImageDimension {
-                field: field_name.to_string(),
+                field: field_name.into(),
                 value,
                 min: limits.dimension.min,
                 max: limits.dimension.max,
@@ -84,43 +87,5 @@ impl Normalizer {
         let effective = snapped.clamp(limits.dimension.min, limits.dimension.max);
         self.adjusted(field_name, f64::from(value), f64::from(effective));
         Ok(effective)
-    }
-
-    pub(super) fn normalize_canvas_area(
-        &mut self,
-        size: ImageSize,
-    ) -> Result<ImageSize, BridgeError> {
-        let limits = self.constraints.canvas;
-        if size.pixels() <= limits.max_pixels {
-            return Ok(size);
-        }
-        if self.reject {
-            return Err(InvalidRequest::InvalidImageDimension {
-                field: Field::Size.to_string(),
-                value: size.width,
-                min: limits.dimension.min,
-                max: limits.dimension.max,
-                multiple_of: limits.multiple,
-            }
-            .into());
-        }
-
-        let mut shrunk = size;
-        while shrunk.pixels() > limits.max_pixels {
-            if (shrunk.width >= shrunk.height && shrunk.width > limits.dimension.min)
-                || shrunk.height == limits.dimension.min
-            {
-                shrunk.width -= limits.multiple;
-            } else {
-                shrunk.height -= limits.multiple;
-            }
-        }
-        self.adjusted(Field::Width, f64::from(size.width), f64::from(shrunk.width));
-        self.adjusted(
-            Field::Height,
-            f64::from(size.height),
-            f64::from(shrunk.height),
-        );
-        Ok(shrunk)
     }
 }

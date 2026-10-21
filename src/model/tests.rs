@@ -26,6 +26,10 @@ fn registered_factory_values_satisfy_their_constraints() {
         assert!((constraints.scale.min..=constraints.scale.max).contains(&defaults.sampling.scale));
         assert!((constraints.samples.min..=constraints.samples.max).contains(&defaults.n_samples));
         assert!(defaults.size.pixels() <= constraints.canvas.max_pixels);
+        // Every combination of supported dimensions fits the independent pricing ceiling.
+        assert!(
+            u64::from(constraints.canvas.dimension.max).pow(2) <= constraints.canvas.max_pixels
+        );
         for dimension in [defaults.size.width, defaults.size.height] {
             assert!(
                 (constraints.canvas.dimension.min..=constraints.canvas.dimension.max)

@@ -46,8 +46,8 @@ fn response_decoder_accepts_valid_raw_image_and_rejects_arbitrary_bytes() {
     let png = create_png_bytes(2, 2);
     let images = decode_generated_images(png.clone()).unwrap();
     assert_eq!(images.len(), 1);
-    assert_eq!(images[0].bytes, png);
-    assert_eq!(images[0].mime_type.as_deref(), Some("image/png"));
+    assert_eq!(images[0].bytes(), png);
+    assert_eq!(images[0].mime_type(), "image/png");
     assert!(decode_generated_images(b"not an image".to_vec()).is_err());
 }
 
@@ -82,7 +82,10 @@ fn archive_entry_limit_is_enforced_before_extraction() {
 fn metadata_problems_do_not_discard_a_valid_image() {
     let png = create_png_with_comment_text("not json");
     let image = decode_generated_images(png).unwrap().pop().unwrap();
-    assert!(matches!(image.metadata, GeneratedImageMetadata::Parsed(_)));
+    assert!(matches!(
+        image.metadata(),
+        GeneratedImageMetadata::Parsed(_)
+    ));
 }
 
 #[derive(Default)]
@@ -93,7 +96,7 @@ struct CountingPreprocessor {
 impl ImagePreprocessor for CountingPreprocessor {
     fn prepare(
         &self,
-        field: &str,
+        field: crate::RequestField,
         image: &EncodedImage,
         operation: ImagePreparation,
     ) -> Result<PreparedImage, BridgeError> {
@@ -106,16 +109,15 @@ impl ImagePreprocessor for CountingPreprocessor {
 #[test]
 fn custom_preprocessor_observes_each_semantic_input_once() {
     use crate::{
-        CharacterReference, CharacterReferenceType, GenerateImageRequest, Img2ImgRequest, Model,
+        CharacterReference, CharacterReferenceType, GenerateImageRequest, InpaintingInput, Model,
     };
-    let mut img2img = Img2ImgRequest::new(image(4, 3), 0.5, 0.0);
-    img2img.mask = Some(image(4, 3));
+    let inpainting = InpaintingInput::new(image(4, 3), image(4, 3), 0.5, 0.0);
     let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
         .size(ImageSize {
             width: 64,
             height: 64,
         })
-        .img2img(img2img)
+        .inpainting(inpainting)
         .character_references(vec![CharacterReference {
             image: image(3, 4),
             reference_type: CharacterReferenceType::Character,
@@ -178,16 +180,11 @@ struct PixelCopyPreprocessor;
 impl ImagePreprocessor for PixelCopyPreprocessor {
     fn prepare(
         &self,
-        _field: &str,
+        _field: crate::RequestField,
         image: &EncodedImage,
         _operation: ImagePreparation,
     ) -> Result<PreparedImage, BridgeError> {
-        let mut output = std::io::Cursor::new(Vec::new());
-        image
-            .pixels()
-            .write_to(&mut output, image::ImageFormat::Png)
-            .unwrap();
-        PreparedImage::from_png(output.into_inner())
+        PreparedImage::from_pixels(image.pixels())
     }
 }
 
@@ -196,7 +193,7 @@ fn custom_preprocessor_reuses_pixels_and_must_match_the_resolved_canvas() {
     let image = image(3, 2);
     let prepared = super::prepare_image(
         &PixelCopyPreprocessor,
-        "source",
+        crate::RequestField::Image,
         &image,
         ImagePreparation::Source(image.size()),
     )
@@ -207,7 +204,7 @@ fn custom_preprocessor_reuses_pixels_and_must_match_the_resolved_canvas() {
         height: 8,
     };
     assert!(
-        matches!(super::prepare_image(&PixelCopyPreprocessor, "source", &image, ImagePreparation::Mask(expected)), Err(BridgeError::InvalidRequest(crate::InvalidRequest::PreparedImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size())
+        matches!(super::prepare_image(&PixelCopyPreprocessor, crate::RequestField::Image, &image, ImagePreparation::Mask(expected)), Err(BridgeError::Preparation(crate::PreparationError::ImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size())
     );
 }
 
@@ -217,7 +214,7 @@ fn preprocessing_rejects_zero_canvas_before_calling_the_adapter() {
     assert!(
         super::prepare_image(
             &preprocessor,
-            "source",
+            crate::RequestField::Image,
             &image(2, 2),
             ImagePreparation::Source(ImageSize {
                 width: 0,
@@ -267,5 +264,184 @@ fn reference_canvas_preserves_the_supported_orientation_choices() {
             ImagePreparation::character_reference(source).target_size(),
             expected
         );
+    }
+}
+
+fn contains_limit(
+    error: &(dyn std::error::Error + 'static),
+    limit: crate::media_policy::ImageLimit,
+) -> bool {
+    if error
+        .downcast_ref::<crate::media_policy::ImagePolicyError>()
+        .is_some_and(|error| error.limit == limit)
+    {
+        return true;
+    }
+    error
+        .source()
+        .is_some_and(|source| contains_limit(source, limit))
+}
+
+#[test]
+fn png_structure_failures_are_rejected_by_every_validated_media_boundary() {
+    let mut truncated = create_png_bytes(2, 2);
+    truncated.truncate(truncated.len() - 12);
+    assert!(EncodedImage::from_bytes(truncated.clone()).is_err());
+    assert!(PreparedImage::from_png(truncated.clone()).is_err());
+    assert!(decode_generated_images(truncated).is_err());
+}
+
+#[test]
+fn media_limits_apply_before_pixels_are_allocated() {
+    use crate::media_policy::{ImageDecodePolicy, ImageLimit};
+    let policy = ImageDecodePolicy {
+        max_width: 1,
+        ..ImageDecodePolicy::default()
+    };
+    let bytes = create_png_bytes(2, 2);
+    for error in [
+        EncodedImage::from_bytes_with_policy(bytes.clone(), policy).unwrap_err(),
+        PreparedImage::from_png_with_policy(bytes.clone(), policy).unwrap_err(),
+        super::decode_generated_images_with_policy(bytes.clone(), policy).unwrap_err(),
+    ] {
+        assert!(contains_limit(&error, ImageLimit::Width));
+    }
+
+    let policy = ImageDecodePolicy {
+        max_decoded_bytes: 15,
+        ..ImageDecodePolicy::default()
+    };
+    assert!(contains_limit(
+        &EncodedImage::from_bytes_with_policy(bytes, policy).unwrap_err(),
+        ImageLimit::DecodedBytes
+    ));
+
+    // A large declared IHDR must be rejected before even reaching its stale CRC or image data.
+    let mut header = create_png_bytes(1, 1);
+    header[16..20].copy_from_slice(&u32::MAX.to_be_bytes());
+    assert!(contains_limit(
+        &EncodedImage::from_bytes(header).unwrap_err(),
+        ImageLimit::Width
+    ));
+}
+
+#[test]
+fn base64_budget_and_png_encoder_are_bounded_before_output_growth() {
+    use crate::media_policy::{ImageDecodePolicy, ImageLimit};
+    let policy = ImageDecodePolicy {
+        max_encoded_bytes: 2,
+        ..ImageDecodePolicy::default()
+    };
+    let error = EncodedImage::from_base64_with_policy(" A Q I D \n", policy).unwrap_err();
+    assert!(contains_limit(&error, ImageLimit::EncodedBytes));
+    let error =
+        PreparedImage::from_pixels_with_policy(&image::DynamicImage::new_rgb8(2, 2), policy)
+            .unwrap_err();
+    assert!(matches!(error, BridgeError::Preparation(_)));
+    assert!(contains_limit(&error, ImageLimit::EncodedBytes));
+}
+
+#[test]
+fn png_input_keeps_sixteen_bit_channels_without_a_second_decoder() {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Sixteen);
+    let mut writer = encoder.write_header().unwrap();
+    writer
+        .write_image_data(&[0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
+        .unwrap();
+    writer.finish().unwrap();
+    let image = EncodedImage::from_bytes(bytes).unwrap();
+    assert_eq!(
+        image.pixels().to_rgb16().as_raw(),
+        &[0x1234, 0x5678, 0x9ABC]
+    );
+}
+
+#[test]
+fn palette_png_is_expanded_and_non_png_formats_share_the_format_mapping() {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, 1, 1);
+    encoder.set_color(png::ColorType::Indexed);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder.set_palette(vec![10, 20, 30]);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&[0]).unwrap();
+    writer.finish().unwrap();
+    assert_eq!(
+        EncodedImage::from_bytes(bytes)
+            .unwrap()
+            .pixels()
+            .to_rgb8()
+            .as_raw(),
+        &[10, 20, 30]
+    );
+
+    for (format, expected) in [
+        (image::ImageFormat::Jpeg, super::ImageMediaFormat::Jpeg),
+        (image::ImageFormat::WebP, super::ImageMediaFormat::WebP),
+    ] {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(2, 2)
+            .write_to(&mut bytes, format)
+            .unwrap();
+        let generated = decode_generated_images(bytes.into_inner())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(generated.format(), expected);
+        assert_eq!(generated.mime_type(), expected.mime_type());
+        assert!(matches!(
+            generated.metadata(),
+            GeneratedImageMetadata::UnsupportedFormat
+        ));
+    }
+}
+
+#[test]
+fn preparation_checks_default_budgets_before_invoking_a_custom_adapter() {
+    use crate::media_policy::{ImageDecodePolicy, ImageLimit};
+    let relaxed = ImageDecodePolicy {
+        max_width: 20_000,
+        ..ImageDecodePolicy::default()
+    };
+    let source =
+        EncodedImage::from_bytes_with_policy(create_png_bytes(17_000, 1), relaxed).unwrap();
+    let adapter = CountingPreprocessor::default();
+    let error = super::prepare_image(
+        &adapter,
+        crate::RequestField::Image,
+        &source,
+        ImagePreparation::Source(source.size()),
+    )
+    .unwrap_err();
+    assert!(contains_limit(&error, ImageLimit::Width));
+    assert!(adapter.operations.lock().unwrap().is_empty());
+}
+
+#[test]
+fn rgb_webp_budget_accounts_for_the_backend_rgba_pixel_workspace() {
+    let pixels =
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(2, 2, image::Rgb([10, 20, 30])));
+    let mut output = std::io::Cursor::new(Vec::new());
+    pixels
+        .write_to(&mut output, image::ImageFormat::WebP)
+        .unwrap();
+    let policy = crate::ImageDecodePolicy {
+        max_decoded_bytes: 12,
+        ..Default::default()
+    };
+    let error = EncodedImage::from_bytes_with_policy(output.into_inner(), policy).unwrap_err();
+    let mut source: &(dyn std::error::Error + 'static) = &error;
+    loop {
+        if let Some(error) = source.downcast_ref::<crate::ImagePolicyError>() {
+            assert_eq!(error.limit, crate::ImageLimit::DecodedBytes);
+            assert_eq!(error.actual, 16);
+            break;
+        }
+        source = source
+            .source()
+            .expect("pixel workspace rejection retains its cause");
     }
 }

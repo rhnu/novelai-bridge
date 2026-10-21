@@ -1,6 +1,6 @@
 //! PNG validation, metadata formats and interpretation precedence.
 mod novelai;
-mod png;
+pub mod png;
 mod types;
 mod value;
 mod vibe;
@@ -8,10 +8,14 @@ mod webui;
 
 use png::{extract_png_text_chunks, first_chunk_value_ci};
 pub use types::{
-    GeneratedImageMetadata, PngMetadata, PngMetadataWarning, VibeMetadataEntry, VibeMetadataSource,
+    CharacterMetadata, GeneratedImageMetadata, MetadataField, PngMetadata, PngMetadataWarning,
+    VibeMetadataEntry, VibeMetadataSource,
 };
 
-use crate::BridgeError;
+use crate::{
+    BridgeError, RequestField,
+    media_policy::{ImageDecodePolicy, check_base64_budget},
+};
 const KEY_SOURCE: &str = "Source";
 const KEY_SOFTWARE: &str = "Software";
 
@@ -22,7 +26,13 @@ const KEY_SOFTWARE: &str = "Software";
 /// Returns [`BridgeError`] when the payload is empty, invalid base64/data URL input, or not a
 /// valid PNG payload.
 pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, BridgeError> {
-    let decoded = crate::payload::decode_image("metadata.image", image)?;
+    check_base64_budget(image, ImageDecodePolicy::default()).map_err(|source| {
+        crate::MetadataError::InvalidPngPayload {
+            field: RequestField::MetadataImage,
+            source: Box::new(source),
+        }
+    })?;
+    let decoded = crate::payload::decode_image(RequestField::MetadataImage, image)?;
     parse_png_metadata_from_bytes(decoded.as_slice())
 }
 
@@ -32,7 +42,23 @@ pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, Bridg
 ///
 /// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
 pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, BridgeError> {
-    let extracted = extract_png_text_chunks(bytes)?;
+    parse_png_metadata_from_bytes_with_policy(bytes, ImageDecodePolicy::default())
+}
+
+/// Parses complete PNG bytes within explicit media resource budgets.
+///
+/// # Errors
+/// Returns a metadata error for an invalid PNG or an exceeded resource budget.
+pub fn parse_png_metadata_from_bytes_with_policy(
+    bytes: &[u8],
+    policy: ImageDecodePolicy,
+) -> Result<PngMetadata, BridgeError> {
+    Ok(interpret_png_text(extract_png_text_chunks(
+        bytes, policy, false,
+    )?))
+}
+
+pub fn interpret_png_text(extracted: png::ExtractedPngText) -> PngMetadata {
     let mut parsed = PngMetadata {
         source: first_chunk_value_ci(&extracted.text_chunks, KEY_SOURCE).map(str::to_owned),
         software: first_chunk_value_ci(&extracted.text_chunks, KEY_SOFTWARE).map(str::to_owned),
@@ -59,7 +85,7 @@ pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, Bridge
             .map(str::to_owned);
     }
 
-    Ok(parsed)
+    parsed
 }
 
 /// Inspects a generated image without promoting metadata problems to generation failures.
@@ -82,9 +108,20 @@ pub fn inspect_generated_image_metadata(
         Ok(metadata) if metadata.is_empty() => GeneratedImageMetadata::NotPresent,
         Ok(metadata) => GeneratedImageMetadata::Parsed(Box::new(metadata)),
         Err(error) => GeneratedImageMetadata::Invalid {
-            message: error.to_string(),
+            message: format_error_chain(&error),
         },
     }
+}
+
+pub fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut message = error.to_string();
+    let mut cause = error.source();
+    while let Some(error) = cause {
+        message.push_str(": ");
+        message.push_str(&error.to_string());
+        cause = error.source();
+    }
+    message
 }
 
 /// Extracts an official serialized vibe document from complete PNG bytes.

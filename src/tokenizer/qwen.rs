@@ -138,7 +138,5 @@ impl super::TokenEncoder for QwenTokenizer {
         Self::encode(self, text, framing)
     }
 
-    fn vocabulary_size(&self) -> usize {
-        Self::vocabulary_size(self)
-    }
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }
