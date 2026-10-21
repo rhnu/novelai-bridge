@@ -27,13 +27,21 @@ impl<T: Transport + ?Sized> Client<T> {
     /// Returns request encoding, transport or response errors.
     pub async fn encode_vibe_prepared(
         &self,
-        prepared: PreparedVibe,
+        mut prepared: PreparedVibe,
     ) -> Result<VibeEncoding, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current().record("model", prepared.model().as_str());
-            let body = prepared.encode().inspect_err(report_failure)?;
+            let body = if self.needs_image_projection(false) {
+                prepared.take_request_body()
+            } else {
+                prepared
+                    .encode()
+                    .map(crate::image::request_body::RequestBody::Json)
+            }
+            .inspect_err(report_failure)?;
             let observation = self.observe_vibe(&prepared, request_id).await;
+            drop(prepared);
             self.execute_encoded(
                 crate::protocol::ApiEndpoint::EncodeVibe,
                 body,

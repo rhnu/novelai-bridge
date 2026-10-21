@@ -43,6 +43,67 @@ fn qwen_preserves_unicode_and_only_splits_at_actual_added_tokens() {
 }
 
 #[test]
+fn qwen_added_tokens_choose_earliest_then_longest_literal() {
+    let mut asset = qwen_asset();
+    asset["added_tokens"] = json!([
+        {"content": "猫🙂", "id": 256},
+        {"content": "🙂", "id": 257},
+        {"content": "猫", "id": 258},
+        {"content": "[a].*", "id": 259},
+        {"content": "a", "id": 97},
+        {"content": "never-present-token", "id": 261}
+    ]);
+    let tokenizer = load_qwen(&asset).unwrap();
+    assert_eq!(
+        tokenizer
+            .encode("🙂猫🙂猫[a].*a", FramingPolicy::ContentOnly)
+            .unwrap(),
+        [257, 256, 258, 259, 97],
+    );
+}
+
+#[test]
+fn qwen_false_special_prefixes_do_not_break_ordinary_merges() {
+    let mut asset = qwen_asset();
+    asset["normalizer"] = Value::Null;
+    asset["model"]["vocab"]["ab"] = json!(256);
+    asset["model"]["vocab"]["abc"] = json!(257);
+    asset["model"]["merges"] = json!([["a", "b"], ["ab", "c"]]);
+    asset["added_tokens"] = json!([
+        {"content": "bc!", "id": 258},
+        {"content": "<|special|>", "id": 259}
+    ]);
+    let tokenizer = load_qwen(&asset).unwrap();
+    assert_eq!(
+        tokenizer
+            .encode("abc<|special|>abc", FramingPolicy::ContentOnly)
+            .unwrap(),
+        [257, 259, 257],
+    );
+}
+
+#[test]
+fn qwen_repeated_special_tokens_preserve_ordinary_unicode_gaps() {
+    let mut asset = qwen_asset();
+    asset["normalizer"] = Value::Null;
+    asset["added_tokens"] = json!([
+        {"content": "<|special|>", "id": 256},
+        {"content": "unmatched-special-token", "id": 257}
+    ]);
+    let tokenizer = load_qwen(&asset).unwrap();
+    let text = "e\u{301}<|special|>🙂<|special|>".repeat(128);
+    let expected: Vec<_> = [101, 204, 129, 256, 240, 159, 153, 130, 256]
+        .into_iter()
+        .cycle()
+        .take(9 * 128)
+        .collect();
+    assert_eq!(
+        tokenizer.encode(&text, FramingPolicy::ContentOnly).unwrap(),
+        expected
+    );
+}
+
+#[test]
 fn qwen_rejects_collisions_and_unsupported_configurations() {
     for (pointer, replacement) in [
         ("/normalizer", json!({"type":"NFKC"})),

@@ -147,7 +147,7 @@ fn prepare_operation(
             image,
             operation,
         )
-        .map(|prepared| prepared.to_base64())
+        .map(crate::image::request_body::Media::Prepared)
     };
     match &request.operation {
         GenerationInput::TextToImage => Ok(OperationParameters::TextToImage {

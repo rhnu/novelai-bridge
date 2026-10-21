@@ -55,12 +55,17 @@ impl<T: Transport + ?Sized> Client<T> {
 
     async fn send_prepared(
         &self,
-        prepared: PreparedGeneration,
+        mut prepared: PreparedGeneration,
         request_id: u64,
     ) -> Result<GenerateImageResult, BridgeError> {
-        let body = prepared
-            .encode(GenerationDelivery::Images)
-            .inspect_err(report_failure)?;
+        let body = if self.needs_image_projection(true) {
+            prepared.take_request_body(GenerationDelivery::Images)
+        } else {
+            prepared
+                .encode(GenerationDelivery::Images)
+                .map(crate::image::request_body::RequestBody::Json)
+        }
+        .inspect_err(report_failure)?;
         let resolved_seed = prepared.resolved_seed();
         let observation = self
             .observe_generation(
@@ -69,17 +74,17 @@ impl<T: Transport + ?Sized> Client<T> {
                 request_id,
             )
             .await;
+        let accept = prepared
+            .normalized()
+            .request()
+            .output
+            .response_format
+            .accept();
+        drop(prepared);
         self.execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
             body,
-            Some(
-                prepared
-                    .normalized()
-                    .request()
-                    .output
-                    .response_format
-                    .accept(),
-            ),
+            Some(accept),
             observation,
             |payload| {
                 let images = decode_generated_image_response(payload)?;
@@ -143,7 +148,7 @@ impl<T: Transport + ?Sized> Client<T> {
 
     async fn send_stream_prepared(
         &self,
-        prepared: PreparedGeneration,
+        mut prepared: PreparedGeneration,
         mode: StreamMode,
         request_id: u64,
     ) -> Result<GenerateImageStream, BridgeError> {
@@ -151,9 +156,14 @@ impl<T: Transport + ?Sized> Client<T> {
             "endpoint",
             crate::protocol::ApiEndpoint::GenerateImageStream.path(),
         );
-        let body = prepared
-            .encode(GenerationDelivery::Stream(mode))
-            .inspect_err(report_failure)?;
+        let body = if self.needs_image_projection(true) {
+            prepared.take_request_body(GenerationDelivery::Stream(mode))
+        } else {
+            prepared
+                .encode(GenerationDelivery::Stream(mode))
+                .map(crate::image::request_body::RequestBody::Json)
+        }
+        .inspect_err(report_failure)?;
         let resolved_seed = prepared.resolved_seed();
         let observation = self
             .observe_generation(
@@ -162,10 +172,15 @@ impl<T: Transport + ?Sized> Client<T> {
                 request_id,
             )
             .await;
-        let request =
-            crate::protocol::ApiEndpoint::stream_request(&self.config.image_base_url, body, mode);
+        let n_samples = prepared.normalized().request().core.n_samples;
+        drop(prepared);
+        let mut request = crate::protocol::ApiEndpoint::GenerateImageStream
+            .request(&self.config.image_base_url, None);
+        if mode == StreamMode::MessagePack {
+            request.accept = None;
+        }
         let url = request.endpoint.clone();
-        let result = match self.execute_image_request(request, true).await {
+        let result = match self.execute_image_request(request, body, true).await {
             Ok(response) => {
                 crate::protocol::decode_stream_response(
                     response,
@@ -182,7 +197,7 @@ impl<T: Transport + ?Sized> Client<T> {
                 tracing::debug!("image stream opened");
                 Ok(GenerateImageStream::new(
                     resolved_seed,
-                    prepared.normalized().request().core.n_samples,
+                    n_samples,
                     stream,
                     observation,
                 ))

@@ -1,5 +1,7 @@
 use std::{io::Write, sync::Mutex};
 
+mod fitting;
+
 use super::output::GeneratedImageSource;
 use crate::{
     BridgeError, DefaultImagePreprocessor, EncodedImage, GeneratedImageMetadata, ImagePreparation,

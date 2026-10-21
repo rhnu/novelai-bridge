@@ -23,13 +23,21 @@ impl<T: Transport + ?Sized> Client<T> {
     /// Returns request encoding, transport or response decoding failures.
     pub async fn upscale_prepared(
         &self,
-        prepared: PreparedUpscale,
+        mut prepared: PreparedUpscale,
     ) -> Result<UpscaleImageResult, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current().record("model", prepared.model().as_str());
-            let body = prepared.encode().inspect_err(report_failure)?;
+            let body = if self.needs_image_projection(false) {
+                prepared.take_request_body()
+            } else {
+                prepared
+                    .encode()
+                    .map(crate::image::request_body::RequestBody::Json)
+            }
+            .inspect_err(report_failure)?;
             let observation = self.observe_upscale(&prepared, request_id).await;
+            drop(prepared);
             self.execute_encoded(
                 crate::ApiEndpoint::UpscaleImage,
                 body,

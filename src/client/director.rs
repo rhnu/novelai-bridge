@@ -29,13 +29,21 @@ impl<T: Transport + ?Sized> Client<T> {
     /// Returns request encoding, transport or response errors.
     pub async fn run_director_tool_prepared(
         &self,
-        prepared: PreparedDirector,
+        mut prepared: PreparedDirector,
     ) -> Result<RunDirectorToolResult, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current().record("tool", prepared.command().wire_name());
-            let body = prepared.encode().inspect_err(report_failure)?;
+            let body = if self.needs_image_projection(false) {
+                prepared.take_request_body()
+            } else {
+                prepared
+                    .encode()
+                    .map(crate::image::request_body::RequestBody::Json)
+            }
+            .inspect_err(report_failure)?;
             let observation = self.observe_director(&prepared, request_id).await;
+            drop(prepared);
             self.execute_encoded(
                 crate::protocol::ApiEndpoint::AugmentImage,
                 body,

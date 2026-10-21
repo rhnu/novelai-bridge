@@ -4,6 +4,7 @@ mod fit;
 mod input;
 mod output;
 mod preparation;
+pub mod request_body;
 mod response;
 pub use codec::{DecodedImage, decode as decode_validated_image};
 pub use input::EncodedImage;

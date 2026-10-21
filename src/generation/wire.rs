@@ -8,7 +8,10 @@ use references::ReferenceParameters;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 
-use crate::{ImageFormat, NoiseSchedule, Sampler};
+use crate::{
+    ImageFormat, NoiseSchedule, Sampler,
+    image::request_body::{Media, MediaSlot},
+};
 
 #[derive(Serialize)]
 pub(super) struct CenterPoint {
@@ -117,7 +120,7 @@ pub(super) enum OperationParameters {
         add_original_image: bool,
     },
     ImageToImage {
-        image: String,
+        image: Media,
         strength: f32,
         noise: f32,
         extra_noise_seed: i64,
@@ -127,8 +130,8 @@ pub(super) enum OperationParameters {
         upscaled_enhance: Option<bool>,
     },
     Inpainting {
-        image: String,
-        mask: String,
+        image: Media,
+        mask: Media,
         request_type: &'static str,
         add_original_image: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +207,24 @@ pub(super) struct ImageGenerationRequestBody {
     pub(super) model: &'static str,
     pub(super) use_new_shared_trial: bool,
     pub(super) parameters: ImageParameters,
+}
+
+impl ImageGenerationRequestBody {
+    pub(super) fn extract_media(&mut self) -> Vec<MediaSlot> {
+        let mut media = Vec::new();
+        match &mut self.parameters.operation {
+            OperationParameters::TextToImage { .. } => {},
+            OperationParameters::ImageToImage { image, .. } => {
+                image.extract("/parameters/image", &mut media);
+            },
+            OperationParameters::Inpainting { image, mask, .. } => {
+                image.extract("/parameters/image", &mut media);
+                mask.extract("/parameters/mask", &mut media);
+            },
+        }
+        self.parameters.references.extract_media(&mut media);
+        media
+    }
 }
 
 #[derive(Serialize)]

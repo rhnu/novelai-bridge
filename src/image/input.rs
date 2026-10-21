@@ -75,6 +75,8 @@ impl EncodedImage {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] { &self.bytes }
 
+    pub(crate) fn into_shared_bytes(self) -> Arc<[u8]> { self.bytes }
+
     /// Canonical base64 representation used by wire payloads.
     #[must_use]
     pub fn to_base64(&self) -> String { STANDARD.encode(&self.bytes) }

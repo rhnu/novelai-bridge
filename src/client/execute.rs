@@ -5,7 +5,7 @@ impl<T: Transport + ?Sized> Client<T> {
     pub(super) async fn execute_encoded<ResultValue>(
         &self,
         endpoint: crate::protocol::ApiEndpoint,
-        body: Vec<u8>,
+        body: crate::image::request_body::RequestBody,
         accept: Option<&str>,
         observation: PendingObservation,
         decode: impl FnOnce(
@@ -14,14 +14,13 @@ impl<T: Transport + ?Sized> Client<T> {
     ) -> Result<ResultValue, BridgeError> {
         let started = std::time::Instant::now();
         tracing::Span::current().record("endpoint", endpoint.path());
-        tracing::debug!(body_bytes = body.len(), "sending request");
-        let mut request = endpoint.request(&self.config.image_base_url, Some(body));
+        let mut request = endpoint.request(&self.config.image_base_url, None);
         if let Some(accept) = accept {
             request.accept = Some(accept.to_owned());
         }
         let url = request.endpoint.clone();
         let result = match self
-            .execute_image_request(request, endpoint == crate::ApiEndpoint::GenerateImage)
+            .execute_image_request(request, body, endpoint == crate::ApiEndpoint::GenerateImage)
             .await
         {
             Ok(response) => {

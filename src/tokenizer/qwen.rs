@@ -4,6 +4,8 @@
 //! pre-tokenization pattern, added-token table, byte mapping and merge list must all come from one
 //! compatible asset set.
 
+use std::{borrow::Cow, collections::HashMap};
+
 use fancy_regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 mod asset;
@@ -23,8 +25,10 @@ enum Normalization {
 #[non_exhaustive]
 pub struct QwenTokenizer {
     bpe: ByteBpe,
-    /// Added and special tokens matched as indivisible units, longest first.
-    added_tokens: Vec<(String, TokenId)>,
+    /// Added and special tokens matched as indivisible units.
+    added_tokens: HashMap<String, TokenId>,
+    /// One literal search matches earliest position, then longest token at that position.
+    added_token_pattern: Option<Regex>,
     normalization: Normalization,
     pattern: Regex,
 }
@@ -45,9 +49,29 @@ impl QwenTokenizer {
         tokenizer_config_json: Option<&[u8]>,
     ) -> Result<Self, TokenizerError> {
         let parsed = asset::load(tokenizer_json, tokenizer_config_json)?;
+        let added_token_pattern = if parsed.added_tokens.is_empty() {
+            None
+        } else {
+            // Asset loading sorts longest first, so leftmost-first alternation also selects
+            // the longest token when several literals begin at the same position.
+            let pattern = parsed
+                .added_tokens
+                .iter()
+                .map(|(token, _)| fancy_regex::escape(token))
+                .collect::<Vec<_>>()
+                .join("|");
+            Some(
+                Regex::new(&pattern).map_err(|source| TokenizerError::InvalidAssetData {
+                    asset: TokenizerAsset::QwenTokenizer,
+                    context: "added-token literal expression",
+                    source: Box::new(source),
+                })?,
+            )
+        };
         Ok(Self {
             bpe: parsed.bpe,
-            added_tokens: parsed.added_tokens,
+            added_tokens: parsed.added_tokens.into_iter().collect(),
+            added_token_pattern,
             normalization: parsed.normalization,
             pattern: parsed.pattern,
         })
@@ -87,33 +111,31 @@ impl QwenTokenizer {
         text: &str,
         out: &mut Vec<TokenId>,
     ) -> Result<(), TokenizerError> {
-        let mut rest = text;
-        while !rest.is_empty() {
-            // Find actual matches, not a possible first byte: false boundaries change BPE merges.
-            // str::find also keeps non-ASCII text on UTF-8 boundaries.
-            let matched = self
-                .added_tokens
-                .iter()
-                .filter_map(|(token, id)| rest.find(token).map(|pos| (pos, token, *id)))
-                .min_by_key(|(pos, token, _)| (*pos, std::cmp::Reverse(token.len())));
-            let Some((pos, token, id)) = matched else {
-                self.encode_ordinary(rest, out)?;
-                break;
-            };
-            self.encode_ordinary(&rest[..pos], out)?;
-            out.push(id);
-            rest = &rest[pos + token.len()..];
+        let Some(pattern) = &self.added_token_pattern else {
+            return self.encode_ordinary(text, out);
+        };
+        let mut cursor = 0;
+        for matched in pattern.find_iter(text) {
+            let matched = matched.map_err(|source| TokenizerError::EncodingFailed {
+                asset: TokenizerAsset::QwenTokenizer,
+                source: Box::new(source),
+            })?;
+            // Only actual complete matches split ordinary spans; partial literal prefixes must
+            // remain together for BPE. The Unicode regex keeps every boundary valid UTF-8.
+            self.encode_ordinary(&text[cursor..matched.start()], out)?;
+            out.push(self.added_tokens[matched.as_str()]);
+            cursor = matched.end();
         }
-        Ok(())
+        self.encode_ordinary(&text[cursor..], out)
     }
 
     fn encode_ordinary(&self, text: &str, out: &mut Vec<TokenId>) -> Result<(), TokenizerError> {
         let normalized = match self.normalization {
-            Normalization::None => text.to_owned(),
-            Normalization::Nfc => text.nfc().collect(),
+            Normalization::None => Cow::Borrowed(text),
+            Normalization::Nfc => Cow::Owned(text.nfc().collect::<String>()),
         };
         let mut cursor = 0;
-        for piece in self.pattern.find_iter(&normalized) {
+        for piece in self.pattern.find_iter(normalized.as_ref()) {
             let piece = piece.map_err(|error| TokenizerError::EncodingFailed {
                 asset: TokenizerAsset::QwenTokenizer,
                 source: Box::new(error),

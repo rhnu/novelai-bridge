@@ -3,7 +3,13 @@
 //! Both encoders differ only in preprocessing and where their tables come from; the reversible
 //! byte alphabet and the ranked merge loop below are identical.
 
-use std::collections::HashMap;
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+};
+
+#[cfg(test)]
+mod tests;
 
 /// Builds the reversible byte-to-Unicode alphabet used by byte-level BPE.
 ///
@@ -86,6 +92,23 @@ pub struct MergeTable {
     merges: HashMap<(u32, u32), (u32, u32)>,
 }
 
+/// Stable positions keep leftmost tie-breaking intact without shifting the remaining symbols.
+struct MergeNode {
+    symbol: Symbol,
+    previous: Option<usize>,
+    next: Option<usize>,
+    merged: bool,
+}
+
+/// A heap entry is discarded if its adjacent symbols have changed since it was queued.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct MergeCandidate {
+    rank: u32,
+    left: usize,
+    right: usize,
+    merged_id: u32,
+}
+
 impl MergeTable {
     /// Builds the table from a ranked merge list. Earlier pairs win.
     ///
@@ -135,33 +158,92 @@ impl MergeTable {
     ///
     /// This is the deterministic core of both byte-level encoders: a merge applies only when the
     /// exact adjacent pair exists in the table, so the result never depends on a word dictionary
-    /// or on language-specific heuristics. Ties cannot occur because each pair has one rank.
+    /// or on language-specific heuristics. Repeated occurrences of the same ranked pair merge
+    /// leftmost first. A priority queue and stable neighbor links avoid rescanning and shifting
+    /// the whole word after every merge.
     #[must_use]
-    pub fn merge(&self, mut symbols: Vec<Symbol>) -> Vec<Symbol> {
-        while symbols.len() > 1 {
-            let mut best: Option<(usize, u32, u32)> = None;
-            for index in 0..symbols.len() - 1 {
-                let (Some(left), Some(right)) = (symbols[index].id, symbols[index + 1].id) else {
-                    continue;
-                };
-                if let Some(&(rank, merged_id)) = self.merges.get(&(left, right))
-                    && best.is_none_or(|(_, best_rank, _)| rank < best_rank)
-                {
-                    best = Some((index, rank, merged_id));
-                }
-            }
-
-            let Some((index, _, merged_id)) = best else {
-                break;
+    pub fn merge(&self, symbols: Vec<Symbol>) -> Vec<Symbol> {
+        if symbols.len() < 2 {
+            return symbols;
+        }
+        if !symbols.windows(2).any(|pair| {
+            let (Some(left), Some(right)) = (pair[0].id, pair[1].id) else {
+                return false;
             };
-
-            let right = symbols.remove(index + 1);
-            let left = &mut symbols[index];
-            left.text.push_str(&right.text);
-            left.id = Some(merged_id);
+            self.merges.contains_key(&(left, right))
+        }) {
+            return symbols;
         }
 
-        symbols
+        let len = symbols.len();
+        let mut nodes: Vec<_> = symbols
+            .into_iter()
+            .enumerate()
+            .map(|(index, symbol)| MergeNode {
+                symbol,
+                previous: index.checked_sub(1),
+                next: (index + 1 < len).then_some(index + 1),
+                merged: false,
+            })
+            .collect();
+        let mut candidates: BinaryHeap<_> = (0..len - 1)
+            .filter_map(|left| self.candidate(&nodes, left).map(Reverse))
+            .collect();
+
+        while let Some(Reverse(candidate)) = candidates.pop() {
+            let MergeCandidate {
+                left,
+                right,
+                merged_id,
+                ..
+            } = candidate;
+            if self.candidate(&nodes, left) != Some(candidate) {
+                continue;
+            }
+            let next = nodes[right].next;
+            nodes[left].symbol.id = Some(merged_id);
+            nodes[left].merged = true;
+            nodes[left].next = next;
+            // Clear the removed node's links so its queued outgoing pair is also invalidated.
+            nodes[right].previous = None;
+            nodes[right].next = None;
+            if let Some(next) = next {
+                nodes[next].previous = Some(left);
+            }
+            for index in [nodes[left].previous, Some(left)].into_iter().flatten() {
+                if let Some(candidate) = self.candidate(&nodes, index) {
+                    candidates.push(Reverse(candidate));
+                }
+            }
+        }
+
+        nodes
+            .into_iter()
+            .enumerate()
+            .filter(|(index, node)| *index == 0 || node.previous.is_some())
+            .map(|(_, mut node)| {
+                if node.merged {
+                    // Materialize a final merged string once, rather than copying growing
+                    // prefixes at every step of a long merge chain.
+                    node.symbol.text.clone_from(
+                        &self.texts[node.symbol.id.expect("merged symbol has an ID") as usize],
+                    );
+                }
+                node.symbol
+            })
+            .collect()
+    }
+
+    fn candidate(&self, nodes: &[MergeNode], left: usize) -> Option<MergeCandidate> {
+        let right = nodes[left].next?;
+        let pair = (nodes[left].symbol.id?, nodes[right].symbol.id?);
+        let &(rank, merged_id) = self.merges.get(&pair)?;
+        Some(MergeCandidate {
+            rank,
+            left,
+            right,
+            merged_id,
+        })
     }
 }
 

@@ -71,11 +71,11 @@ impl EncodeVibeRequest {
                     mask,
                     ImagePreparation::Mask(image_size),
                 )
-                .map(|prepared| prepared.to_base64())
+                .map(crate::image::request_body::Media::Prepared)
             })
             .transpose()?;
         let body = VibeRequestBody {
-            image: self.image.to_base64(),
+            image: crate::image::request_body::Media::Image(self.image.into_shared_bytes()),
             information_extracted,
             model: self.model.as_str(),
             mask,
@@ -102,6 +102,17 @@ impl EncodeVibeRequest {
 }
 
 impl PreparedVibe {
+    pub(crate) fn take_request_body(
+        &mut self,
+    ) -> Result<crate::image::request_body::RequestBody, BridgeError> {
+        let mut media = Vec::new();
+        self.body.image.extract("/image", &mut media);
+        if let Some(mask) = &mut self.body.mask {
+            mask.extract("/mask", &mut media);
+        }
+        crate::image::request_body::RequestBody::new(&self.body, media)
+    }
+
     /// Effective extraction strength after validation.
     #[must_use]
     pub const fn information_extracted(&self) -> f32 { self.body.information_extracted }

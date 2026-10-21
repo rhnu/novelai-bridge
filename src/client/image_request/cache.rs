@@ -15,19 +15,16 @@ pub(in crate::client) struct CacheState {
 }
 
 pub(super) struct CacheTransaction {
-    pub body: Value,
+    pub body: crate::image::request_body::MediaBody,
     pub registrations: Vec<String>,
-    omitted: Vec<OmittedMedia>,
-}
-
-struct OmittedMedia {
-    key: String,
-    pointer: String,
-    data: String,
+    omitted: Vec<(usize, String)>,
 }
 
 impl CacheState {
-    pub(super) fn transform(&mut self, mut body: Value) -> Result<CacheTransaction, BridgeError> {
+    pub(super) fn transform(
+        &mut self,
+        mut body: crate::image::request_body::MediaBody,
+    ) -> Result<CacheTransaction, BridgeError> {
         let secret = if let Some(secret) = self.secret {
             secret
         } else {
@@ -37,47 +34,60 @@ impl CacheState {
         };
         let mut registrations = Vec::new();
         let mut omitted = Vec::new();
-        if let Some(parameters) = body.get_mut("parameters").and_then(Value::as_object_mut) {
-            for field in ["image", "mask", "reference_image"] {
-                if let Some(Value::String(data)) = parameters.remove(field) {
-                    let key = cache_key(&secret, &data);
+        if let Some(parameters) = body
+            .value
+            .get_mut("parameters")
+            .and_then(Value::as_object_mut)
+        {
+            for field in ["reference_image_multiple", "director_reference_images"] {
+                if let Some(Value::Array(images)) = parameters.remove(field) {
                     parameters.insert(
-                        format!("{field}_cache_secret_key"),
+                        format!("{field}_cached"),
+                        Value::Array(images.into_iter().map(|_| json!({})).collect()),
+                    );
+                }
+            }
+            for (index, media) in body.media.iter_mut().enumerate() {
+                let Some(path) = media
+                    .pointer
+                    .strip_prefix("/parameters/")
+                    .map(str::to_owned)
+                else {
+                    continue;
+                };
+                let key = cache_key(&secret, media.data.bytes());
+                if let Some((field, position)) = path.split_once('/') {
+                    media.pointer = format!("/parameters/{field}_cached/{position}/data");
+                    let entry = parameters
+                        .get_mut(&format!("{field}_cached"))
+                        .and_then(Value::as_array_mut)
+                        .and_then(|entries| {
+                            entries.get_mut(
+                                position
+                                    .parse::<usize>()
+                                    .expect("prepared reference index is numeric"),
+                            )
+                        })
+                        .and_then(Value::as_object_mut)
+                        .expect("prepared reference arrays have matching media entries");
+                    entry.insert("cache_secret_key".to_owned(), Value::String(key.clone()));
+                    if !self.known.contains(&key) {
+                        entry.insert("data".to_owned(), Value::String(String::new()));
+                    }
+                } else {
+                    parameters.insert(
+                        format!("{path}_cache_secret_key"),
                         Value::String(key.clone()),
                     );
                     if self.known.contains(&key) {
-                        omitted.push(OmittedMedia {
-                            key,
-                            pointer: format!("/parameters/{field}"),
-                            data,
-                        });
-                    } else {
-                        registrations.push(key);
-                        parameters.insert(field.to_owned(), Value::String(data));
+                        parameters.remove(&path);
                     }
                 }
-            }
-            for field in ["reference_image_multiple", "director_reference_images"] {
-                if let Some(Value::Array(images)) = parameters.remove(field) {
-                    let mut cached = Vec::with_capacity(images.len());
-                    for (index, image) in images.into_iter().enumerate() {
-                        if let Value::String(data) = image {
-                            let key = cache_key(&secret, &data);
-                            let mut entry = json!({ "cache_secret_key": key });
-                            if self.known.contains(&key) {
-                                omitted.push(OmittedMedia {
-                                    key,
-                                    pointer: format!("/parameters/{field}_cached/{index}/data"),
-                                    data,
-                                });
-                            } else {
-                                registrations.push(key);
-                                entry["data"] = Value::String(data);
-                            }
-                            cached.push(entry);
-                        }
-                    }
-                    parameters.insert(format!("{field}_cached"), Value::Array(cached));
+                if self.known.contains(&key) {
+                    media.omitted = true;
+                    omitted.push((index, key));
+                } else {
+                    registrations.push(key);
                 }
             }
         }
@@ -110,7 +120,7 @@ impl CacheState {
 }
 
 impl CacheTransaction {
-    pub(super) const fn uncached(body: Value) -> Self {
+    pub(super) const fn uncached(body: crate::image::request_body::MediaBody) -> Self {
         Self {
             body,
             registrations: Vec::new(),
@@ -120,29 +130,32 @@ impl CacheTransaction {
 
     pub(super) fn restore(&mut self, keys: &[String]) -> bool {
         let mut restored = false;
-        for media in &mut self.omitted {
-            if keys.contains(&media.key) {
+        for (index, key) in &self.omitted {
+            let media = &mut self.body.media[*index];
+            if media.omitted && keys.contains(key) {
                 let (parent, field) = media
                     .pointer
                     .rsplit_once('/')
                     .expect("media paths have a field");
-                if let Some(object) = self.body.pointer_mut(parent).and_then(Value::as_object_mut) {
-                    object.insert(
-                        field.to_owned(),
-                        Value::String(std::mem::take(&mut media.data)),
-                    );
-                    self.registrations.push(media.key.clone());
-                    restored = true;
-                }
+                let object = self
+                    .body
+                    .value
+                    .pointer_mut(parent)
+                    .and_then(Value::as_object_mut)
+                    .expect("omitted media retains its parent object");
+                object.insert(field.to_owned(), Value::String(String::new()));
+                media.omitted = false;
+                self.registrations.push(key.clone());
+                restored = true;
             }
         }
         restored
     }
 }
 
-fn cache_key(secret: &[u8; 32], data: &str) -> String {
+fn cache_key(secret: &[u8; 32], data: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC accepts a 32-byte key");
-    mac.update(data.as_bytes());
+    mac.update(data);
     super::hex(&mac.finalize().into_bytes())
 }
 

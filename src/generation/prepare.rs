@@ -46,6 +46,33 @@ impl std::fmt::Debug for PreparedGeneration {
 }
 
 impl PreparedGeneration {
+    pub(crate) fn take_request_body(
+        &mut self,
+        delivery: GenerationDelivery,
+    ) -> Result<crate::image::request_body::RequestBody, BridgeError> {
+        if matches!(delivery, GenerationDelivery::Stream(_)) {
+            self.validate_stream()?;
+        }
+        let media = self.body.extract_media();
+        let mut body = crate::image::request_body::MediaBody::new(&self.body, media)?;
+        if let GenerationDelivery::Stream(mode) = delivery {
+            body.value["parameters"]["stream"] =
+                serde_json::Value::String(mode.as_str().to_owned());
+        }
+        Ok(crate::image::request_body::RequestBody::Media(body))
+    }
+
+    fn validate_stream(&self) -> Result<(), BridgeError> {
+        if !self.normalized.request().descriptor().support().streaming {
+            return Err(InvalidRequest::UnsupportedModelFeature {
+                feature: RequestField::StreamDelivery,
+                required_model: "a model supporting streaming".to_owned(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
     /// Effective input and cached prompts used to construct this payload.
     #[must_use]
     pub const fn normalized(&self) -> &NormalizedGeneration { &self.normalized }
@@ -70,13 +97,7 @@ impl PreparedGeneration {
                 .map_err(encode_error)
                 .map_err(Into::into),
             GenerationDelivery::Stream(mode) => {
-                if !self.normalized.request().descriptor().support().streaming {
-                    return Err(InvalidRequest::UnsupportedModelFeature {
-                        feature: RequestField::StreamDelivery,
-                        required_model: "a model supporting streaming".to_owned(),
-                    }
-                    .into());
-                }
+                self.validate_stream()?;
                 let body = StreamImageGenerationRequestBody {
                     action: self.body.action,
                     input: &self.body.input,

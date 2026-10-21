@@ -144,7 +144,9 @@ impl<T: ?Sized> Client<T> {
     }
 
     fn last_pricing_context(&self) -> AnlasPricingContext {
-        self.last_subscription()
+        self.account
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
             .map_or_else(AnlasPricingContext::default, AnlasPricingContext::from)
     }

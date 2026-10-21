@@ -1,5 +1,7 @@
+use std::borrow::Cow;
+
 use image::{
-    DynamicImage, Rgba, RgbaImage,
+    DynamicImage, Pixel, Rgba, RgbaImage,
     imageops::{self, FilterType},
 };
 
@@ -49,17 +51,44 @@ fn fit_decoded_with_rounding(
             field,
             source: Box::new(source),
         })?;
-    let source = decoded.to_rgba8();
+    let source = decoded
+        .as_rgba8()
+        .map_or_else(|| Cow::Owned(decoded.to_rgba8()), Cow::Borrowed);
     let (scaled_width, scaled_height) = if round {
         fit_within_rounded(source.width(), source.height(), size.width, size.height)
     } else {
         fit_within(source.width(), source.height(), size.width, size.height)
     };
-    let resized = imageops::resize(&source, scaled_width, scaled_height, filter);
+    let resized = if source.dimensions() == (scaled_width, scaled_height) {
+        source
+    } else {
+        Cow::Owned(imageops::resize(
+            &*source,
+            scaled_width,
+            scaled_height,
+            filter,
+        ))
+    };
+    if resized.dimensions() == (size.width, size.height) {
+        // Identity fitting still composites onto opaque black. Only opaque RGBA inputs
+        // can be encoded directly; translucent inputs need a writable output buffer.
+        if matches!(resized, Cow::Borrowed(_)) && resized.pixels().all(|pixel| pixel.0[3] == 255) {
+            return super::codec::encode_png(decoded, field, policy);
+        }
+        let mut pixels = resized.into_owned();
+        for pixel in pixels.pixels_mut() {
+            if pixel.0[3] != 255 {
+                let mut black = Rgba([0, 0, 0, 255]);
+                black.blend(pixel);
+                *pixel = black;
+            }
+        }
+        return super::codec::encode_png(&DynamicImage::ImageRgba8(pixels), field, policy);
+    }
     let mut canvas = RgbaImage::from_pixel(size.width, size.height, Rgba([0, 0, 0, 255]));
     imageops::overlay(
         &mut canvas,
-        &resized,
+        &*resized,
         i64::from(if round {
             (size.width - scaled_width).div_ceil(2)
         } else {

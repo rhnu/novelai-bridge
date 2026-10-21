@@ -25,36 +25,51 @@ impl Default for ImageCacheConfig {
 }
 
 impl<T: Transport + ?Sized> Client<T> {
+    pub(super) fn needs_image_projection(&self, cacheable: bool) -> bool {
+        self.config.image_request_encoding == ImageRequestEncoding::Multipart
+            || (cacheable
+                && self
+                    .config
+                    .image_cache
+                    .is_some_and(|config| config.max_entries > 0))
+    }
+
     pub(super) async fn execute_image_request(
         &self,
         mut request: TransportRequest,
+        body: crate::image::request_body::RequestBody,
         cacheable: bool,
     ) -> Result<TransportResponse, BridgeError> {
+        let body = match body {
+            crate::image::request_body::RequestBody::Json(body) => {
+                tracing::debug!(body_bytes = body.len(), "sending request");
+                request.body = Some(body);
+                return Ok(self.transport.execute(request).await?);
+            },
+            crate::image::request_body::RequestBody::Media(body) => body,
+        };
         let caching = cacheable
             && self
                 .config
                 .image_cache
                 .is_some_and(|config| config.max_entries > 0);
-        if !caching && self.config.image_request_encoding == ImageRequestEncoding::Json {
-            return Ok(self.transport.execute(request).await?);
-        }
-        let Some(body) = request.body.take() else {
-            return Ok(self.transport.execute(request).await?);
-        };
-        let value = serde_json::from_slice(&body).map_err(encode_error)?;
         let mut transaction = if caching {
             self.image_cache
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .transform(value)?
+                .transform(body)?
         } else {
-            cache::CacheTransaction::uncached(value)
+            cache::CacheTransaction::uncached(body)
         };
         encode_request(
             &mut request,
             &transaction.body,
             self.config.image_request_encoding,
         )?;
+        tracing::debug!(
+            body_bytes = request.body.as_ref().map_or(0, Vec::len),
+            "sending request"
+        );
         if !caching {
             drop(transaction);
             return Ok(self.transport.execute(request).await?);
@@ -108,12 +123,12 @@ impl<T: Transport + ?Sized> Client<T> {
 
 fn encode_request(
     request: &mut TransportRequest,
-    value: &serde_json::Value,
+    value: &crate::image::request_body::MediaBody,
     encoding: ImageRequestEncoding,
 ) -> Result<(), BridgeError> {
     match encoding {
         ImageRequestEncoding::Json => {
-            request.body = Some(serde_json::to_vec(value).map_err(encode_error)?);
+            request.body = Some(value.encode_json()?);
             request.content_type = Some("application/json".to_owned());
         },
         ImageRequestEncoding::Multipart => {
@@ -131,10 +146,6 @@ fn random_bytes<const N: usize>() -> Result<[u8; N], BridgeError> {
         source: Box::new(source),
     })?;
     Ok(bytes)
-}
-
-fn encode_error(source: serde_json::Error) -> BridgeError {
-    crate::EncodeError::new(crate::EncodeTarget::JsonRequest, Box::new(source)).into()
 }
 
 fn hex(bytes: &[u8]) -> String {

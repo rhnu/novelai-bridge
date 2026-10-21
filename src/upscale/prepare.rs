@@ -7,7 +7,7 @@ use crate::{
 
 #[derive(Serialize)]
 struct UpscaleRequestBody {
-    image: String,
+    image: crate::image::request_body::Media,
     model: Model,
     declared_blur_sigma: UpscaleBlurSigma,
 }
@@ -29,7 +29,7 @@ impl UpscaleImageRequest {
         Ok(PreparedUpscale {
             image_size: self.image.size(),
             body: UpscaleRequestBody {
-                image: self.image.to_base64(),
+                image: crate::image::request_body::Media::Image(self.image.into_shared_bytes()),
                 model: self.model,
                 declared_blur_sigma: self.declared_blur_sigma,
             },
@@ -38,6 +38,14 @@ impl UpscaleImageRequest {
 }
 
 impl PreparedUpscale {
+    pub(crate) fn take_request_body(
+        &mut self,
+    ) -> Result<crate::image::request_body::RequestBody, BridgeError> {
+        let mut media = Vec::new();
+        self.body.image.extract("/image", &mut media);
+        crate::image::request_body::RequestBody::new(&self.body, media)
+    }
+
     /// Original image dimensions used by preparation and local pricing.
     #[must_use]
     pub const fn image_size(&self) -> ImageSize { self.image_size }

@@ -163,3 +163,97 @@ fn corrupt_final_images_fail_with_original_data_and_cause() {
         assert_ne!(source.to_string(), "");
     }
 }
+
+#[test]
+fn escaped_json_strings_decode_and_retain_the_original_sse() {
+    let raw = TransportSseEvent {
+        event: "intermediate".into(),
+        data: r#"{"event_type":"inter\u006Dediate","samp_ix":2,"step_ix":4,"image":"\u0063HJldmlldw==","extension":{"image":"ignored","nested":[{"event_type":false}]}}"#.into(),
+        ..Default::default()
+    };
+    let chunk = decode_event(raw.clone()).unwrap();
+    let ImageStreamEvent::Intermediate {
+        samp_ix,
+        step_ix,
+        image,
+        ..
+    } = chunk.event
+    else {
+        panic!("expected intermediate event");
+    };
+    assert_eq!((samp_ix, step_ix), (2, 4));
+    assert_eq!(image, b"preview");
+    assert_eq!(chunk.raw.as_sse(), Some(&raw));
+}
+
+#[test]
+fn discriminator_scan_skips_large_extension_strings_without_changing_event_fields() {
+    let raw = raw(
+        "message",
+        &json!({
+            "ignored_before": "x".repeat(32_768),
+            "event_type": "intermediate",
+            "samp_ix": 0,
+            "step_ix": 1,
+            "image": "cHJldmlldw==",
+            "ignored_after": { "event_type": "final", "values": [null, false, 1.5, "x".repeat(32_768)] }
+        }),
+    );
+    let chunk = decode_event(raw.clone()).unwrap();
+    assert!(matches!(
+        chunk.event,
+        ImageStreamEvent::Intermediate {
+            samp_ix: 0,
+            step_ix: 1,
+            ..
+        }
+    ));
+    assert_eq!(chunk.raw.as_sse(), Some(&raw));
+}
+
+#[test]
+fn non_string_discriminators_are_allowed_only_for_named_extensions() {
+    for discriminator in [
+        json!(null),
+        json!(false),
+        json!(1),
+        json!(1.5),
+        json!(["final"]),
+        json!({"name": "final"}),
+    ] {
+        let value = json!({ "event_type": discriminator });
+        let extension = raw("future-event", &value);
+        let chunk = decode_event(extension.clone()).unwrap();
+        assert!(matches!(chunk.event, ImageStreamEvent::Unknown { .. }));
+        assert_eq!(chunk.raw.as_sse(), Some(&extension));
+        for header in ["", "final"] {
+            assert!(matches!(
+                decode_event(raw(header, &value)),
+                Err(BridgeError::Stream(ImageStreamError::InvalidEvent { .. }))
+            ));
+        }
+    }
+}
+
+#[test]
+fn malformed_known_json_retains_the_serde_error_source() {
+    for data in [
+        r#"{"event_type":"final","samp_ix":0,"image":"unterminated}"#,
+        r#"{"event_type":"intermediate","samp_ix":0,"step_ix":"bad","image":"cHJldmlldw=="}"#,
+    ] {
+        let raw = TransportSseEvent {
+            event: "message".into(),
+            data: data.into(),
+            ..Default::default()
+        };
+        let Err(BridgeError::Stream(ImageStreamError::InvalidEvent {
+            raw: retained,
+            source,
+        })) = decode_event(raw.clone())
+        else {
+            panic!("expected invalid event");
+        };
+        assert_eq!(retained.as_sse(), Some(&raw));
+        assert!(source.downcast_ref::<serde_json::Error>().is_some());
+    }
+}

@@ -275,9 +275,25 @@ fn prepare_builtin(
                 u64::from(size.width) * u64::from(size.height) * 4,
             )
             .map_err(|source| invalid_policy(field, source))?;
-        let resized =
-            image::imageops::resize(&image.pixels().to_rgba8(), size.width, size.height, filter);
-        super::codec::encode_png(&image::DynamicImage::ImageRgba8(resized), field, policy)?
+        let pixels = image.pixels();
+        if pixels.width() == size.width && pixels.height() == size.height {
+            if pixels.as_rgba8().is_some() {
+                super::codec::encode_png(pixels, field, policy)?
+            } else {
+                super::codec::encode_png(
+                    &image::DynamicImage::ImageRgba8(pixels.to_rgba8()),
+                    field,
+                    policy,
+                )?
+            }
+        } else {
+            let source = pixels.as_rgba8().map_or_else(
+                || std::borrow::Cow::Owned(pixels.to_rgba8()),
+                std::borrow::Cow::Borrowed,
+            );
+            let resized = image::imageops::resize(&*source, size.width, size.height, filter);
+            super::codec::encode_png(&image::DynamicImage::ImageRgba8(resized), field, policy)?
+        }
     } else {
         super::fit::fit_decoded(field, image.pixels(), size, filter)?
     };

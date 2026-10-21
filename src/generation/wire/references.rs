@@ -4,16 +4,17 @@ use super::{ReferenceCaption, ReferenceConditionInput};
 use crate::{
     BridgeError, CharacterReferenceField, GenerationField, ImagePreparation, ImagePreprocessor,
     ReferenceSet, VibeReferenceField, VibeReferenceInput,
+    image::request_body::{Media, MediaSlot},
 };
 
 pub(super) struct VibeRecord {
-    image: String,
+    image: Media,
     strength: f32,
     information_extracted: Option<f32>,
 }
 
 pub(super) struct CharacterReferenceRecord {
-    image: String,
+    image: Media,
     description: ReferenceConditionInput,
     secondary_strength: f32,
     strength: f32,
@@ -44,7 +45,7 @@ pub(super) fn prepare_references(
             .iter()
             .enumerate()
             .map(|(index, item)| {
-                let image = crate::image::prepare_image(
+                let image = Media::Prepared(crate::image::prepare_image(
                     preprocessor,
                     GenerationField::CharacterReference {
                         index,
@@ -53,8 +54,7 @@ pub(super) fn prepare_references(
                     .into(),
                     &item.image,
                     ImagePreparation::character_reference(item.image.size()),
-                )?
-                .to_base64();
+                )?);
                 Ok(CharacterReferenceRecord {
                     image,
                     description: ReferenceConditionInput {
@@ -81,12 +81,12 @@ pub(super) fn prepare_references(
         .enumerate()
         .map(|(index, reference)| {
             let (image, information_extracted) = match &reference.input {
-                VibeReferenceInput::Encoded { encoding } => (encoding.to_base64(), None),
+                VibeReferenceInput::Encoded { encoding } => (Media::Vibe(encoding.clone()), None),
                 VibeReferenceInput::Image {
                     image,
                     information_extracted,
                 } => (
-                    crate::image::prepare_image(
+                    Media::Prepared(crate::image::prepare_image(
                         preprocessor,
                         GenerationField::VibeReference {
                             index,
@@ -95,8 +95,7 @@ pub(super) fn prepare_references(
                         .into(),
                         image,
                         ImagePreparation::RawVibe,
-                    )?
-                    .to_base64(),
+                    )?),
                     Some(*information_extracted),
                 ),
             };
@@ -114,6 +113,30 @@ pub(super) fn prepare_references(
         references: records,
         normalize_strength: encoded.then_some(vibe.normalize_strength),
     })
+}
+
+impl ReferenceParameters {
+    pub(super) fn extract_media(&mut self, media: &mut Vec<MediaSlot>) {
+        match self {
+            Self::None => {},
+            Self::Vibe { references, .. } => {
+                for (index, reference) in references.iter_mut().enumerate() {
+                    reference.image.extract(
+                        format!("/parameters/reference_image_multiple/{index}"),
+                        media,
+                    );
+                }
+            },
+            Self::Character(references) => {
+                for (index, reference) in references.iter_mut().enumerate() {
+                    reference.image.extract(
+                        format!("/parameters/director_reference_images/{index}"),
+                        media,
+                    );
+                }
+            },
+        }
+    }
 }
 
 impl Serialize for ReferenceParameters {

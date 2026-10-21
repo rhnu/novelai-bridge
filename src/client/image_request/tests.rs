@@ -77,10 +77,31 @@ fn test_client(replies: Vec<Reply>, max_entries: usize) -> Client<Mock> {
     )
 }
 
-fn request(data: &str) -> TransportRequest {
-    ApiEndpoint::GenerateImage.request(DEFAULT_IMAGE_BASE, Some(serde_json::to_vec(&json!({
-        "parameters": {"image": data, "mask":"BAUG", "reference_image_multiple":[data], "director_reference_images":[data]}
-    })).unwrap()))
+fn request() -> TransportRequest { ApiEndpoint::GenerateImage.request(DEFAULT_IMAGE_BASE, None) }
+
+fn media_body(data: &str) -> crate::image::request_body::RequestBody {
+    use base64::Engine;
+
+    use crate::image::request_body::{Media, MediaSlot, RequestBody};
+    let mut media = Vec::new();
+    for (pointer, encoded) in [
+        ("/parameters/image", data),
+        ("/parameters/mask", "BAUG"),
+        ("/parameters/reference_image_multiple/0", data),
+        ("/parameters/director_reference_images/0", data),
+    ] {
+        media.push(MediaSlot {
+            pointer: pointer.to_owned(),
+            data: Media::Image(
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap()
+                    .into(),
+            ),
+            omitted: false,
+        });
+    }
+    RequestBody::new(&json!({"parameters": {"image":"", "mask":"", "reference_image_multiple":[""], "director_reference_images":[""]}}), media).unwrap()
 }
 
 fn bodies(client: &Client<Mock>) -> Vec<Value> {
@@ -106,16 +127,16 @@ async fn clones_share_registration_and_invalid_keys_restore_only_matching_media_
         16,
     );
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     client
         .clone()
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     let requests = bodies(&client);
@@ -145,7 +166,7 @@ async fn clones_share_registration_and_invalid_keys_restore_only_matching_media_
     assert_eq!(requests[3], requests[1]);
     let another = test_client(vec![Reply::Success], 16);
     another
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     assert_ne!(
@@ -164,7 +185,9 @@ async fn network_other_statuses_and_unrestorable_keys_never_retry() {
         Reply::InvalidKey,
     ] {
         let client = test_client(vec![reply], 16);
-        let result = client.execute_image_request(request("AQID"), true).await;
+        let result = client
+            .execute_image_request(request(), media_body("AQID"), true)
+            .await;
         if let Ok(response) = result {
             assert!(!(200..300).contains(&response.status));
         }
@@ -184,16 +207,16 @@ async fn a_second_cache_rejection_is_terminal_and_invalidated_data_is_sent_next_
         16,
     );
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     let response = client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     assert_eq!(response.status, 400);
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     let requests = bodies(&client);
@@ -205,15 +228,15 @@ async fn a_second_cache_rejection_is_terminal_and_invalidated_data_is_sent_next_
 async fn bounded_registration_evicts_old_keys_without_retaining_image_payloads() {
     let client = test_client(vec![Reply::Success, Reply::Success, Reply::Success], 1);
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     client
-        .execute_image_request(request("BwgJ"), true)
+        .execute_image_request(request(), media_body("BwgJ"), true)
         .await
         .unwrap();
     client
-        .execute_image_request(request("AQID"), true)
+        .execute_image_request(request(), media_body("AQID"), true)
         .await
         .unwrap();
     assert_eq!(bodies(&client)[2]["parameters"]["image"], "AQID");

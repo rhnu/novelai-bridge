@@ -18,6 +18,7 @@
 
 ### Changed
 
+- Reduce media request and SSE event allocations, avoid unnecessary image-buffer copies, and reuse borrowed subscription fields for pricing. Replace repeated BPE pair scans and Qwen special-token searches with indexed merging and compiled literal matching.
 - Include request planning, media processing, metadata, the client, streaming and credit observation in the core. Retain only `reqwest-transport`, `tokenizer` and `bundled-assets` Cargo features.
 - Use one raw-byte `Transport` contract for ordinary and streamed responses. Parse SSE and apply response budgets in the core so custom transports share the same limits.
 - Define quality and UC preset text per model. Derive conditioning and the current `tag_hint_qt` / `tag_hint_uc_preset` fields from the effective selection; send the same assembled positive prompt in the top-level input and conditioning fields.

@@ -18,6 +18,34 @@ fn payload(
 }
 
 #[test]
+fn raw_media_projection_preserves_public_json_for_images_and_streams() {
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .seed(42)
+        .size(ImageSize {
+            width: 256,
+            height: 256,
+        })
+        .image_to_image(ImageToImageInput::new(image(), 0.7, 0.1))
+        .build();
+    for delivery in [
+        GenerationDelivery::Images,
+        GenerationDelivery::Stream(StreamMode::Sse),
+        GenerationDelivery::Stream(StreamMode::MessagePack),
+    ] {
+        let mut prepared = request.clone().normalize().unwrap().prepare().unwrap();
+        let expected = payload(&prepared, delivery);
+        let crate::image::request_body::RequestBody::Media(body) =
+            prepared.take_request_body(delivery).unwrap()
+        else {
+            unreachable!()
+        };
+        let actual: serde_json::Value =
+            serde_json::from_slice(&body.encode_json().unwrap()).unwrap();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
 fn legacy_uc_is_a_v4_negative_condition_option_with_typed_model_gating() {
     for model in Model::ALL {
         let request = GenerateImageRequest::builder("cat", model)

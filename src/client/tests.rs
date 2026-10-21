@@ -56,14 +56,24 @@ async fn account_cache_is_shared_and_an_invalid_response_does_not_replace_it() {
     });
     let client = Client::new(transport, ClientConfig::default());
     let cloned = client.clone();
+    let request = crate::GenerateImageRequest::builder("cat", crate::Model::NaiDiffusion5Full)
+        .size(crate::ImageSize {
+            width: 256,
+            height: 256,
+        })
+        .steps(2)
+        .build();
     assert!(client.last_subscription().is_none());
+    assert!(client.estimate_anlas_cost(&request).unwrap().total > 0);
     let subscription = client.get_subscription().await.unwrap();
     assert_eq!(cloned.last_subscription(), Some(subscription.clone()));
+    assert_eq!(cloned.estimate_anlas_cost(&request).unwrap().total, 0);
     assert!(matches!(
         cloned.get_subscription().await,
         Err(BridgeError::Decode(_))
     ));
     assert_eq!(client.last_subscription(), Some(subscription));
+    assert_eq!(client.estimate_anlas_cost(&request).unwrap().total, 0);
 }
 
 #[derive(Default)]
@@ -104,7 +114,8 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
     let result: Result<(), BridgeError> = client
         .execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
-            Vec::new(),
+            crate::image::request_body::RequestBody::new(&serde_json::json!({}), Vec::new())
+                .unwrap(),
             None,
             pending,
             |_| {
@@ -127,7 +138,8 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
     let result = client
         .execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
-            Vec::new(),
+            crate::image::request_body::RequestBody::new(&serde_json::json!({}), Vec::new())
+                .unwrap(),
             None,
             pending,
             |_| Ok(((), 2)),

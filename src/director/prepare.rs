@@ -75,7 +75,7 @@ impl RunDirectorToolRequest {
             req_type: command.wire_name(),
             width: image_size.width,
             height: image_size.height,
-            image: image.to_base64(),
+            image: crate::image::request_body::Media::Prepared(image),
             prompt,
             defry,
         };
@@ -90,6 +90,14 @@ impl RunDirectorToolRequest {
 }
 
 impl PreparedDirector {
+    pub(crate) fn take_request_body(
+        &mut self,
+    ) -> Result<crate::image::request_body::RequestBody, BridgeError> {
+        let mut media = Vec::new();
+        self.body.image.extract("/image", &mut media);
+        crate::image::request_body::RequestBody::new(&self.body, media)
+    }
+
     /// Numeric changes made under normalize policy.
     #[must_use]
     pub fn adjustments(&self) -> &[ValidationAdjustment] { &self.adjustments }
