@@ -1,9 +1,8 @@
 use std::{format, io::Read, vec::Vec};
 
-use crate::{
-    CLIP_MERGES_GZ, QWEN_TOKENIZER_CONFIG_GZ, QWEN_TOKENIZER_GZ, T5_SENTENCEPIECE_GZ,
-};
 use sha2::{Digest, Sha256};
+
+use crate::{CLIP_MERGES_GZ, QWEN_TOKENIZER_CONFIG_GZ, QWEN_TOKENIZER_GZ, T5_SENTENCEPIECE_GZ};
 
 #[test]
 fn embedded_assets_match_pinned_upstream_hashes() {
@@ -27,7 +26,7 @@ fn embedded_assets_match_pinned_upstream_hashes() {
         flate2::read::GzDecoder::new(bytes)
             .read_to_end(&mut decoded)
             .unwrap();
-        assert!(!decoded.is_empty());
+        assert_ne!(decoded.as_slice(), &[]);
         let upstream = if record.get("upstream_gzip").and_then(toml::Value::as_bool) == Some(true) {
             bytes
         } else {
