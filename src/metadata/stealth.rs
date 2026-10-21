@@ -1,34 +1,16 @@
 use std::io::Read;
 
-use super::{MetadataOrigin, MetadataWarning, png::PngPixels};
+use super::{MetadataOrigin, MetadataWarning};
 use crate::{ImageDecodePolicy, ImageSize};
 
 const SIGNATURE: &[u8] = b"stealth_pngcomp";
+pub(super) const HEADER_BITS: usize = (SIGNATURE.len() + 4) * 8;
 
 fn invalid(message: impl Into<String>) -> MetadataWarning {
     MetadataWarning::InvalidCarrier {
         origin: MetadataOrigin::StealthPngComp,
         message: message.into(),
     }
-}
-
-pub(super) fn read_png(
-    pixels: &PngPixels,
-    size: ImageSize,
-    policy: ImageDecodePolicy,
-) -> Result<Option<String>, MetadataWarning> {
-    // The captured carrier operates on 8-bit RGBA pixels. No verified 16-bit conversion is assumed.
-    if pixels.depth != png::BitDepth::Eight {
-        return Ok(None);
-    }
-    let channels = match pixels.color {
-        png::ColorType::Rgba => 4,
-        png::ColorType::GrayscaleAlpha => 2,
-        _ => return Ok(None),
-    };
-    read_alpha(size, policy, |x, y| {
-        pixels.bytes[(y * size.width as usize + x) * channels + channels - 1]
-    })
 }
 
 pub(super) fn read_pixels(
@@ -54,13 +36,13 @@ pub(super) fn read_pixels(
     })
 }
 
-fn read_alpha(
+pub(super) fn read_alpha(
     size: ImageSize,
     policy: ImageDecodePolicy,
     alpha: impl Fn(usize, usize) -> u8,
 ) -> Result<Option<String>, MetadataWarning> {
     let pixels = usize::try_from(size.pixels()).map_err(|error| invalid(error.to_string()))?;
-    let header_bits = (SIGNATURE.len() + 4) * 8;
+    let header_bits = HEADER_BITS;
     if size.height == 0 || pixels < header_bits {
         return Ok(None);
     }

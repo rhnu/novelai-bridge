@@ -1,3 +1,5 @@
+use std::{collections::HashMap, mem::Discriminant};
+
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 use super::{ReferenceCaption, ReferenceConditionInput};
@@ -39,22 +41,27 @@ pub(super) fn prepare_references(
     let Some(references) = references else {
         return Ok(ReferenceParameters::None);
     };
+    let mut images = ReferenceImages {
+        preprocessor,
+        prepared: HashMap::new(),
+    };
     if !references.character_references.is_empty() {
         let records = references
             .character_references
             .iter()
             .enumerate()
             .map(|(index, item)| {
-                let image = Media::Prepared(crate::image::prepare_image(
-                    preprocessor,
-                    GenerationField::CharacterReference {
-                        index,
-                        field: CharacterReferenceField::Image,
-                    }
-                    .into(),
-                    &item.image,
-                    ImagePreparation::character_reference(item.image.size()),
-                )?);
+                let image = Media::Prepared(
+                    images.prepare(
+                        GenerationField::CharacterReference {
+                            index,
+                            field: CharacterReferenceField::Image,
+                        }
+                        .into(),
+                        &item.image,
+                        ImagePreparation::character_reference(item.image.size()),
+                    )?,
+                );
                 Ok(CharacterReferenceRecord {
                     image,
                     description: ReferenceConditionInput {
@@ -86,16 +93,17 @@ pub(super) fn prepare_references(
                     image,
                     information_extracted,
                 } => (
-                    Media::Prepared(crate::image::prepare_image(
-                        preprocessor,
-                        GenerationField::VibeReference {
-                            index,
-                            field: VibeReferenceField::Image,
-                        }
-                        .into(),
-                        image,
-                        ImagePreparation::RawVibe,
-                    )?),
+                    Media::Prepared(
+                        images.prepare(
+                            GenerationField::VibeReference {
+                                index,
+                                field: VibeReferenceField::Image,
+                            }
+                            .into(),
+                            image,
+                            ImagePreparation::RawVibe,
+                        )?,
+                    ),
                     Some(*information_extracted),
                 ),
             };
@@ -113,6 +121,49 @@ pub(super) fn prepare_references(
         references: records,
         normalize_strength: encoded.then_some(vibe.normalize_strength),
     })
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct PreparationKey {
+    pixels: *const image::DynamicImage,
+    operation: Discriminant<ImagePreparation>,
+    width: u32,
+    height: u32,
+}
+
+/// Shares deterministic built-in work within one request without merging reference rows.
+struct ReferenceImages<'a> {
+    preprocessor: Option<&'a dyn ImagePreprocessor>,
+    prepared: HashMap<PreparationKey, crate::PreparedImage>,
+}
+
+impl ReferenceImages<'_> {
+    fn prepare(
+        &mut self,
+        field: crate::RequestField,
+        image: &crate::EncodedImage,
+        operation: ImagePreparation,
+    ) -> Result<crate::PreparedImage, BridgeError> {
+        // Custom preprocessors may use the row's field/index to produce distinct images.
+        if self.preprocessor.is_some() {
+            return crate::image::prepare_image(self.preprocessor, field, image, operation);
+        }
+        let size = operation.target_size();
+        let key = PreparationKey {
+            pixels: std::ptr::from_ref(image.pixels()),
+            operation: std::mem::discriminant(&operation),
+            width: size.width,
+            height: size.height,
+        };
+        match self.prepared.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let prepared = crate::image::prepare_image(None, field, image, operation)?;
+                entry.insert(prepared.clone());
+                Ok(prepared)
+            },
+        }
+    }
 }
 
 impl ReferenceParameters {
@@ -224,3 +275,6 @@ impl Serialize for ReferenceParameters {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

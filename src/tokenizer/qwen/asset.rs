@@ -43,6 +43,7 @@ pub(super) fn load(
     }
 
     let vocab = parse_vocab(model)?;
+    let ids = index_vocab_ids(&vocab)?;
     let merge_pairs = parse_merges(model)?;
     validate_merges(&merge_pairs, &vocab)?;
 
@@ -50,7 +51,7 @@ pub(super) fn load(
     if let Some(config) = tokenizer_config_json {
         merge_config_special_tokens(config, &vocab, &mut added_tokens)?;
     }
-    validate_added_ids(&vocab, &added_tokens)?;
+    validate_added_ids(ids, &added_tokens)?;
     validate_profile(&root)?;
     for symbol in byte_to_unicode() {
         if !vocab.contains_key(&symbol.to_string()) {
@@ -191,10 +192,15 @@ fn parse_vocab(model: &Value) -> Result<HashMap<String, TokenId>, TokenizerError
         )
     })?;
 
-    let vocab: HashMap<String, TokenId> =
-        deserialize_value(entries, TokenizerAsset::QwenTokenizer, "model.vocab")?;
+    deserialize_value(entries, TokenizerAsset::QwenTokenizer, "model.vocab")
+}
+
+/// Keep the validated reverse index for the later added-token collision check.
+fn index_vocab_ids(
+    vocab: &HashMap<String, TokenId>,
+) -> Result<HashMap<TokenId, &str>, TokenizerError> {
     let mut by_id: HashMap<TokenId, &str> = HashMap::with_capacity(vocab.len());
-    for (token, id) in &vocab {
+    for (token, id) in vocab {
         if let Some(first) = by_id.insert(*id, token) {
             return Err(TokenizerError::DuplicateTokenId {
                 asset: TokenizerAsset::QwenTokenizer,
@@ -204,7 +210,7 @@ fn parse_vocab(model: &Value) -> Result<HashMap<String, TokenId>, TokenizerError
             });
         }
     }
-    Ok(vocab)
+    Ok(by_id)
 }
 
 fn parse_merges(model: &Value) -> Result<Vec<(String, String)>, TokenizerError> {
@@ -467,14 +473,10 @@ fn validate_added_flags(entry: &Value, asset: TokenizerAsset) -> Result<(), Toke
     Ok(())
 }
 
-fn validate_added_ids(
-    vocab: &HashMap<String, TokenId>,
-    added: &[(String, TokenId)],
+fn validate_added_ids<'a>(
+    mut ids: HashMap<TokenId, &'a str>,
+    added: &'a [(String, TokenId)],
 ) -> Result<(), TokenizerError> {
-    let mut ids: HashMap<TokenId, &str> = vocab
-        .iter()
-        .map(|(token, id)| (*id, token.as_str()))
-        .collect();
     let mut strings = std::collections::HashSet::new();
     for (token, id) in added {
         if token.is_empty() || !strings.insert(token) {

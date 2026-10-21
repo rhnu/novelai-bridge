@@ -18,7 +18,11 @@ mod asset;
 mod html;
 use html::unescape_html;
 
-use super::{FramingPolicy, TokenId, TokenizerAsset, TokenizerError, bpe::ByteBpe};
+use super::{
+    FramingPolicy, TokenId, TokenizerAsset, TokenizerError,
+    bpe::ByteBpe,
+    encoder::{TokenCounter, TokenSink},
+};
 
 /// The CLIP pre-tokenization pattern, verbatim from `simple_tokenizer.py`.
 ///
@@ -71,8 +75,18 @@ impl ClipTokenizer {
         text: &str,
         framing: FramingPolicy,
     ) -> Result<Vec<TokenId>, TokenizerError> {
-        let cleaned = clean_text(text);
         let mut out = Vec::new();
+        self.encode_into(text, framing, &mut out)?;
+        Ok(out)
+    }
+
+    fn encode_into(
+        &self,
+        text: &str,
+        framing: FramingPolicy,
+        out: &mut impl TokenSink,
+    ) -> Result<(), TokenizerError> {
+        let cleaned = clean_text(text);
         if framing.includes_framing() {
             out.push(self.start_of_text);
         }
@@ -82,16 +96,16 @@ impl ClipTokenizer {
                 asset: TokenizerAsset::ClipMerges,
                 source: Box::new(error),
             })?;
-            self.encode_word(word.as_str(), &mut out);
+            self.encode_word(word.as_str(), out);
         }
 
         if framing.includes_framing() {
             out.push(self.end_of_text);
         }
-        Ok(out)
+        Ok(())
     }
 
-    fn encode_word(&self, word: &str, output: &mut Vec<TokenId>) {
+    fn encode_word(&self, word: &str, output: &mut impl TokenSink) {
         match word {
             START_OF_TEXT => output.push(self.start_of_text),
             END_OF_TEXT => output.push(self.end_of_text),
@@ -124,6 +138,12 @@ fn clean_text(text: &str) -> String {
 impl super::TokenEncoder for ClipTokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
         Self::encode(self, text, framing)
+    }
+
+    fn count(&self, text: &str, framing: FramingPolicy) -> Result<u32, TokenizerError> {
+        let mut count = TokenCounter::default();
+        self.encode_into(text, framing, &mut count)?;
+        Ok(count.0)
     }
 
     fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }

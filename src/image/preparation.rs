@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::imageops::FilterType;
 
@@ -84,7 +86,7 @@ fn resize_to_pixels(source: ImageSize, pixels: u64) -> ImageSize {
 /// Prepared PNG payload returned by an [`ImagePreprocessor`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct PreparedImage {
-    bytes: Vec<u8>,
+    bytes: Arc<Vec<u8>>,
     size: ImageSize,
     usage: ImageResourceUsage,
 }
@@ -115,7 +117,7 @@ impl PreparedImage {
             },
         )?;
         Ok(Self {
-            bytes,
+            bytes: Arc::new(bytes),
             size: ImageSize {
                 width: report.usage.width,
                 height: report.usage.height,
@@ -162,7 +164,11 @@ impl PreparedImage {
             text_chunk_bytes: 0,
             total_text_bytes: 0,
         };
-        Ok(Self { bytes, size, usage })
+        Ok(Self {
+            bytes: Arc::new(bytes),
+            size,
+            usage,
+        })
     }
 
     /// Validated PNG bytes.
@@ -171,7 +177,7 @@ impl PreparedImage {
 
     /// Canonical base64 PNG representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String { STANDARD.encode(&self.bytes) }
+    pub fn to_base64(&self) -> String { STANDARD.encode(self.as_bytes()) }
 
     /// Prepared image dimensions.
     #[must_use]
@@ -305,7 +311,11 @@ fn prepare_builtin(
         text_chunk_bytes: 0,
         total_text_bytes: 0,
     };
-    Ok(PreparedImage { bytes, size, usage })
+    Ok(PreparedImage {
+        bytes: Arc::new(bytes),
+        size,
+        usage,
+    })
 }
 
 fn validate_size(field: RequestField, size: ImageSize) -> Result<(), BridgeError> {

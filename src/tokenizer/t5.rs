@@ -18,6 +18,7 @@ mod wire;
 use normalizer::Normalizer;
 
 use super::{
+    encoder::{TokenCounter, TokenSink},
     error::TokenizerError,
     profile::{FramingPolicy, TokenId},
 };
@@ -87,17 +88,20 @@ impl T5Tokenizer {
     /// asset itself assigns rather than a hard-coded value.
     #[must_use]
     pub fn encode(&self, text: &str, framing: FramingPolicy) -> Vec<TokenId> {
+        let mut ids = Vec::new();
+        self.encode_into(text, framing, &mut ids);
+        ids
+    }
+
+    fn encode_into(&self, text: &str, framing: FramingPolicy, ids: &mut impl TokenSink) {
         let normalized = self.normalizer.normalize(text, &self.user_symbols);
-        let mut ids = if normalized.is_empty() {
-            Vec::new()
-        } else {
-            self.viterbi(&normalized)
-        };
+        if !normalized.is_empty() {
+            self.viterbi(&normalized, ids);
+        }
 
         if framing.includes_framing() {
             ids.push(self.eos_id);
         }
-        ids
     }
 
     /// Selects the highest-scoring complete segmentation with dynamic programming.
@@ -111,7 +115,7 @@ impl T5Tokenizer {
         clippy::float_cmp,
         reason = "SentencePiece segmentation requires upstream f32 arithmetic and exact score ties"
     )]
-    fn viterbi(&self, text: &str) -> Vec<TokenId> {
+    fn viterbi(&self, text: &str, ids: &mut impl TokenSink) {
         let bytes = text.len();
         // Only character boundaries are populated:
         // best[i] = (score of best path ending at byte i, start byte, piece id).
@@ -160,17 +164,18 @@ impl T5Tokenizer {
             }
         }
 
-        let mut ids = Vec::new();
         let mut cursor = bytes;
+        let mut previous = None;
         while cursor > 0 {
             let (_, start, id) = best[cursor]
                 .expect("each character boundary is reachable through a known or unknown piece");
-            ids.push(id);
+            if id != self.unk_id || previous != Some(self.unk_id) {
+                ids.push(id);
+            }
+            previous = Some(id);
             cursor = start;
         }
         ids.reverse();
-        ids.dedup_by(|right, left| *right == self.unk_id && *left == self.unk_id);
-        ids
     }
 }
 
@@ -185,6 +190,12 @@ fn next_char_boundary(text: &str, from: usize) -> usize {
 impl super::TokenEncoder for T5Tokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
         Ok(Self::encode(self, text, framing))
+    }
+
+    fn count(&self, text: &str, framing: FramingPolicy) -> Result<u32, TokenizerError> {
+        let mut count = TokenCounter::default();
+        self.encode_into(text, framing, &mut count);
+        Ok(count.0)
     }
 
     fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }

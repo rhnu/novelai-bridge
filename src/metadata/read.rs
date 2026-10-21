@@ -7,12 +7,7 @@ pub(super) fn parse_png(
     bytes: &[u8],
     policy: ImageDecodePolicy,
 ) -> Result<ImageMetadata, BridgeError> {
-    let mut report = super::png::extract_png_text_chunks(bytes, policy, true)?;
-    let pixels = report.pixels.take();
-    let size = crate::ImageSize {
-        width: report.usage.width,
-        height: report.usage.height,
-    };
+    let (report, alpha) = super::png::extract_png_metadata(bytes, policy)?;
     let mut metadata = super::interpret_png_text(report);
     if !metadata.text_chunks.is_empty() {
         return Ok(metadata);
@@ -21,8 +16,8 @@ pub(super) fn parse_png(
     if let Some(metadata) = read_exif(bytes, policy, &mut warnings) {
         return Ok(metadata);
     }
-    if let Some(pixels) = pixels {
-        match stealth::read_png(&pixels, size, policy) {
+    if let Some(alpha) = alpha {
+        match alpha.read(policy) {
             Ok(Some(text)) => {
                 if let Some(metadata) =
                     json_carrier(&text, MetadataOrigin::StealthPngComp, &mut warnings)

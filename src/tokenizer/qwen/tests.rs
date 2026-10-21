@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::tokenizer::bpe;
+use crate::{TokenEncoder as _, tokenizer::bpe};
 
 pub(super) fn qwen_asset() -> Value {
     let vocab: serde_json::Map<String, Value> = bpe::byte_to_unicode()
@@ -40,6 +40,10 @@ fn qwen_preserves_unicode_and_only_splits_at_actual_added_tokens() {
             );
         }
     }
+    for framing in [FramingPolicy::ContentOnly, FramingPolicy::ModelInput] {
+        assert_eq!(tokenizer.count("e\u{301}猫🙂", framing).unwrap(), 3);
+        assert_eq!(tokenizer.count("e\u{301}猫🙂", framing).unwrap(), 3);
+    }
 }
 
 #[test]
@@ -74,6 +78,9 @@ fn qwen_false_special_prefixes_do_not_break_ordinary_merges() {
         {"content": "<|special|>", "id": 259}
     ]);
     let tokenizer = load_qwen(&asset).unwrap();
+    for framing in [FramingPolicy::ContentOnly, FramingPolicy::ModelInput] {
+        assert_eq!(tokenizer.count("abc<|special|>abc", framing).unwrap(), 3);
+    }
     assert_eq!(
         tokenizer
             .encode("abc<|special|>abc", FramingPolicy::ContentOnly)
@@ -332,6 +339,18 @@ fn asset_failures_keep_merge_and_vocabulary_categories() {
         load_qwen(&duplicate),
         Err(TokenizerError::DuplicateTokenId { id: 0, .. })
     ));
+    let mut collision = qwen_asset();
+    collision["added_tokens"] = json!([{"content": "special", "id": 65}]);
+    assert!(matches!(
+        load_qwen(&collision),
+        Err(TokenizerError::SpecialTokenIdCollision { id: 65, .. })
+    ));
+    collision["added_tokens"] =
+        json!([{"content": "first", "id": 256}, {"content": "second", "id": 256}]);
+    assert!(matches!(
+        load_qwen(&collision),
+        Err(TokenizerError::SpecialTokenIdCollision { id: 256, .. })
+    ));
 }
 
 #[test]
@@ -345,6 +364,10 @@ fn regex_failure_is_not_a_partial_success() {
         .unwrap();
     assert!(matches!(
         tokenizer.encode("aaaaaaaaaab", FramingPolicy::ContentOnly),
+        Err(TokenizerError::EncodingFailed { .. })
+    ));
+    assert!(matches!(
+        tokenizer.count("aaaaaaaaaab", FramingPolicy::ContentOnly),
         Err(TokenizerError::EncodingFailed { .. })
     ));
 }

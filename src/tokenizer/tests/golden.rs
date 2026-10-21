@@ -70,6 +70,17 @@ fn check_fixture(encoder: &dyn TokenEncoder, fixture: &Fixture, asset: &[u8]) {
     assert_eq!(encoder.vocabulary_size(), fixture.vocabulary_size);
 
     for case in &fixture.cases {
+        for (framing, expected) in [
+            (FramingPolicy::ContentOnly, &case.content_only),
+            (FramingPolicy::ModelInput, &case.model_input),
+        ] {
+            assert_eq!(
+                encoder.count(&case.input, framing).unwrap(),
+                u32::try_from(expected.len()).unwrap(),
+                "{}: count matches upstream sequence length",
+                case.name
+            );
+        }
         assert_eq!(
             encoder
                 .encode(&case.input, FramingPolicy::ContentOnly)

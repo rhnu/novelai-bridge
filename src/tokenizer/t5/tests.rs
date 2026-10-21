@@ -1,6 +1,7 @@
 use std::error::Error as _;
 
 use super::*;
+use crate::TokenEncoder as _;
 
 fn field(number: u8, data: &[u8]) -> Vec<u8> {
     assert!(data.len() < 128);
@@ -51,6 +52,20 @@ fn t5_uses_viterbi_unknown_runs_user_symbols_and_normalizer_flags() {
         [2, 0, 6, 1]
     );
     assert_eq!(tokenizer.encode("</s>", FramingPolicy::ContentOnly), [2, 0]);
+    assert_eq!(
+        tokenizer
+            .count("🙂🙂猫", FramingPolicy::ModelInput)
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        tokenizer
+            .count("🙂🙂猫", FramingPolicy::ContentOnly)
+            .unwrap(),
+        3
+    );
+    assert_eq!(tokenizer.count("", FramingPolicy::ContentOnly).unwrap(), 0);
+    assert_eq!(tokenizer.count("", FramingPolicy::ModelInput).unwrap(), 1);
     let mut no_prefix = bytes;
     no_prefix.extend(field(3, &[24, 0, 32, 0, 40, 0]));
     let tokenizer = T5Tokenizer::from_sentencepiece_model(&no_prefix).unwrap();

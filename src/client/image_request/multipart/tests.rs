@@ -69,13 +69,18 @@ fn cached_multipart_omits_known_bytes_and_recovers_only_the_rejected_identity() 
         "image":"AQID", "mask":"BAUG", "reference_image_multiple":["AQID"], "director_reference_images":["AQID"]
     }});
     let mut cache = super::super::cache::CacheState::default();
-    let first = cache.transform(request_body(original.clone())).unwrap();
+    let secret = cache.secret().unwrap();
+    let body = request_body(original.clone());
+    let keys = super::super::cache::hash_media(&secret, &body);
+    let first = cache.transform(body, keys);
     let (bytes, _) = encode_with_boundary(&first.body, "boundary").unwrap();
     let first_text = String::from_utf8(bytes).unwrap();
     assert_eq!(first_text.matches("Content-Disposition:").count(), 3);
     assert!(first_text.contains("\r\n\r\n\u{1}\u{2}\u{3}\r\n"));
     cache.register(first.registrations, 16);
-    let mut cached = cache.transform(request_body(original)).unwrap();
+    let body = request_body(original);
+    let keys = super::super::cache::hash_media(&secret, &body);
+    let mut cached = cache.transform(body, keys);
     let (bytes, _) = encode_with_boundary(&cached.body, "boundary").unwrap();
     let cached_text = String::from_utf8(bytes).unwrap();
     assert_eq!(cached_text.matches("Content-Disposition:").count(), 1);

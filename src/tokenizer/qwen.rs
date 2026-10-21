@@ -11,7 +11,11 @@ use unicode_normalization::UnicodeNormalization;
 mod asset;
 #[cfg(test)]
 mod tests;
-use super::{FramingPolicy, TokenId, TokenizerAsset, TokenizerError, bpe::ByteBpe};
+use super::{
+    FramingPolicy, TokenId, TokenizerAsset, TokenizerError,
+    bpe::ByteBpe,
+    encoder::{TokenCounter, TokenSink},
+};
 
 /// Unicode normalization applied before pre-tokenization.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -109,7 +113,7 @@ impl QwenTokenizer {
     fn encode_with_added_tokens(
         &self,
         text: &str,
-        out: &mut Vec<TokenId>,
+        out: &mut impl TokenSink,
     ) -> Result<(), TokenizerError> {
         let Some(pattern) = &self.added_token_pattern else {
             return self.encode_ordinary(text, out);
@@ -129,7 +133,7 @@ impl QwenTokenizer {
         self.encode_ordinary(&text[cursor..], out)
     }
 
-    fn encode_ordinary(&self, text: &str, out: &mut Vec<TokenId>) -> Result<(), TokenizerError> {
+    fn encode_ordinary(&self, text: &str, out: &mut impl TokenSink) -> Result<(), TokenizerError> {
         let normalized = match self.normalization {
             Normalization::None => Cow::Borrowed(text),
             Normalization::Nfc => Cow::Owned(text.nfc().collect::<String>()),
@@ -158,6 +162,12 @@ impl QwenTokenizer {
 impl super::TokenEncoder for QwenTokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
         Self::encode(self, text, framing)
+    }
+
+    fn count(&self, text: &str, _framing: FramingPolicy) -> Result<u32, TokenizerError> {
+        let mut count = TokenCounter::default();
+        self.encode_with_added_tokens(text, &mut count)?;
+        Ok(count.0)
     }
 
     fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }

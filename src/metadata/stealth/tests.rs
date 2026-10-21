@@ -1,14 +1,10 @@
 use super::*;
 use crate::metadata::test_support::{compressed, stealth_pixels};
 
-fn pixels(compressed: &[u8]) -> (PngPixels, ImageSize) {
+fn pixels(compressed: &[u8]) -> (image::DynamicImage, ImageSize) {
     let (width, height, bytes) = stealth_pixels(compressed);
     (
-        PngPixels {
-            bytes,
-            color: png::ColorType::Rgba,
-            depth: png::BitDepth::Eight,
-        },
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(width, height, bytes).unwrap()),
         ImageSize { width, height },
     )
 }
@@ -17,9 +13,9 @@ fn pixels(compressed: &[u8]) -> (PngPixels, ImageSize) {
 fn alpha_is_column_major_and_big_endian_for_all_confirmed_compression_forms() {
     let text = r#"{"Description":"日本語","Comment":"{\"seed\":42}"}"#;
     for codec in 0..3 {
-        let (pixels, size) = pixels(&compressed(text.as_bytes(), codec));
+        let (pixels, _) = pixels(&compressed(text.as_bytes(), codec));
         assert_eq!(
-            read_png(&pixels, size, ImageDecodePolicy::default())
+            read_pixels(&pixels, ImageDecodePolicy::default())
                 .unwrap()
                 .as_deref(),
             Some(text)
@@ -32,13 +28,13 @@ fn zlib_and_raw_payloads_can_expand_across_multiple_output_buffers() {
     let text = serde_json::json!({"Description": "x".repeat(20 * 1024)}).to_string();
     for codec in [1, 2] {
         let encoded = compressed(text.as_bytes(), codec);
-        let (pixels, size) = pixels(&encoded);
+        let (pixels, _) = pixels(&encoded);
         let policy = ImageDecodePolicy {
             max_text_chunk_bytes: text.len(),
             ..Default::default()
         };
         assert_eq!(
-            read_png(&pixels, size, policy).unwrap().as_deref(),
+            read_pixels(&pixels, policy).unwrap().as_deref(),
             Some(text.as_str())
         );
         assert!(decompress(&encoded, text.len() - 1).is_err());
@@ -72,20 +68,20 @@ fn compressed_inflated_and_alpha_capacity_limits_are_checked() {
         max_text_chunk_bytes: 128,
         ..Default::default()
     };
-    assert!(read_png(&pixels, size, policy).is_err());
+    assert!(read_pixels(&pixels, policy).is_err());
     let policy = ImageDecodePolicy {
         max_text_chunk_bytes: 1,
         ..Default::default()
     };
-    assert!(read_png(&pixels, size, policy).is_err());
+    assert!(read_pixels(&pixels, policy).is_err());
     // Forge a huge bit count without constructing or allocating its claimed payload.
     for bit in 15 * 8..19 * 8 {
         let index =
             ((bit % size.height as usize) * size.width as usize + bit / size.height as usize) * 4
                 + 3;
-        pixels.bytes[index] |= 1;
+        pixels.as_mut_rgba8().unwrap().as_mut()[index] |= 1;
     }
-    assert!(read_png(&pixels, size, ImageDecodePolicy::default()).is_err());
+    assert!(read_pixels(&pixels, ImageDecodePolicy::default()).is_err());
 }
 
 #[test]
@@ -102,22 +98,30 @@ fn every_compression_form_rejects_truncation_and_trailing_bytes() {
 #[test]
 fn absent_and_unverified_sixteen_bit_carriers_are_not_guessed() {
     let (mut pixels, size) = pixels(&compressed(b"{}", 0));
-    pixels.depth = png::BitDepth::Sixteen;
+    let values = pixels
+        .as_rgba8()
+        .unwrap()
+        .as_raw()
+        .iter()
+        .map(|value| u16::from(*value) * 257)
+        .collect();
+    let sixteen = image::DynamicImage::ImageRgba16(
+        image::ImageBuffer::from_raw(size.width, size.height, values).unwrap(),
+    );
     assert!(
-        read_png(&pixels, size, ImageDecodePolicy::default())
+        read_pixels(&sixteen, ImageDecodePolicy::default())
             .unwrap()
             .is_none()
     );
-    pixels.depth = png::BitDepth::Eight;
-    pixels.bytes.fill(255);
+    pixels.as_mut_rgba8().unwrap().as_mut().fill(255);
     assert!(
-        read_png(&pixels, size, ImageDecodePolicy::default())
+        read_pixels(&pixels, ImageDecodePolicy::default())
             .unwrap()
             .is_none()
     );
-    pixels.color = png::ColorType::Rgb;
+    let pixels = image::DynamicImage::ImageRgb8(pixels.to_rgb8());
     assert!(
-        read_png(&pixels, size, ImageDecodePolicy::default())
+        read_pixels(&pixels, ImageDecodePolicy::default())
             .unwrap()
             .is_none()
     );

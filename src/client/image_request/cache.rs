@@ -21,17 +21,21 @@ pub(super) struct CacheTransaction {
 }
 
 impl CacheState {
+    /// Copies the stable client secret so media can be hashed without holding the state lock.
+    pub(super) fn secret(&mut self) -> Result<[u8; 32], BridgeError> {
+        if let Some(secret) = self.secret {
+            return Ok(secret);
+        }
+        let secret = super::random_bytes()?;
+        self.secret = Some(secret);
+        Ok(secret)
+    }
+
     pub(super) fn transform(
-        &mut self,
+        &self,
         mut body: crate::image::request_body::MediaBody,
-    ) -> Result<CacheTransaction, BridgeError> {
-        let secret = if let Some(secret) = self.secret {
-            secret
-        } else {
-            let secret = super::random_bytes()?;
-            self.secret = Some(secret);
-            secret
-        };
+        keys: Vec<(usize, String)>,
+    ) -> CacheTransaction {
         let mut registrations = Vec::new();
         let mut omitted = Vec::new();
         if let Some(parameters) = body
@@ -47,15 +51,14 @@ impl CacheState {
                     );
                 }
             }
-            for (index, media) in body.media.iter_mut().enumerate() {
-                let Some(path) = media
+            for (index, key) in keys {
+                let media = &mut body.media[index];
+                let path = media
                     .pointer
                     .strip_prefix("/parameters/")
-                    .map(str::to_owned)
-                else {
-                    continue;
-                };
-                let key = cache_key(&secret, media.data.bytes());
+                    .expect("only parameter media is hashed")
+                    .to_owned();
+                let known = self.known.contains(&key);
                 if let Some((field, position)) = path.split_once('/') {
                     media.pointer = format!("/parameters/{field}_cached/{position}/data");
                     let entry = parameters
@@ -71,7 +74,7 @@ impl CacheState {
                         .and_then(Value::as_object_mut)
                         .expect("prepared reference arrays have matching media entries");
                     entry.insert("cache_secret_key".to_owned(), Value::String(key.clone()));
-                    if !self.known.contains(&key) {
+                    if !known {
                         entry.insert("data".to_owned(), Value::String(String::new()));
                     }
                 } else {
@@ -79,11 +82,11 @@ impl CacheState {
                         format!("{path}_cache_secret_key"),
                         Value::String(key.clone()),
                     );
-                    if self.known.contains(&key) {
+                    if known {
                         parameters.remove(&path);
                     }
                 }
-                if self.known.contains(&key) {
+                if known {
                     media.omitted = true;
                     omitted.push((index, key));
                 } else {
@@ -91,11 +94,11 @@ impl CacheState {
                 }
             }
         }
-        Ok(CacheTransaction {
+        CacheTransaction {
             body,
             registrations,
             omitted,
-        })
+        }
     }
 
     pub(super) fn invalidate(&mut self, keys: &[String]) {
@@ -117,6 +120,19 @@ impl CacheState {
             }
         }
     }
+}
+
+/// Hashes immutable media outside the shared registration lock.
+pub(super) fn hash_media(
+    secret: &[u8; 32],
+    body: &crate::image::request_body::MediaBody,
+) -> Vec<(usize, String)> {
+    body.media
+        .iter()
+        .enumerate()
+        .filter(|(_, media)| media.pointer.starts_with("/parameters/"))
+        .map(|(index, media)| (index, cache_key(secret, media.data.bytes())))
+        .collect()
 }
 
 impl CacheTransaction {
@@ -179,3 +195,6 @@ pub(super) fn invalid_keys(error: &BridgeError) -> Option<Vec<String>> {
     let body: ErrorBody = serde_json::from_str(error.raw_body.as_deref()?).ok()?;
     (body.message == "INVALID_CACHE_KEYS").then_some(body.details.invalid_keys)
 }
+
+#[cfg(test)]
+mod tests;

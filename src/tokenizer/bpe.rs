@@ -278,7 +278,7 @@ impl ByteBpe {
         self.vocab.get(token).copied()
     }
 
-    pub(super) fn encode_piece(&self, piece: &str, output: &mut Vec<super::TokenId>) {
+    pub(super) fn encode_piece(&self, piece: &str, output: &mut impl super::encoder::TokenSink) {
         if let Ok(cache) = self.cache.lock()
             && let Some(cached) = cache.get(piece)
         {

@@ -54,10 +54,16 @@ impl<T: Transport + ?Sized> Client<T> {
                 .image_cache
                 .is_some_and(|config| config.max_entries > 0);
         let mut transaction = if caching {
+            let secret = self
+                .image_cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .secret()?;
+            let keys = cache::hash_media(&secret, &body);
             self.image_cache
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .transform(body)?
+                .transform(body, keys)
         } else {
             cache::CacheTransaction::uncached(body)
         };

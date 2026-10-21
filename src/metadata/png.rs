@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
+mod alpha;
 mod write;
+pub(super) use alpha::AlphaBits;
 pub use write::{PngTextEntry, write_png_text_chunks, write_png_text_chunks_with_policy};
 
 use super::MetadataWarning;
@@ -28,6 +30,38 @@ pub fn extract_png_text_chunks(
     policy: ImageDecodePolicy,
     retain_pixels: bool,
 ) -> Result<ExtractedPngText, BridgeError> {
+    extract(
+        bytes,
+        policy,
+        if retain_pixels {
+            Pixels::All
+        } else {
+            Pixels::None
+        },
+    )
+    .map(|(report, _)| report)
+}
+
+/// Keeps only alpha carrier bits when metadata may need the stealth fallback.
+pub(super) fn extract_png_metadata(
+    bytes: &[u8],
+    policy: ImageDecodePolicy,
+) -> Result<(ExtractedPngText, Option<AlphaBits>), BridgeError> {
+    extract(bytes, policy, Pixels::Stealth)
+}
+
+#[derive(Copy, Clone)]
+enum Pixels {
+    All,
+    None,
+    Stealth,
+}
+
+fn extract(
+    bytes: &[u8],
+    policy: ImageDecodePolicy,
+    retention: Pixels,
+) -> Result<(ExtractedPngText, Option<AlphaBits>), BridgeError> {
     policy
         .check(ImageLimit::EncodedBytes, bytes.len() as u64)
         .map_err(invalid_png_payload)?;
@@ -49,7 +83,12 @@ pub fn extract_png_text_chunks(
     policy
         .check(ImageLimit::DecodedBytes, output_size as u64)
         .map_err(invalid_png_payload)?;
-    let pixels = if retain_pixels {
+    let mut alpha = if matches!(retention, Pixels::Stealth) {
+        AlphaBits::for_metadata(reader.info(), reader.output_color_type())
+    } else {
+        None
+    };
+    let pixels = if matches!(retention, Pixels::All) {
         let mut output = vec![0_u8; output_size];
         let frame = reader
             .next_frame(&mut output)
@@ -61,7 +100,13 @@ pub fn extract_png_text_chunks(
             depth: frame.bit_depth,
         })
     } else {
-        while reader.next_row().map_err(invalid_png_payload)?.is_some() {}
+        let mut row_number = 0;
+        while let Some(row) = reader.next_interlaced_row().map_err(invalid_png_payload)? {
+            if let Some(alpha) = &mut alpha {
+                alpha.push_row(row, row_number);
+            }
+            row_number += 1;
+        }
         None
     };
     reader.finish().map_err(invalid_png_payload)?;
@@ -102,19 +147,22 @@ pub fn extract_png_text_chunks(
             policy,
         );
     }
-    Ok(ExtractedPngText {
-        text_chunks: chunks,
-        warnings,
-        usage: crate::media_policy::ImageResourceUsage {
-            encoded_bytes: bytes.len() as u64,
-            width,
-            height,
-            decoded_bytes: output_size as u64,
-            text_chunk_bytes: max_text_bytes as u64,
-            total_text_bytes: total_text_bytes as u64,
+    Ok((
+        ExtractedPngText {
+            text_chunks: chunks,
+            warnings,
+            usage: crate::media_policy::ImageResourceUsage {
+                encoded_bytes: bytes.len() as u64,
+                width,
+                height,
+                decoded_bytes: output_size as u64,
+                text_chunk_bytes: max_text_bytes as u64,
+                total_text_bytes: total_text_bytes as u64,
+            },
+            pixels,
         },
-        pixels,
-    })
+        alpha,
+    ))
 }
 
 fn decode_compressed_text_chunk<T>(
@@ -305,3 +353,6 @@ pub(super) fn chunk_values_ci<'a>(
         .filter(move |(chunk_key, _)| chunk_key.eq_ignore_ascii_case(key))
         .flat_map(|(_, values)| values.iter().map(String::as_str))
 }
+
+#[cfg(test)]
+mod tests;
