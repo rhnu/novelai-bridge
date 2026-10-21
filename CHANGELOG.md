@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Add standalone `Client::upscale` / `upscale_prepared`, typed blur declarations, complete image results and input-area cost estimates.
+- Add URL-encoded English/Japanese tag queries through `Client::suggest_tags`, preserving their distinct response shapes and ranking fields.
+- Add `DirectorCommand::DeclutterKeepBubbles`.
+
 ### Changed
 
 - Include request planning, media processing, metadata, the client, streaming and credit observation in the core. Retain only `reqwest-transport`, `tokenizer` and `bundled-assets` Cargo features.
@@ -14,6 +20,8 @@
 - Retain every Director result instead of discarding images after the first. Preserve each decoded image's raw or archive source identity, including archive entry name and index.
 - Accept pre-epoch subscription expiration timestamps returned by the service and preserve their signed millisecond value.
 - Use the official Heavy UC default, model-specific full/curated prompt text, and V3 Variety+ sigma profile.
+- Resize Director sources to the effective tool canvas before encoding and pricing. Use V3 at 28 steps for ordinary tools and the distinct background-removal surcharge without an Opus exemption.
+- Keep transport and JSON parser error sources out of library logs because query URLs and decoded values may contain caller data. Returned errors retain their sources.
 
 ### Migration
 
@@ -23,6 +31,8 @@
 - `SubscriptionInfo::expires_at_ms` is now `Option<i64>` to represent expiration timestamps before the Unix epoch.
 - Construct `InpaintingInput::new(image, mask)` for pure infill. Move strength and noise into `img2img: Some(InpaintImageToImage::new(strength, noise))`; this group also owns color correction and an optional noise seed. Remove the old flat inpainting fields.
 - Inspect preset text through `model.descriptor().prompt().quality_preset(...)` or `uc_preset(...)`. Remove calls to global `QualityPreset::tags` / `UcPreset::preset_text` and replace `QualitySupport` inspection with the model's supported definition lists.
+- Pass the Director command to `estimate_director_tool_cost`, or call `PreparedDirector::estimate_anlas_cost` to use its effective dimensions. `source_size()` retains the original size; `image_size()` reports the processed canvas.
+- Handle `RequestCostEstimate::Unavailable`. Its `total()` now returns `Option<u32>`; known generation and fixed prices return `Some`.
 
 ## 0.6.0 - 2026-10-21
 

@@ -7,6 +7,8 @@ pub enum ApiEndpoint {
     GenerateImageStream,
     EncodeVibe,
     AugmentImage,
+    UpscaleImage,
+    SuggestTags,
     Subscription,
 }
 
@@ -17,6 +19,8 @@ impl ApiEndpoint {
             Self::GenerateImageStream => "/ai/generate-image-stream",
             Self::EncodeVibe => "/ai/encode-vibe",
             Self::AugmentImage => "/ai/augment-image",
+            Self::UpscaleImage => "/ai/upscale",
+            Self::SuggestTags => "/ai/generate-image/suggest-tags",
             Self::Subscription => "/user/subscription",
         }
     }
@@ -24,7 +28,7 @@ impl ApiEndpoint {
     #[must_use]
     pub const fn method(self) -> TransportMethod {
         match self {
-            Self::Subscription => TransportMethod::Get,
+            Self::Subscription | Self::SuggestTags => TransportMethod::Get,
             _ => TransportMethod::Post,
         }
     }
@@ -32,7 +36,7 @@ impl ApiEndpoint {
     #[must_use]
     pub const fn accept(self) -> &'static str {
         match self {
-            Self::Subscription => "application/json",
+            Self::Subscription | Self::SuggestTags => "application/json",
             Self::GenerateImageStream => "text/event-stream",
             _ => "application/octet-stream",
         }
@@ -41,7 +45,7 @@ impl ApiEndpoint {
     #[must_use]
     pub const fn content_type(self) -> Option<&'static str> {
         match self {
-            Self::Subscription => None,
+            Self::Subscription | Self::SuggestTags => None,
             _ => Some("application/json"),
         }
     }

@@ -1240,6 +1240,7 @@ dependencies = [
  "eventsource-stream",
  "fancy-regex",
  "flate2",
+ "form_urlencoded",
  "futures-core",
  "futures-util",
  "getrandom 0.4.3",

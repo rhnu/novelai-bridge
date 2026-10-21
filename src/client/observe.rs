@@ -116,6 +116,9 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 crate::DirectorCommand::BgRemoval => ObservedDirectorTool::BgRemoval,
                 crate::DirectorCommand::Emotion { .. } => ObservedDirectorTool::Emotion,
                 crate::DirectorCommand::Declutter => ObservedDirectorTool::Declutter,
+                crate::DirectorCommand::DeclutterKeepBubbles => {
+                    ObservedDirectorTool::DeclutterKeepBubbles
+                },
                 crate::DirectorCommand::Colorize { .. } => ObservedDirectorTool::Colorize,
             };
             let size = prepared.image_size();
@@ -124,11 +127,34 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                     request_id,
                     ObservedOperation::AugmentImage { tool, size },
                     RequestCostEstimate::Fixed {
-                        anlas: crate::estimate_director_tool_cost(
-                            size,
-                            self.last_pricing_context(),
-                        ),
+                        anlas: prepared.estimate_anlas_cost(self.last_pricing_context()),
                     },
+                )
+                .await;
+        }
+        PendingObservation::default()
+    }
+
+    pub(super) async fn observe_upscale(
+        &self,
+        prepared: &crate::PreparedUpscale,
+        request_id: u64,
+    ) -> PendingObservation {
+        if let Some(context) = &self.observation {
+            let estimate = prepared
+                .estimated_cost()
+                .map_or(RequestCostEstimate::Unavailable, |anlas| {
+                    RequestCostEstimate::Fixed { anlas }
+                });
+            return context
+                .begin(
+                    request_id,
+                    ObservedOperation::UpscaleImage {
+                        model: prepared.model(),
+                        size: prepared.image_size(),
+                        declared_blur_sigma: prepared.declared_blur_sigma(),
+                    },
+                    estimate,
                 )
                 .await;
         }

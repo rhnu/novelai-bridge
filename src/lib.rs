@@ -13,9 +13,11 @@ mod payload;
 mod pricing;
 mod protocol;
 mod subscription;
+mod tag;
 #[cfg(feature = "tokenizer")]
 mod tokenizer;
 mod transport;
+mod upscale;
 mod validation;
 mod vibe;
 
@@ -82,6 +84,9 @@ pub use protocol::{ApiEndpoint, BufferedResponse};
 #[cfg(feature = "reqwest-transport")]
 pub use secrecy::SecretString;
 pub use subscription::{SubscriptionInfo, V5UsageStatus};
+pub use tag::{
+    JapaneseTagSuggestion, SuggestTagsRequest, SuggestTagsResult, TagLanguage, TagSuggestion,
+};
 #[cfg(feature = "tokenizer")]
 pub use tokenizer::{
     ClipTokenizer, FramingPolicy, QwenTokenizer, T5Tokenizer, TokenCount, TokenEncoder, TokenId,
@@ -92,6 +97,10 @@ pub use transport::{ApiKeySource, DEFAULT_TIMEOUT_MS, ReqwestOptions, ReqwestTra
 pub use transport::{
     ResponseLimitExceeded, ResponseLimits, Transport, TransportByteStream, TransportHeader,
     TransportMethod, TransportRequest, TransportResponse,
+};
+pub use upscale::{
+    PreparedUpscale, UpscaleBlurSigma, UpscaleImageRequest, UpscaleImageResult,
+    estimate_upscale_cost,
 };
 pub use validation::{ValidationAdjustment, ValidationPolicy};
 pub use vibe::{EncodeVibeRequest, PreparedVibe, VibeEncoding, VibeReference, VibeTransferConfig};

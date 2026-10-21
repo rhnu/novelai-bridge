@@ -96,6 +96,8 @@ operations use validated `EncodedImage` inputs:
 | Inpainting     | `.inpainting(InpaintingInput::new(image, mask))`                  |
 | Director Tools | `Client::run_director_tool` with `RunDirectorToolRequest`         |
 | Vibe encoding  | `Client::encode_vibe` with `EncodeVibeRequest`                    |
+| Upscale        | `Client::upscale` with `UpscaleImageRequest::new(image)`          |
+| Tag suggestions | `Client::suggest_tags` with `SuggestTagsRequest::new(prefix, model)` |
 
 Requests default to `ValidationPolicy::Normalize`, which adjusts unsupported or out-of-range
 settings and records diagnostics. Select `.policy(ValidationPolicy::Reject)` to reject those
@@ -113,6 +115,16 @@ with `client.generate_prepared(...)`, or inspect its JSON with
 
 Director calls return `RunDirectorToolResult` with every returned image. Returned `GeneratedImage`
 values expose validated bytes, format, source identity, metadata and any embedded image seed. `GenerateImageResult::resolved_seed` is the request seed; it is separate from per-image seeds.
+
+Director preparation resizes the source to the official tool's processing canvas. Inspect
+`PreparedDirector::source_size()` and `image_size()` for the original and effective dimensions.
+`DirectorCommand::DeclutterKeepBubbles` preserves dialogue bubbles during cleanup.
+
+Standalone upscaling sends the original image and a typed blur declaration, with V5 Curated and
+zero blur as defaults. It returns all images through `UpscaleImageResult::images`. Tag queries
+support English and Japanese and return suggestions in provider order without generating images.
+`SuggestTagsResult` retains English tag/count/confidence records or Japanese/English translation
+pairs and their `power` ranking as separate variants.
 
 ## Tokenization and cost estimates
 

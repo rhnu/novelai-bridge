@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use novelai_bridge::{
     BridgeError, Client, ClientConfig, CreditEvent, CreditObserver, DirectorCommand,
-    EncodeVibeRequest, EncodedImage, InvalidRequest, Model, RequestCostEstimate,
+    EncodeVibeRequest, EncodedImage, ImageSize, InvalidRequest, Model, RequestCostEstimate,
     RunDirectorToolRequest,
 };
 
@@ -179,9 +179,16 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
         Some("https://image.novelai.net/ai/augment-image")
     );
     assert_eq!(body["req_type"], json!("lineart"));
-    assert_eq!(body["width"], json!(320));
-    assert_eq!(body["height"], json!(240));
-    assert_eq!(body["image"], json!(image_base64));
+    assert_eq!(body["width"], json!(1182));
+    assert_eq!(body["height"], json!(886));
+    let processed = EncodedImage::from_base64(body["image"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        processed.size(),
+        ImageSize {
+            width: 1182,
+            height: 886
+        }
+    );
 }
 
 #[tokio::test]

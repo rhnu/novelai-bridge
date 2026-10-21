@@ -14,6 +14,8 @@ mod generate;
 mod observe;
 mod stream;
 mod subscription;
+mod tags;
+mod upscale;
 mod vibe;
 
 pub use stream::{GenerateImageStream, ImageStreamItem, ImageStreamResult};

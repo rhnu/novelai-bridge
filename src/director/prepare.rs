@@ -1,12 +1,14 @@
 use super::{DirectorCommand, RunDirectorToolRequest, wire::DirectorRequestBody};
 use crate::{
-    BridgeError, EncodeError, EncodeTarget, ImageSize, InvalidRequest, RequestField,
-    ValidationAdjustment, ValidationPolicy, parameters::bounds::normalize_integer,
+    BridgeError, EncodeError, EncodeTarget, ImagePreparation, ImagePreprocessor, ImageSize,
+    InvalidRequest, RequestField, ValidationAdjustment, ValidationPolicy,
+    parameters::bounds::normalize_integer,
 };
 
 /// A validated director operation with its encoded source image.
 pub struct PreparedDirector {
     command: DirectorCommand,
+    source_size: ImageSize,
     image_size: ImageSize,
     body: DirectorRequestBody,
     adjustments: Vec<ValidationAdjustment>,
@@ -18,11 +20,23 @@ impl RunDirectorToolRequest {
     /// # Errors
     ///
     /// Returns an invalid prompt or numeric parameter error.
-    pub fn prepare(self) -> Result<PreparedDirector, BridgeError> {
-        self.image.validate_policy(
-            RequestField::Image,
-            crate::media_policy::ImageDecodePolicy::default(),
-        )?;
+    pub fn prepare(self) -> Result<PreparedDirector, BridgeError> { self.prepare_inner(None) }
+
+    /// Prepares a Director source using a caller-provided pixel transformer.
+    ///
+    /// # Errors
+    /// Returns command validation, media-budget or image-preparation failures.
+    pub fn prepare_with(
+        self,
+        preprocessor: &dyn ImagePreprocessor,
+    ) -> Result<PreparedDirector, BridgeError> {
+        self.prepare_inner(Some(preprocessor))
+    }
+
+    fn prepare_inner(
+        self,
+        preprocessor: Option<&dyn ImagePreprocessor>,
+    ) -> Result<PreparedDirector, BridgeError> {
         let mut adjustments = Vec::new();
         let command = match self.command {
             DirectorCommand::Emotion { prompt, defry } => {
@@ -52,17 +66,22 @@ impl RunDirectorToolRequest {
             DirectorCommand::Colorize { prompt, defry } => (prompt.clone(), Some(*defry)),
             _ => (None, None),
         };
-        let image_size = self.image.size();
+        let source_size = self.image.size();
+        let operation = ImagePreparation::director(source_size);
+        let image =
+            crate::image::prepare_image(preprocessor, RequestField::Image, &self.image, operation)?;
+        let image_size = image.size();
         let body = DirectorRequestBody {
             req_type: command.wire_name(),
             width: image_size.width,
             height: image_size.height,
-            image: self.image.to_base64(),
+            image: image.to_base64(),
             prompt,
             defry,
         };
         Ok(PreparedDirector {
             command,
+            source_size,
             image_size,
             body,
             adjustments,
@@ -79,9 +98,19 @@ impl PreparedDirector {
     #[must_use]
     pub const fn command(&self) -> &DirectorCommand { &self.command }
 
-    /// Source dimensions used for both the payload and pricing.
+    /// Actual processing dimensions used for both the payload and pricing.
     #[must_use]
     pub const fn image_size(&self) -> ImageSize { self.image_size }
+
+    /// Original input dimensions before Director Tools resizing.
+    #[must_use]
+    pub const fn source_size(&self) -> ImageSize { self.source_size }
+
+    /// Estimates this prepared command using its actual processing dimensions.
+    #[must_use]
+    pub fn estimate_anlas_cost(&self, context: crate::AnlasPricingContext) -> u32 {
+        crate::estimate_director_tool_cost(self.image_size, &self.command, context)
+    }
 
     /// Encodes the prepared operation without repeating normalization.
     ///
@@ -115,6 +144,7 @@ impl std::fmt::Debug for PreparedDirector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PreparedDirector")
             .field("command", &self.command)
+            .field("source_size", &self.source_size)
             .field("image_size", &self.image_size)
             .field("adjustments", &self.adjustments)
             .finish_non_exhaustive()

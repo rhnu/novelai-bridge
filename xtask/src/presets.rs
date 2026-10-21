@@ -3,7 +3,8 @@ use novelai_bridge::{
     ApiEndpoint, CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE,
     EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
     GenerationInput, ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model,
-    ReferenceSet, StreamMode, Transport, VibeReference, VibeTransferConfig,
+    ReferenceSet, StreamMode, SuggestTagsRequest, TagLanguage, Transport, UpscaleImageRequest,
+    VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -54,8 +55,20 @@ pub fn shape(
     size: ImageSize,
     edits: &RequestEdits,
 ) -> TaskResult<()> {
+    if args.preset == Preset::Tags {
+        let query = tag_query(args, model);
+        let mut request = ApiEndpoint::SuggestTags.request(DEFAULT_IMAGE_BASE, None);
+        request.endpoint.push('?');
+        request.endpoint.push_str(&query.query_string());
+        edits.apply(request)?;
+        return Ok(());
+    }
     let (endpoint, body) = match args.preset {
         Preset::Subscription => (ApiEndpoint::Subscription, None),
+        Preset::Upscale => (
+            ApiEndpoint::UpscaleImage,
+            Some(upscale_request(args, size)?.prepare()?.encode()?),
+        ),
         Preset::Vibe => (
             ApiEndpoint::EncodeVibe,
             Some(
@@ -97,6 +110,13 @@ pub async fn execute<T: Transport + ?Sized>(
     size: ImageSize,
 ) -> TaskResult<String> {
     match args.preset {
+        Preset::Tags => Ok(serde_json::to_string_pretty(
+            &client.suggest_tags(tag_query(args, model)).await?,
+        )?),
+        Preset::Upscale => report::images(
+            &client.upscale(upscale_request(args, size)?).await?.images,
+            args,
+        ),
         Preset::Subscription => Ok(render::subscription_summary(
             &client.get_subscription().await?,
         )),
@@ -147,6 +167,24 @@ pub async fn execute<T: Transport + ?Sized>(
             args,
         ),
     }
+}
+
+fn tag_query(args: &RunArgs, model: Model) -> SuggestTagsRequest {
+    let mut query = SuggestTagsRequest::new(&args.prompt, model);
+    query.language = if args.lang == "jp" {
+        TagLanguage::Japanese
+    } else {
+        TagLanguage::English
+    };
+    query
+}
+
+fn upscale_request(args: &RunArgs, size: ImageSize) -> TaskResult<UpscaleImageRequest> {
+    let mut request = UpscaleImageRequest::new(inputs::source(args, size)?);
+    if let Some(model) = args.model {
+        request.model = model;
+    }
+    Ok(request)
 }
 
 fn encode_vibe_request(

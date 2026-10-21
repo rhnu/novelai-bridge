@@ -60,6 +60,10 @@ pub enum Preset {
     Stream,
     /// Read the account subscription and free V5 allowance.
     Subscription,
+    /// Upscale a source image using the independent image endpoint.
+    Upscale,
+    /// Read tag suggestions without generating images.
+    Tags,
 }
 
 #[derive(Args)]
@@ -81,6 +85,10 @@ pub struct RunArgs {
 
     #[arg(long)]
     pub negative: Option<String>,
+
+    /// Tag suggestion language.
+    #[arg(long, value_parser = ["en", "jp"], default_value = "en")]
+    pub lang: String,
 
     /// Built-in quality tags. `light` is V5 only.
     #[arg(long, value_enum, default_value = "standard")]

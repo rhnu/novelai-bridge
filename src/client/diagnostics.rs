@@ -20,11 +20,15 @@ pub(super) fn report_failure(error: &BridgeError) {
             tracing::debug!(causes = %ErrorChain(error), "local request rejected");
         },
         BridgeError::Transport(transport) => {
-            tracing::error!(operation = %transport.operation, causes = %ErrorChain(error), "transport failed");
+            // A transport error's URL can contain the caller's tag query.
+            tracing::error!(operation = %transport.operation, "transport failed");
         },
         BridgeError::Decode(decode) => {
-            if decode.target == crate::DecodeTarget::StreamChunk {
-                // A framing parser may retain submitted content in its source error.
+            if matches!(
+                decode.target,
+                crate::DecodeTarget::StreamChunk | crate::DecodeTarget::JsonResponse
+            ) {
+                // Text parsers may retain submitted or account content in their source error.
                 tracing::error!(target = %decode.target, "response decoding failed");
             } else {
                 tracing::error!(target = %decode.target, causes = %ErrorChain(error), "response decoding failed");

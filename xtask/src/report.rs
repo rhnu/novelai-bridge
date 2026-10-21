@@ -1,15 +1,19 @@
 use anyhow::Context as _;
-use novelai_bridge::{GenerateImageResult, GeneratedImageMetadata};
+use novelai_bridge::{GenerateImageResult, GeneratedImage, GeneratedImageMetadata};
 
 use crate::{RunArgs, TaskResult};
 
 pub fn generation(result: &GenerateImageResult, args: &RunArgs) -> TaskResult<String> {
-    let mut lines = vec![format!(
-        "request seed {}, {} image(s)",
+    Ok(format!(
+        "request seed {}, {}",
         result.resolved_seed,
-        result.images.len()
-    )];
-    for (index, image) in result.images.iter().enumerate() {
+        images(&result.images, args)?
+    ))
+}
+
+pub fn images(images: &[GeneratedImage], args: &RunArgs) -> TaskResult<String> {
+    let mut lines = vec![format!("{} image(s)", images.len())];
+    for (index, image) in images.iter().enumerate() {
         let metadata = match image.metadata() {
             GeneratedImageMetadata::Parsed(parsed) => format!(
                 "parsed (generation data: {}, {} warning(s))",

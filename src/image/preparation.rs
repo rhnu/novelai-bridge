@@ -16,9 +16,29 @@ pub enum ImagePreparation {
     Mask(ImageSize),
     /// Fit a director reference to the closest supported reference canvas.
     CharacterReference(ImageSize),
+    /// Resize a Director Tools source to its effective processing dimensions.
+    Director(ImageSize),
 }
 
 impl ImagePreparation {
+    /// Applies the Director Tools processing dimensions used by the `NovelAI` frontend.
+    ///
+    /// The provider schema does not declare these as service-side input limits.
+    #[must_use]
+    pub fn director(source_size: ImageSize) -> Self {
+        const MAX_PIXELS: u64 = 3_145_728 - 2_000;
+        const MIN_PIXELS: u64 = 1_011_712;
+        const UPSIZE_PIXELS: u64 = 1_048_576;
+        let mut size = source_size;
+        if size.pixels() > MAX_PIXELS {
+            size = resize_to_pixels(size, MAX_PIXELS);
+        }
+        if size.pixels() > 0 && size.pixels() < MIN_PIXELS {
+            size = resize_to_pixels(size, UPSIZE_PIXELS);
+        }
+        Self::Director(size)
+    }
+
     /// Selects the supported reference canvas that wastes the least area.
     #[must_use]
     pub fn character_reference(source_size: ImageSize) -> Self {
@@ -33,8 +53,25 @@ impl ImagePreparation {
     #[must_use]
     pub const fn target_size(self) -> ImageSize {
         match self {
-            Self::Source(size) | Self::Mask(size) | Self::CharacterReference(size) => size,
+            Self::Source(size)
+            | Self::Mask(size)
+            | Self::CharacterReference(size)
+            | Self::Director(size) => size,
         }
+    }
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Provider sizing floors positive dimensions after its floating point area scaling"
+)]
+fn resize_to_pixels(source: ImageSize, pixels: u64) -> ImageSize {
+    let factor = (pixels as f64 / source.pixels() as f64).sqrt();
+    ImageSize {
+        width: (f64::from(source.width) * factor).floor() as u32,
+        height: (f64::from(source.height) * factor).floor() as u32,
     }
 }
 
@@ -215,11 +252,26 @@ fn prepare_builtin(
     let size = operation.target_size();
     let filter = match operation {
         ImagePreparation::Mask(_) => FilterType::Nearest,
-        ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => {
-            FilterType::CatmullRom
-        },
+        ImagePreparation::Source(_)
+        | ImagePreparation::CharacterReference(_)
+        | ImagePreparation::Director(_) => FilterType::CatmullRom,
     };
-    let bytes = super::fit::fit_decoded(field, image.pixels(), size, filter)?;
+    let bytes = if matches!(operation, ImagePreparation::Director(_)) {
+        // Independent dimension flooring slightly changes the aspect ratio. A second fit
+        // would shrink a side again and add an unintended border.
+        let policy = ImageDecodePolicy::default();
+        policy
+            .check(
+                ImageLimit::DecodedBytes,
+                u64::from(size.width) * u64::from(size.height) * 4,
+            )
+            .map_err(|source| invalid_policy(field, source))?;
+        let resized =
+            image::imageops::resize(&image.pixels().to_rgba8(), size.width, size.height, filter);
+        super::codec::encode_png(&image::DynamicImage::ImageRgba8(resized), field, policy)?
+    } else {
+        super::fit::fit_decoded(field, image.pixels(), size, filter)?
+    };
     let usage = ImageResourceUsage {
         encoded_bytes: bytes.len() as u64,
         width: size.width,

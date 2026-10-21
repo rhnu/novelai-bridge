@@ -32,6 +32,8 @@ Markdown uses [rumdl](https://rumdl.dev/) and the repository's `.rumdl.toml`. Li
 cargo xtask capabilities
 cargo xtask shape t2i --model nai-diffusion-5-full
 cargo xtask shape stream --seed 123
+cargo xtask shape upscale --size 256x256
+cargo xtask shape tags --prompt cat --lang en
 ```
 
 `shape` consumes the same prepared payload and `ApiEndpoint` request description as the client and does not construct a transport or require credentials. Vibe shape inspection covers the encode-vibe request; generation with that encoding needs its response.

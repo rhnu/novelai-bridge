@@ -15,10 +15,12 @@ fn transport_is_dyn_compatible() {
 
 #[test]
 fn request_debug_does_not_render_payload_bytes() {
-    let request = crate::protocol::ApiEndpoint::GenerateImage
+    let mut request = crate::protocol::ApiEndpoint::GenerateImage
         .request("https://example.test", Some(b"private prompt".to_vec()));
+    request.endpoint.push_str("?prompt=private-query");
     let debug = format!("{request:?}");
     assert!(!debug.contains("private prompt"));
+    assert!(!debug.contains("private-query"));
     assert!(!debug.contains("112, 114, 105"));
     assert!(debug.contains("body_bytes"));
 }

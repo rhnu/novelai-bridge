@@ -24,6 +24,7 @@ pub enum ObservedDirectorTool {
     BgRemoval,
     Emotion,
     Declutter,
+    DeclutterKeepBubbles,
     Colorize,
 }
 
@@ -38,6 +39,11 @@ pub enum ObservedOperation {
     AugmentImage {
         tool: ObservedDirectorTool,
         size: ImageSize,
+    },
+    UpscaleImage {
+        model: Model,
+        size: ImageSize,
+        declared_blur_sigma: crate::UpscaleBlurSigma,
     },
 }
 
@@ -98,15 +104,20 @@ pub enum RequestOutcome {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RequestCostEstimate {
     Generation(AnlasEstimate),
-    Fixed { anlas: u32 },
+    Fixed {
+        anlas: u32,
+    },
+    /// The provider's published local pricing rule does not cover this input.
+    Unavailable,
 }
 
 impl RequestCostEstimate {
     #[must_use]
-    pub const fn total(&self) -> u32 {
+    pub const fn total(&self) -> Option<u32> {
         match self {
-            Self::Generation(estimate) => estimate.total,
-            Self::Fixed { anlas } => *anlas,
+            Self::Generation(estimate) => Some(estimate.total),
+            Self::Fixed { anlas } => Some(*anlas),
+            Self::Unavailable => None,
         }
     }
 }

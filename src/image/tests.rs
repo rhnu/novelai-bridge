@@ -426,6 +426,28 @@ fn reference_canvas_preserves_the_supported_orientation_choices() {
     }
 }
 
+#[test]
+fn director_processing_dimensions_follow_the_two_stage_area_rules() {
+    for (width, height, expected_width, expected_height) in [
+        (1000, 1000, 1024, 1024),
+        (1000, 1011, 1018, 1029),
+        (832, 1216, 832, 1216),
+        (1000, 1012, 1000, 1012),
+        (1773, 1773, 1773, 1773),
+        (1774, 1774, 1773, 1773),
+        (3000, 1200, 2803, 1121),
+        (0, 1000, 0, 1000),
+    ] {
+        assert_eq!(
+            ImagePreparation::director(ImageSize { width, height }).target_size(),
+            ImageSize {
+                width: expected_width,
+                height: expected_height
+            }
+        );
+    }
+}
+
 fn contains_limit(
     error: &(dyn std::error::Error + 'static),
     limit: crate::media_policy::ImageLimit,

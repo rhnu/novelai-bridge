@@ -41,7 +41,7 @@ async fn public_estimate_matches_planned_estimate_after_size_normalization() {
     let planned = events
         .iter()
         .find_map(|event| match event {
-            CreditEvent::RequestPlanned { estimate, .. } => Some(estimate.total()),
+            CreditEvent::RequestPlanned { estimate, .. } => estimate.total(),
             _ => None,
         })
         .unwrap();

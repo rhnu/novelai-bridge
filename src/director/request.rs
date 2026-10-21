@@ -21,6 +21,8 @@ pub enum DirectorCommand {
     },
     /// Declutter cleanup.
     Declutter,
+    /// Declutter cleanup that retains speech bubbles.
+    DeclutterKeepBubbles,
     /// Colorization with an optional guidance prompt.
     Colorize {
         /// Optional colorization prompt.
@@ -72,6 +74,7 @@ impl DirectorCommand {
             Self::Sketch => "sketch",
             Self::BgRemoval => "bg-removal",
             Self::Declutter => "declutter",
+            Self::DeclutterKeepBubbles => "declutter-keep-bubbles",
             Self::Colorize { .. } => "colorize",
             Self::Emotion { .. } => "emotion",
         }

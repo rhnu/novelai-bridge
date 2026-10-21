@@ -2,7 +2,7 @@ use super::{
     AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode, estimate_anlas_cost,
     estimate_director_tool_cost,
 };
-use crate::{ImageSize, Model};
+use crate::{DirectorCommand, ImageSize, Model};
 
 fn input(model: Model, size: ImageSize, steps: u32) -> AnlasEstimateInput {
     AnlasEstimateInput {
@@ -159,8 +159,8 @@ fn a_resolution_with_no_priced_samples_is_not_reported_as_free() {
 #[test]
 fn director_discount_requires_an_active_opus_subscription() {
     let size = ImageSize {
-        width: 512,
-        height: 512,
+        width: 1024,
+        height: 1024,
     };
     let inactive = AnlasPricingContext {
         tier: 3,
@@ -172,8 +172,63 @@ fn director_discount_requires_an_active_opus_subscription() {
         ..inactive
     };
 
-    assert_eq!(estimate_director_tool_cost(size, inactive), 1);
-    assert_eq!(estimate_director_tool_cost(size, active), 0);
+    for command in [
+        DirectorCommand::Lineart,
+        DirectorCommand::DeclutterKeepBubbles,
+    ] {
+        assert_eq!(estimate_director_tool_cost(size, &command, inactive), 20);
+        assert_eq!(estimate_director_tool_cost(size, &command, active), 0);
+        assert_eq!(
+            estimate_director_tool_cost(
+                size,
+                &command,
+                AnlasPricingContext {
+                    free_first_image_used: true,
+                    ..active
+                }
+            ),
+            20
+        );
+        assert_eq!(
+            estimate_director_tool_cost(
+                ImageSize {
+                    width: 1024,
+                    height: 1025
+                },
+                &command,
+                active
+            ),
+            21
+        );
+    }
+}
+
+#[test]
+fn director_background_removal_prices_three_outputs_and_a_surcharge_without_free_allowance() {
+    for context in [
+        AnlasPricingContext::default(),
+        AnlasPricingContext {
+            tier: 3,
+            subscription_active: true,
+            ..Default::default()
+        },
+    ] {
+        assert_eq!(
+            estimate_director_tool_cost(ImageSize::square(), &DirectorCommand::BgRemoval, context),
+            65
+        );
+        assert_eq!(
+            estimate_director_tool_cost(
+                ImageSize {
+                    width: 2803,
+                    height: 1121
+                },
+                &DirectorCommand::BgRemoval,
+                context
+            ),
+            185
+        );
+    }
 }
 
 #[test]

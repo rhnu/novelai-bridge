@@ -29,7 +29,10 @@ impl std::fmt::Debug for TransportRequest {
         formatter
             .debug_struct("TransportRequest")
             .field("method", &self.method)
-            .field("endpoint", &self.endpoint)
+            .field(
+                "endpoint",
+                &self.endpoint.split('?').next().unwrap_or_default(),
+            )
             .field("accept", &self.accept)
             .field("content_type", &self.content_type)
             .field("body_bytes", &self.body.as_ref().map(Vec::len))

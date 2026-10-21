@@ -1,12 +1,13 @@
 # NovelAI Anlas estimation formula
 
 > Source note: The coefficients and pricing rules below were obtained from NovelAI's official
-> [image-generation website](https://novelai.net/image) on 2026-08-21. NovelAI may change its
+> [image-generation website](https://novelai.net/image), checked on 2026-10-21. NovelAI may change its
 > pricing, so this document is an estimate for that retrieval date rather than a billing guarantee.
 
 This document describes the generation-cost estimate used by `novelai-bridge` for the current NAI
 3, NAI 4, NAI 4.5, and NAI 5 model families. Legacy pricing paths are outside the scope of this
-formula. Director and upscale operations use a separate pricing rule.
+formula. Director uses the V3 formula with tool-specific adjustments; standalone upscaling uses
+an input-area table.
 
 The independent `estimate_anlas_cost(AnlasEstimateInput)` function is part of the core.
 Request and client helpers first normalize the editable request using its
@@ -222,6 +223,32 @@ overage additionally follows reference availability for the selected operation a
 character-reference precedence rule. For unsupported models, both vibe charges are zero.
 Normalized generation requests already contain encoded vibe data, so their projected
 `pending_vibe_encodes` is zero.
+
+## Director Tools and standalone upscaling
+
+Director preparation first shrinks sources above 3,143,728 pixels proportionally, flooring each
+dimension. If the result has fewer than 1,011,712 pixels, it scales toward 1,048,576 pixels using
+the same rounding. `PreparedDirector::image_size()` reports this effective canvas.
+
+`estimate_director_tool_cost(size, &command, context)` uses that processing size, V3, 28 steps and
+one sample. Ordinary tools follow the usual Opus allowance. Background removal costs three
+times the base price plus five, with the ordinary free-image allowance disabled. At 1024×1024,
+the ordinary base estimate is 20 Anlas and background removal is 65 Anlas.
+
+`estimate_upscale_cost(size)` uses the original input area and has no Opus discount:
+
+| Maximum input pixels | Anlas |
+| ---: | ---: |
+| 1,048,576 | 1 |
+| 1,747,627 | 2 |
+| 2,446,678 | 3 |
+| 3,145,728 | 4 |
+
+Zero dimensions and areas outside this table return `None`. The SDK does not turn the website's
+1MP tool-entry restriction into an API input limit: the published API schema declares no such
+limit. Credit observation represents an unavailable local estimate as
+`RequestCostEstimate::Unavailable`; `RequestCostEstimate::total()` returns `Option<u32>` so an
+unknown price is distinct from a known zero.
 
 ## Total estimate
 
