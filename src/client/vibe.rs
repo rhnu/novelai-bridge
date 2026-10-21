@@ -37,6 +37,7 @@ impl<T: Transport + ?Sized> Client<T> {
             self.execute_encoded(
                 crate::protocol::ApiEndpoint::EncodeVibe,
                 body,
+                None,
                 observation,
                 |response| VibeEncoding::from_bytes(response.body).map(|encoding| (encoding, 0)),
             )

@@ -34,7 +34,9 @@ pub struct ImageDecodePolicy {
     pub max_total_text_bytes: usize,
     /// Maximum number of ZIP entries, including ignored files.
     pub max_archive_entries: usize,
-    /// Maximum archive input bytes and cumulative extracted image bytes.
+    /// Maximum returned images across raw, ZIP and JSON response containers.
+    pub max_images: usize,
+    /// Maximum cumulative returned image bytes; also caps the original ZIP input bytes.
     pub max_total_image_bytes: u64,
 }
 
@@ -49,6 +51,7 @@ impl Default for ImageDecodePolicy {
             max_text_chunk_bytes: 2 * 1024 * 1024,
             max_total_text_bytes: 8 * 1024 * 1024,
             max_archive_entries: 64,
+            max_images: 1024,
             max_total_image_bytes: 256 * 1024 * 1024,
         }
     }
@@ -65,6 +68,7 @@ pub enum ImageLimit {
     TextChunkBytes,
     TotalTextBytes,
     ArchiveEntries,
+    Images,
     TotalImageBytes,
 }
 
@@ -79,7 +83,8 @@ impl std::fmt::Display for ImageLimit {
             Self::TextChunkBytes => "PNG text chunk bytes",
             Self::TotalTextBytes => "total PNG text bytes",
             Self::ArchiveEntries => "archive entries",
-            Self::TotalImageBytes => "total extracted image bytes",
+            Self::Images => "returned images",
+            Self::TotalImageBytes => "total returned image bytes",
         })
     }
 }
@@ -108,6 +113,7 @@ impl ImageDecodePolicy {
             ImageLimit::TextChunkBytes => self.max_text_chunk_bytes as u64,
             ImageLimit::TotalTextBytes => self.max_total_text_bytes as u64,
             ImageLimit::ArchiveEntries => self.max_archive_entries as u64,
+            ImageLimit::Images => self.max_images as u64,
             ImageLimit::TotalImageBytes => self.max_total_image_bytes,
         };
         if actual > maximum {

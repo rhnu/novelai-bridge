@@ -60,10 +60,10 @@ fn chunk(sample: u32) -> ImageStreamChunk {
     ImageStreamChunk {
         event: crate::ImageStreamEvent::Final {
             samp_ix: sample,
-            gen_id: 1,
+            gen_id: Some(1),
             image,
         },
-        raw: crate::TransportSseEvent::default(),
+        raw: crate::TransportSseEvent::default().into(),
     }
 }
 
@@ -72,11 +72,11 @@ fn preview(sample: u32) -> ImageStreamChunk {
         event: crate::ImageStreamEvent::Intermediate {
             samp_ix: sample,
             step_ix: 1,
-            gen_id: 1,
+            gen_id: Some(1),
             sigma: None,
-            image: "preview".into(),
+            image: b"preview".to_vec(),
         },
-        raw: crate::TransportSseEvent::default(),
+        raw: crate::TransportSseEvent::default().into(),
     }
 }
 
@@ -152,7 +152,8 @@ async fn previews_unknown_extensions_and_partial_finals_cannot_establish_complet
         raw: crate::TransportSseEvent {
             data: "opaque extension".into(),
             ..Default::default()
-        },
+        }
+        .into(),
     };
     for chunks in [
         vec![preview(0), preview(1)],
@@ -426,4 +427,74 @@ async fn eight_final_samples_settle_with_the_complete_small_canvas_batch() {
         outcomes(&observer),
         [RequestOutcome::Succeeded { image_count: 8 }]
     );
+}
+
+fn binary_final(sample: u32) -> serde_json::Value {
+    serde_json::json!({"event_type":"final", "samp_ix":sample,
+        "image":crate::generation::test_support::image().as_bytes()})
+}
+
+async fn binary_input(events: Vec<serde_json::Value>, truncated_tail: bool) -> ImageStreamResult {
+    let mut body = Vec::new();
+    for event in events {
+        let payload = rmp_serde::to_vec_named(&event).unwrap();
+        body.extend_from_slice(&u32::try_from(payload.len()).unwrap().to_be_bytes());
+        body.extend_from_slice(&payload);
+    }
+    if truncated_tail {
+        body.push(0);
+    }
+    crate::protocol::decode_stream_response(
+        crate::TransportResponse::from_bytes(200, Vec::new(), body),
+        "https://example.test/ai/generate-image-stream",
+        crate::StreamMode::MessagePack,
+        crate::ResponseLimits::default(),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn messagepack_retains_the_shared_all_finals_and_eof_lifecycle() {
+    let observer = Arc::new(Observer::default());
+    let input = binary_input(vec![binary_final(1),
+        serde_json::json!({"event_type":"intermediate", "samp_ix":0, "step_ix":1, "image":[1,2]}),
+        binary_final(0), serde_json::json!({"event_type":"extension"})], false).await;
+    let mut output = observed(input, Arc::clone(&observer)).await;
+    for _ in 0..4 {
+        assert!(output.next().await.unwrap().is_ok());
+        assert_eq!(outcomes(&observer), []);
+    }
+    assert!(output.next().await.is_none());
+    assert_eq!(
+        outcomes(&observer),
+        [RequestOutcome::Succeeded { image_count: 2 }]
+    );
+
+    for (events, truncated) in [
+        (vec![binary_final(0)], false),
+        (vec![binary_final(0), binary_final(0)], false),
+        (vec![binary_final(2)], false),
+        (
+            vec![
+                binary_final(0),
+                binary_final(1),
+                serde_json::json!({"event_type":"error", "message":"trailing"}),
+            ],
+            false,
+        ),
+        (vec![binary_final(0), binary_final(1)], true),
+    ] {
+        let observer = Arc::new(Observer::default());
+        let input = binary_input(events, truncated).await;
+        let output = observed(input, Arc::clone(&observer))
+            .await
+            .collect::<Vec<_>>()
+            .await;
+        assert!(output.last().unwrap().is_err());
+        assert!(matches!(
+            outcomes(&observer).as_slice(),
+            [RequestOutcome::Failed { .. }]
+        ));
+    }
 }

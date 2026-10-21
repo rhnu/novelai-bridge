@@ -39,9 +39,10 @@ impl<T: Transport + ?Sized> Client<T> {
             self.execute_encoded(
                 crate::protocol::ApiEndpoint::AugmentImage,
                 body,
+                None,
                 observation,
                 |response| {
-                    let images = crate::image::decode_generated_images(response.body)?;
+                    let images = crate::image::decode_generated_image_response(response)?;
                     let image_count = u32::try_from(images.len()).unwrap_or(u32::MAX);
                     Ok((RunDirectorToolResult { images }, image_count))
                 },

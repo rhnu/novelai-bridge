@@ -33,9 +33,10 @@ impl<T: Transport + ?Sized> Client<T> {
             self.execute_encoded(
                 crate::ApiEndpoint::UpscaleImage,
                 body,
+                None,
                 observation,
                 |response| {
-                    let images = crate::decode_generated_images(response.body)?;
+                    let images = crate::image::decode_generated_image_response(response)?;
                     let image_count = u32::try_from(images.len()).unwrap_or(u32::MAX);
                     Ok((UpscaleImageResult { images }, image_count))
                 },

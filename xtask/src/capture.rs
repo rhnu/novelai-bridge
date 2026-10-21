@@ -24,6 +24,24 @@ impl RequestEdits {
 
     pub fn apply(&self, mut request: TransportRequest) -> Result<TransportRequest, TransportError> {
         println!("{:?} {}", request.method, request.endpoint);
+        if request
+            .content_type
+            .as_deref()
+            .is_some_and(|value| value.starts_with("multipart/form-data"))
+        {
+            if !self.overrides.is_empty() || !self.removals.is_empty() {
+                return Err(TransportError::new(
+                    TransportOperation::SendRequest,
+                    Some(request.endpoint.clone()),
+                    "body edits require JSON request encoding".into(),
+                ));
+            }
+            println!(
+                "multipart body: {} bytes (media and cache keys omitted)",
+                request.body.as_ref().map_or(0, Vec::len)
+            );
+            return Ok(request);
+        }
         if request.body.is_none() && (!self.overrides.is_empty() || !self.removals.is_empty()) {
             return Err(TransportError::new(
                 TransportOperation::SendRequest,
@@ -77,7 +95,17 @@ impl<T: Transport> Transport for CaptureTransport<T> {
         &self,
         request: TransportRequest,
     ) -> Result<TransportResponse, TransportError> {
-        self.inner.execute(self.edits.apply(request)?).await
+        let response = self.inner.execute(self.edits.apply(request)?).await?;
+        println!(
+            "HTTP {}, content-type {:?}",
+            response.status,
+            response
+                .headers
+                .iter()
+                .find(|header| header.name.eq_ignore_ascii_case("content-type"))
+                .map(|header| String::from_utf8_lossy(&header.value))
+        );
+        Ok(response)
     }
 }
 

@@ -2,25 +2,25 @@ use std::error::Error as StdError;
 
 use thiserror::Error;
 
-use crate::{ImageStreamChunk, TransportSseEvent};
+use crate::{ImageStreamChunk, StreamEventSource};
 
 /// Business or protocol failure of an opened image-generation stream.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ImageStreamError {
-    /// The provider's error event, including its typed message and complete SSE source.
+    /// The provider's error event, including its typed message and complete protocol source.
     #[error("provider reported an image-generation error")]
     Provider { event: Box<ImageStreamChunk> },
     #[error("invalid image-generation event")]
     InvalidEvent {
-        raw: Box<TransportSseEvent>,
+        raw: Box<StreamEventSource>,
         #[source]
         source: Box<dyn StdError + Send + Sync + 'static>,
     },
     #[error("invalid final image for sample {samp_ix}")]
     InvalidFinal {
         samp_ix: u32,
-        raw: Box<TransportSseEvent>,
+        raw: Box<StreamEventSource>,
         #[source]
         source: Box<dyn StdError + Send + Sync + 'static>,
     },
@@ -35,11 +35,11 @@ pub enum ImageStreamError {
     InvalidSample {
         samp_ix: u32,
         expected_samples: u32,
-        raw: Box<TransportSseEvent>,
+        raw: Box<StreamEventSource>,
     },
     #[error("stream repeated the final image for sample {samp_ix}")]
     DuplicateFinal {
         samp_ix: u32,
-        raw: Box<TransportSseEvent>,
+        raw: Box<StreamEventSource>,
     },
 }

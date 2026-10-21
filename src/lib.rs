@@ -12,6 +12,7 @@ mod parameters;
 mod payload;
 mod pricing;
 mod protocol;
+mod stream;
 mod subscription;
 mod tag;
 #[cfg(feature = "tokenizer")]
@@ -22,8 +23,8 @@ mod validation;
 mod vibe;
 
 pub use client::{
-    Client, ClientConfig, DEFAULT_IMAGE_BASE, GenerateImageStream, ImageStreamItem,
-    ImageStreamResult,
+    Client, ClientConfig, DEFAULT_IMAGE_BASE, GenerateImageStream, ImageCacheConfig,
+    ImageRequestEncoding, ImageStreamItem, ImageStreamResult,
 };
 pub use director::{
     DirectorCommand, PreparedDirector, RunDirectorToolRequest, RunDirectorToolResult,
@@ -41,16 +42,16 @@ pub use generation::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
     GenerateImageRequest, GenerateImageRequestBuilder, GenerateImageResult,
     GenerateImageStreamRequest, GenerationCore, GenerationDelivery, GenerationGeometry,
-    GenerationInput, GuidanceParams, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType,
-    ImageToImageInput, InpaintImageToImage, InpaintingInput, NormalizationChange,
-    NormalizationDiagnostic, NormalizedGeneration, OutputParams, PreparedGeneration, ReferenceSet,
-    ResolvedCharacterPrompt, ResolvedPrompts, TransportSseEvent,
+    GenerationInput, GuidanceParams, ImageToImageInput, InpaintImageToImage, InpaintingInput,
+    NormalizationChange, NormalizationDiagnostic, NormalizedGeneration, OutputParams,
+    PreparedGeneration, ReferenceSet, ResolvedCharacterPrompt, ResolvedPrompts,
 };
 #[cfg(feature = "tokenizer")]
 pub use generation::{CharacterTokenUsage, PromptField, PromptTokenUsage};
 pub use image::{
     DefaultImagePreprocessor, EncodedImage, GeneratedImage, GeneratedImageSource, ImageMediaFormat,
-    ImagePreparation, ImagePreprocessor, PreparedImage, decode_generated_images,
+    ImagePreparation, ImagePreprocessor, PreparedImage, decode_generated_image_response,
+    decode_generated_image_response_with_policy, decode_generated_images,
     decode_generated_images_with_policy,
 };
 pub use media_policy::{ImageDecodePolicy, ImageLimit, ImagePolicyError};
@@ -74,8 +75,8 @@ pub use observation::{
     RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome,
 };
 pub use parameters::{
-    AlphaMode, ImageFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams,
-    StreamMode, UcPreset,
+    AlphaMode, ImageFormat, ImageResponseFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler,
+    SamplingParams, StreamMode, UcPreset,
 };
 pub use pricing::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode,
@@ -84,6 +85,9 @@ pub use pricing::{
 pub use protocol::{ApiEndpoint, BufferedResponse};
 #[cfg(feature = "reqwest-transport")]
 pub use secrecy::SecretString;
+pub use stream::{
+    ImageStreamChunk, ImageStreamEvent, ImageStreamEventType, StreamEventSource, TransportSseEvent,
+};
 pub use subscription::{SubscriptionInfo, V5UsageStatus};
 pub use tag::{
     JapaneseTagSuggestion, SuggestTagsRequest, SuggestTagsResult, TagLanguage, TagSuggestion,

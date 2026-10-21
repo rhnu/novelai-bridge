@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{CharacterSet, GenerateImageRequestBuilder, GenerationInput, ReferenceSet};
 use crate::{
-    AlphaMode, GenerationMode, ImageFormat, ImageSize, Model, ModelDescriptor, QualityPreset,
-    SamplingParams, StreamMode, UcPreset, ValidationPolicy,
+    AlphaMode, GenerationMode, ImageFormat, ImageResponseFormat, ImageSize, Model, ModelDescriptor,
+    QualityPreset, SamplingParams, StreamMode, UcPreset, ValidationPolicy,
 };
 
 /// Prompt, model and canvas fields shared by every generation request.
@@ -116,6 +116,9 @@ impl GuidanceParams {
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct OutputParams {
+    /// Ordinary response container, negotiated through the HTTP Accept header.
+    #[serde(default)]
+    pub response_format: ImageResponseFormat,
     /// Optional output image format.
     pub image_format: Option<ImageFormat>,
     /// Alpha representation for supported transparent generation.

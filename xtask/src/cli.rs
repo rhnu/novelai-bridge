@@ -140,6 +140,23 @@ pub struct RunArgs {
     #[arg(long, value_enum, default_value = "straight")]
     pub alpha: Alpha,
 
+    #[arg(long, value_parser = ["sse", "msgpack"], default_value = "sse")]
+    pub stream_mode: String,
+
+    #[arg(long, value_parser = ["zip", "json"], default_value = "zip")]
+    pub response_format: String,
+
+    #[arg(long, value_parser = ["json", "multipart"], default_value = "json")]
+    pub request_encoding: String,
+
+    /// Reuse registered image cache keys in the same client.
+    #[arg(long)]
+    pub cache_images: bool,
+
+    /// Repeat the selected live scenario with the same client (each run may cost credits).
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=8))]
+    pub repeat: u32,
+
     /// Reject unsupported or out-of-range values instead of normalizing them.
     #[arg(long)]
     pub strict: bool,

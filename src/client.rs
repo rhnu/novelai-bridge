@@ -11,6 +11,7 @@ mod diagnostics;
 mod director;
 mod execute;
 mod generate;
+mod image_request;
 mod observe;
 mod stream;
 mod subscription;
@@ -18,6 +19,7 @@ mod tags;
 mod upscale;
 mod vibe;
 
+pub use image_request::{ImageCacheConfig, ImageRequestEncoding};
 pub use stream::{GenerateImageStream, ImageStreamItem, ImageStreamResult};
 
 /// Default base URL for image-service endpoints.
@@ -29,6 +31,10 @@ pub struct ClientConfig {
     pub image_base_url: String,
     /// Response budgets applied to every transport implementation.
     pub response_limits: crate::ResponseLimits,
+    /// Encoding for image-service POST bodies. JSON retains the original base64 representation.
+    pub image_request_encoding: ImageRequestEncoding,
+    /// Optional bounded server image-cache registration shared by cloned clients.
+    pub image_cache: Option<ImageCacheConfig>,
 }
 
 impl Default for ClientConfig {
@@ -36,6 +42,8 @@ impl Default for ClientConfig {
         Self {
             image_base_url: DEFAULT_IMAGE_BASE.to_owned(),
             response_limits: crate::ResponseLimits::default(),
+            image_request_encoding: ImageRequestEncoding::default(),
+            image_cache: None,
         }
     }
 }
@@ -46,6 +54,7 @@ pub struct Client<T: ?Sized> {
     config: ClientConfig,
     account: Arc<Mutex<Option<SubscriptionInfo>>>,
     request_counter: Arc<AtomicU64>,
+    image_cache: Arc<Mutex<image_request::CacheState>>,
     #[cfg(feature = "tokenizer")]
     tokenizers: Option<Arc<crate::Tokenizers>>,
     observation: Option<observe::ObservationContext>,
@@ -58,6 +67,7 @@ impl<T: ?Sized> Clone for Client<T> {
             config: self.config.clone(),
             account: Arc::clone(&self.account),
             request_counter: Arc::clone(&self.request_counter),
+            image_cache: Arc::clone(&self.image_cache),
             #[cfg(feature = "tokenizer")]
             tokenizers: self.tokenizers.clone(),
             observation: self.observation.clone(),
@@ -73,6 +83,7 @@ impl<T: ?Sized> Client<T> {
             config,
             account: Arc::new(Mutex::new(None)),
             request_counter: Arc::new(AtomicU64::new(1)),
+            image_cache: Arc::default(),
             #[cfg(feature = "tokenizer")]
             tokenizers: None,
             observation: None,

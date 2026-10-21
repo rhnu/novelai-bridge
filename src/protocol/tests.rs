@@ -97,12 +97,12 @@ async fn unknown_event_types_cross_the_wire_boundary_without_losing_their_source
     assert!(
         matches!(chunk.event_type(), crate::ImageStreamEventType::Unknown(ref name) if name == "future-event")
     );
-    assert_eq!(chunk.raw.id, "sample-1");
+    assert_eq!(chunk.raw.as_sse().unwrap().id, "sample-1");
     assert_eq!(
-        chunk.raw.retry,
+        chunk.raw.as_sse().unwrap().retry,
         Some(std::time::Duration::from_millis(2500))
     );
-    assert_eq!(chunk.raw.data, "arbitrary");
+    assert_eq!(chunk.raw.as_sse().unwrap().data, "arbitrary");
 }
 
 #[tokio::test]
@@ -112,8 +112,30 @@ async fn sse_framing_handles_every_byte_split_and_multiple_events() {
     let mut output = post_sse(&backend, request(), ResponseLimits::default())
         .await
         .unwrap();
-    assert_eq!(output.next().await.unwrap().unwrap().raw.data, "è");
-    assert_eq!(output.next().await.unwrap().unwrap().raw.data, "");
+    assert_eq!(
+        output
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .raw
+            .as_sse()
+            .unwrap()
+            .data,
+        "è"
+    );
+    assert_eq!(
+        output
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .raw
+            .as_sse()
+            .unwrap()
+            .data,
+        ""
+    );
     assert!(output.next().await.is_none());
 }
 
@@ -228,4 +250,57 @@ async fn account_body_limit_reports_the_shared_http_boundary() {
     assert!(matches!(result, Err(BridgeError::Decode(error))
         if error.target == crate::DecodeTarget::HttpResponseBody
             && error.source.downcast_ref::<crate::ResponseLimitExceeded>().is_some()));
+}
+
+#[tokio::test]
+async fn messagepack_selection_preserves_http_errors_and_rejects_an_sse_mismatch() {
+    let error = backend(
+        429,
+        vec![header("Retry-After", "5")],
+        vec![br#"{"message":"slow down"}"#.to_vec()],
+    );
+    assert!(
+        matches!(super::post_stream(&error, request(), crate::StreamMode::MessagePack,
+        ResponseLimits::default()).await, Err(BridgeError::Api(error)) if error.status() == 429)
+    );
+    let backend = sse(vec![]);
+    assert!(matches!(
+        super::post_stream(
+            &backend,
+            request(),
+            crate::StreamMode::MessagePack,
+            ResponseLimits::default()
+        )
+        .await,
+        Err(BridgeError::Decode(_))
+    ));
+}
+
+#[tokio::test]
+async fn binary_stream_frames_are_independent_of_transport_chunks_and_keep_unknown_sources() {
+    let payload = rmp_serde::to_vec_named(
+        &serde_json::json!({"event_type":"extension", "image":{"opaque":true}}),
+    )
+    .unwrap();
+    let mut frame = u32::try_from(payload.len()).unwrap().to_be_bytes().to_vec();
+    frame.extend_from_slice(&payload);
+    let backend = backend(
+        200,
+        vec![],
+        frame.into_iter().map(|byte| vec![byte]).collect(),
+    );
+    let mut stream = super::post_stream(
+        &backend,
+        request(),
+        crate::StreamMode::MessagePack,
+        ResponseLimits::default(),
+    )
+    .await
+    .unwrap();
+    let chunk = stream.next().await.unwrap().unwrap();
+    assert!(
+        matches!(chunk.event, crate::ImageStreamEvent::Unknown { event_type } if event_type == "extension")
+    );
+    assert_eq!(chunk.raw.as_messagepack(), Some(payload.as_slice()));
+    assert!(stream.next().await.is_none());
 }

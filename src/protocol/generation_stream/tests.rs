@@ -17,7 +17,7 @@ fn raw(event: &str, value: &serde_json::Value) -> TransportSseEvent {
 fn official_preview_retains_its_type_and_complete_source() {
     let raw = raw(
         "intermediate",
-        &json!({"event_type":"intermediate","samp_ix":0,"step_ix":2,"gen_id":3,"image":"preview","sigma":0.5,"extension":{"future":[1,2]}}),
+        &json!({"event_type":"intermediate","samp_ix":0,"step_ix":2,"gen_id":3,"image":"cHJldmlldw==","sigma":0.5,"extension":{"future":[1,2]}}),
     );
     let chunk = decode_event(raw.clone()).unwrap();
     assert!(matches!(
@@ -25,12 +25,12 @@ fn official_preview_retains_its_type_and_complete_source() {
         ImageStreamEvent::Intermediate {
             samp_ix: 0,
             step_ix: 2,
-            gen_id: 3,
+            gen_id: Some(3),
             sigma: Some(0.5),
             ..
         }
     ));
-    assert_eq!(chunk.raw, raw);
+    assert_eq!(chunk.raw.as_sse(), Some(&raw));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn official_final_is_a_complete_validated_image_without_preview_fields() {
     };
     assert_eq!(samp_ix, 1);
     assert_eq!(parsed.bytes(), image.as_bytes());
-    assert_eq!(chunk.raw, raw);
+    assert_eq!(chunk.raw.as_sse(), Some(&raw));
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn provider_errors_preserve_message_source_and_optional_sample() {
         assert!(
             matches!(&event.event, ImageStreamEvent::Error { samp_ix, message, .. } if *samp_ix == sample && message == "provider failure")
         );
-        assert_eq!(event.raw, raw);
+        assert_eq!(event.raw.as_sse(), Some(&raw));
         assert!(!format!("{event:?}").contains("provider failure"));
     }
 }
@@ -96,7 +96,7 @@ fn unknown_extensions_preserve_arbitrary_shapes_and_non_json() {
     ] {
         let chunk = decode_event(raw.clone()).unwrap();
         assert!(matches!(chunk.event, ImageStreamEvent::Unknown { .. }));
-        assert_eq!(chunk.raw, raw);
+        assert_eq!(chunk.raw.as_sse(), Some(&raw));
     }
 }
 
@@ -126,7 +126,7 @@ fn known_events_never_fall_back_to_unknown_on_malformed_data() {
         else {
             panic!("expected invalid event")
         };
-        assert_eq!(*retained, raw);
+        assert_eq!(retained.as_sse(), Some(&raw));
     }
 }
 
@@ -134,7 +134,7 @@ fn known_events_never_fall_back_to_unknown_on_malformed_data() {
 fn explicit_sse_name_also_recognizes_official_events_without_json_tag() {
     let chunk = decode_event(raw(
         "intermediate",
-        &json!({"samp_ix":0,"step_ix":1,"gen_id":1,"image":"preview"}),
+        &json!({"samp_ix":0,"step_ix":1,"gen_id":1,"image":"cHJldmlldw=="}),
     ))
     .unwrap();
     assert!(matches!(chunk.event, ImageStreamEvent::Intermediate { .. }));
@@ -159,7 +159,7 @@ fn corrupt_final_images_fail_with_original_data_and_cause() {
             panic!("expected invalid final")
         };
         assert_eq!(samp_ix, 0);
-        assert_eq!(*retained, raw);
+        assert_eq!(retained.as_sse(), Some(&raw));
         assert_ne!(source.to_string(), "");
     }
 }

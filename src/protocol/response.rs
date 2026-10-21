@@ -31,7 +31,7 @@ impl BufferedResponse {
     }
 }
 
-pub(super) async fn checked_body(
+pub async fn checked_body(
     response: TransportResponse,
     endpoint: &str,
     limits: super::limits::ResponseLimits,

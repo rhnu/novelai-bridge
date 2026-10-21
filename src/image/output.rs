@@ -29,6 +29,15 @@ pub enum GeneratedImageSource {
         /// Zero-based ZIP entry index, including preceding non-image entries.
         index: usize,
     },
+    /// Identity supplied by a JSON image response, independent of embedded metadata.
+    Json {
+        /// Zero-based position in the response's images array.
+        position: usize,
+        /// Provider index, retained when present without imposing positivity.
+        index: Option<i64>,
+        /// Provider seed, independent of the request and embedded image seeds.
+        seed: Option<i64>,
+    },
 }
 
 /// Supported media formats with a single MIME/extension mapping.

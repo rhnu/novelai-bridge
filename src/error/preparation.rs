@@ -8,6 +8,11 @@ use crate::{ImageSize, RequestField};
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum PreparationError {
+    #[error("failed to generate image-request randomness")]
+    RequestRandomnessFailed {
+        #[source]
+        source: Box<dyn StdError + Send + Sync>,
+    },
     #[error("failed to generate a request seed")]
     SeedGenerationFailed {
         #[source]

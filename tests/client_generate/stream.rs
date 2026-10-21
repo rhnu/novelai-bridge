@@ -10,8 +10,8 @@ use super::*;
 async fn generate_stream_parses_chunk() {
     let transport = MockTransport::default();
     transport.set_sse_chunks(vec![ImageStreamChunk {
-        event: ImageStreamEvent::Intermediate { samp_ix: 0, step_ix: 1, gen_id: 1, sigma: Some(1.1), image: "abc".into() },
-        raw: TransportSseEvent { event: "intermediate".into(), data: r#"{"event_type":"intermediate","samp_ix":0,"step_ix":1,"gen_id":1,"sigma":1.1,"image":"abc"}"#.into(), ..Default::default() },
+        event: ImageStreamEvent::Intermediate { samp_ix: 0, step_ix: 1, gen_id: Some(1), sigma: Some(1.1), image: b"abc".to_vec() },
+        raw: TransportSseEvent { event: "intermediate".into(), data: r#"{"event_type":"intermediate","samp_ix":0,"step_ix":1,"gen_id":1,"sigma":1.1,"image":"YWJj"}"#.into(), ..Default::default() }.into(),
     }]);
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 

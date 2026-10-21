@@ -1,3 +1,5 @@
+mod messagepack;
+
 use std::pin::Pin;
 
 use base64::Engine;
@@ -18,7 +20,7 @@ pub type ImageStreamResult = Pin<Box<dyn Stream<Item = ImageStreamItem> + Send>>
 struct IntermediateBody {
     samp_ix: u32,
     step_ix: u32,
-    gen_id: u32,
+    gen_id: Option<u32>,
     sigma: Option<f32>,
     image: String,
 }
@@ -26,7 +28,7 @@ struct IntermediateBody {
 #[derive(Deserialize)]
 struct FinalBody {
     samp_ix: u32,
-    gen_id: u32,
+    gen_id: Option<u32>,
     image: String,
 }
 
@@ -42,7 +44,7 @@ fn invalid(
     source: impl std::error::Error + Send + Sync + 'static,
 ) -> BridgeError {
     ImageStreamError::InvalidEvent {
-        raw: Box::new(raw),
+        raw: Box::new(raw.into()),
         source: Box::new(source),
     }
     .into()
@@ -58,7 +60,7 @@ fn decode_final(raw: &TransportSseEvent) -> Result<ImageStreamEvent, BridgeError
         .decode(&body.image)
         .map_err(|source| ImageStreamError::InvalidFinal {
             samp_ix: body.samp_ix,
-            raw: Box::new(raw.clone()),
+            raw: Box::new(raw.clone().into()),
             source: Box::new(source),
         })?;
     let image = crate::image::validated_generated_image(
@@ -68,7 +70,7 @@ fn decode_final(raw: &TransportSseEvent) -> Result<ImageStreamEvent, BridgeError
     )
     .map_err(|source| ImageStreamError::InvalidFinal {
         samp_ix: body.samp_ix,
-        raw: Box::new(raw.clone()),
+        raw: Box::new(raw.clone().into()),
         source: Box::new(source),
     })?;
     Ok(ImageStreamEvent::Final {
@@ -98,7 +100,7 @@ fn decode_event(raw: TransportSseEvent) -> ImageStreamItem {
             event: ImageStreamEvent::Unknown {
                 event_type: name.to_owned(),
             },
-            raw,
+            raw: raw.into(),
         });
     }
     let discriminator = match json.as_ref().ok().and_then(|value| value.get("event_type")) {
@@ -145,7 +147,9 @@ fn decode_event(raw: TransportSseEvent) -> ImageStreamItem {
                 step_ix: body.step_ix,
                 gen_id: body.gen_id,
                 sigma: body.sigma,
-                image: body.image,
+                image: base64::engine::general_purpose::STANDARD
+                    .decode(&body.image)
+                    .map_err(|source| invalid(raw.clone(), source))?,
             }
         },
         "final" => decode_final(&raw)?,
@@ -159,7 +163,10 @@ fn decode_event(raw: TransportSseEvent) -> ImageStreamItem {
         },
         _ => ImageStreamEvent::Unknown { event_type: name },
     };
-    let chunk = ImageStreamChunk { event, raw };
+    let chunk = ImageStreamChunk {
+        event,
+        raw: raw.into(),
+    };
     if matches!(chunk.event, ImageStreamEvent::Error { .. }) {
         return Err(ImageStreamError::Provider {
             event: Box::new(chunk),
@@ -169,7 +176,7 @@ fn decode_event(raw: TransportSseEvent) -> ImageStreamItem {
     Ok(chunk)
 }
 
-pub(super) fn decode(mut input: super::sse::SseStream) -> ImageStreamResult {
+pub(super) fn decode_sse(mut input: super::sse::SseStream) -> ImageStreamResult {
     Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await {
             yield decode_event(event?)?;
@@ -179,3 +186,11 @@ pub(super) fn decode(mut input: super::sse::SseStream) -> ImageStreamResult {
 
 #[cfg(test)]
 mod tests;
+
+pub(super) fn decode_msgpack(mut input: super::msgpack::MessagePackStream) -> ImageStreamResult {
+    Box::pin(async_stream::try_stream! {
+        while let Some(payload) = input.next().await {
+            yield messagepack::decode_event(payload?)?;
+        }
+    })
+}

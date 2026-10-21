@@ -155,6 +155,8 @@ pub enum StreamMode {
     /// Server-sent events.
     #[default]
     Sse,
+    /// Four-byte big-endian length-prefixed `MessagePack` events.
+    MessagePack,
 }
 
 impl StreamMode {
@@ -163,6 +165,7 @@ impl StreamMode {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Sse => "sse",
+            Self::MessagePack => "msgpack",
         }
     }
 }
@@ -196,6 +199,37 @@ pub enum AlphaMode {
     Straight,
     /// Multiply color channels by alpha.
     Premultiplied,
+}
+
+/// Ordinary generation response container selected through the HTTP Accept header.
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageResponseFormat {
+    /// A ZIP archive containing the returned images.
+    #[default]
+    Zip,
+    /// A JSON object containing base64 images and provider identities.
+    Json,
+}
+
+impl ImageResponseFormat {
+    /// Stable editable-request identifier.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Zip => "zip",
+            Self::Json => "json",
+        }
+    }
+
+    /// HTTP Accept value used for ordinary generation.
+    #[must_use]
+    pub const fn accept(self) -> &'static str {
+        match self {
+            Self::Zip => "application/zip",
+            Self::Json => "application/json",
+        }
+    }
 }
 
 /// Image dimensions in pixels.
@@ -305,7 +339,7 @@ serde_string_enum!(
     ]
 );
 
-serde_string_enum!(StreamMode, [Self::Sse]);
+serde_string_enum!(StreamMode, [Self::Sse, Self::MessagePack]);
 
 serde_string_enum!(ImageFormat, [Self::Png, Self::Webp]);
 pub mod bounds;

@@ -30,7 +30,7 @@ pub enum DecodeTarget {
     HttpResponseBody,
     /// HTTP JSON response body.
     JsonResponse,
-    /// SSE image stream chunk.
+    /// Framed image stream chunk.
     StreamChunk,
     /// Image-generation or director response body.
     ImageResponse,

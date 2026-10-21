@@ -60,8 +60,24 @@ async fn run(args: &RunArgs, live: bool) -> TaskResult<()> {
         return presets::shape(args, model, size, &edits);
     }
     let transport = CaptureTransport::new(ReqwestTransport::new(credentials::options()?)?, edits);
-    let client = Client::new(Arc::new(transport), ClientConfig::default());
-    println!("{}", presets::execute(&client, args, model, size).await?);
+    let config = ClientConfig {
+        image_request_encoding: if args.request_encoding == "multipart" {
+            novelai_bridge::ImageRequestEncoding::Multipart
+        } else {
+            novelai_bridge::ImageRequestEncoding::Json
+        },
+        image_cache: args
+            .cache_images
+            .then(novelai_bridge::ImageCacheConfig::default),
+        ..ClientConfig::default()
+    };
+    let client = Client::new(Arc::new(transport), config);
+    for run in 1..=args.repeat {
+        if args.repeat > 1 {
+            println!("run {run}/{}", args.repeat);
+        }
+        println!("{}", presets::execute(&client, args, model, size).await?);
+    }
     Ok(())
 }
 

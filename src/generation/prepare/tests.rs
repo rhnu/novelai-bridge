@@ -56,6 +56,14 @@ fn one_preparation_reuses_images_and_seed_for_both_deliveries() {
     );
     assert!(ordinary["parameters"].get("stream").is_none());
     assert_eq!(stream["parameters"]["stream"], "sse");
+    let binary = payload(
+        &prepared,
+        GenerationDelivery::Stream(StreamMode::MessagePack),
+    );
+    assert_eq!(binary["parameters"]["stream"], "msgpack");
+    let mut comparable = binary;
+    comparable["parameters"]["stream"] = "sse".into();
+    assert_eq!(comparable, stream);
     assert_eq!(counter.0.load(Ordering::Relaxed), 1);
 }
 
@@ -73,6 +81,11 @@ fn fixed_seed_is_preserved_and_unsupported_delivery_is_rejected() {
     assert!(
         prepared
             .encode(GenerationDelivery::Stream(StreamMode::Sse))
+            .is_err()
+    );
+    assert!(
+        prepared
+            .encode(GenerationDelivery::Stream(StreamMode::MessagePack))
             .is_err()
     );
 }

@@ -1,4 +1,4 @@
-/// Maximum bytes accepted at the HTTP and SSE framing boundaries.
+/// Maximum bytes accepted at HTTP and streaming frame boundaries.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ResponseLimits {
     /// Complete successful HTTP body, before image or archive decoding.
@@ -7,6 +7,8 @@ pub struct ResponseLimits {
     pub error_body_bytes: usize,
     /// Raw bytes in one SSE frame, including its line delimiters.
     pub sse_event_bytes: usize,
+    /// Payload bytes in one `MessagePack` frame, excluding its four-byte prefix.
+    pub msgpack_frame_bytes: usize,
 }
 
 impl Default for ResponseLimits {
@@ -15,6 +17,7 @@ impl Default for ResponseLimits {
             success_body_bytes: 256 * 1024 * 1024,
             error_body_bytes: 64 * 1024,
             sse_event_bytes: 64 * 1024 * 1024,
+            msgpack_frame_bytes: 64 * 1024 * 1024,
         }
     }
 }

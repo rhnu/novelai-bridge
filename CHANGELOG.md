@@ -10,6 +10,8 @@
 - Add V5 Full Medium and its inpainting sibling with fixed sampling, Heavy UC, custom-negative restrictions and the Medium pricing step factor.
 - Add V5 Max Enhance with explicit input, expected-output and pricing geometry. Apply the model's canvas grid before source preparation and serialization.
 - Add encode-vibe masks, cropping and explicit focus/information seeds, V3 raw image vibe input, configurable encoded-strength normalization, character-reference information extraction and transparent-output alpha representation.
+- Add bounded MessagePack image streaming alongside SSE, JSON image response negotiation and protocol-specific raw event sources.
+- Add multipart image-service bodies and opt-in bounded image-cache registration with one recovery attempt for explicit invalid-cache-key rejections.
 
 ### Changed
 
@@ -42,6 +44,8 @@
 - Replace `VibeReference::vibe_data_cache` with `VibeReference::encoded(...)` or `VibeReference::image(...)`. Replace the unrelated group `strength` with `VibeTransferConfig::normalize_strength` (or use `new`). Vibe references no longer send `controlnet_strength`. Construct encoding requests with `EncodeVibeRequest::new` and set optional mask/crop/seed fields as needed.
 - Add `information_extracted` to character-reference literals, or use `CharacterReference::new` for defaults. Finite signed reference strengths and fidelity values are preserved instead of being clamped to 0-1. Use `GenerationField::VibeReference { index, field }` for row diagnostics.
 - Add `OutputParams::alpha_mode` to output literals, or use defaults. Transparent output defaults to straight alpha.
+- Match `ImageStreamChunk::raw` as `StreamEventSource::{Sse, MessagePack}`. Previews now contain decoded bytes; intermediate/final `gen_id` is optional. Add `ResponseLimits::msgpack_frame_bytes` to explicit limit literals.
+- Add `OutputParams::response_format` and the new `ClientConfig` fields to explicit literals, or use defaults. JSON responses retain provider index/seed through `GeneratedImageSource::Json`; embedded seed access is unchanged. Add `ImageDecodePolicy::max_images` to explicit policy literals.
 
 ## 0.6.0 - 2026-10-21
 

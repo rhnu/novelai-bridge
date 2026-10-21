@@ -105,6 +105,7 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
         .execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
             Vec::new(),
+            None,
             pending,
             |_| {
                 Err(crate::DecodeError::new(
@@ -127,6 +128,7 @@ async fn common_execution_settles_decode_failure_and_success_with_distinct_ident
         .execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
             Vec::new(),
+            None,
             pending,
             |_| Ok(((), 2)),
         )

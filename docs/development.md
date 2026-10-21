@@ -40,6 +40,12 @@ cargo xtask shape tags --prompt cat --lang en
 
 `cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation. Setting can add an object field; missing parent paths, removal targets and body edits on a bodyless operation are errors. Synthetic image dimensions and pixel storage are checked before allocation.
 
+Select `--stream-mode msgpack`, `--response-format json`, `--request-encoding multipart` and
+`--cache-images` to exercise the corresponding paths. `--repeat N` reuses one client, so later
+runs can use its registered keys; every run can consume credits. `shape` prints the semantic JSON
+before multipart/cache encoding. JSON overrides require JSON request encoding. Multipart probe
+output omits binary content and keys, and JSON inspection redacts cache-secret fields.
+
 The tool installs a tracing subscriber on stderr with an `info` default; `RUST_LOG` selects another filter and invalid filters fail at startup. Inspection output deliberately includes prompt text. Client tracing uses content-free summaries and does not log server error bodies, which may echo user data.
 
 `scripts/probe_user_api.py` remains an exploratory tool for raw user-service endpoints, including endpoints outside the typed client's API. It prints redacted response shapes and is not part of library execution or automated verification.
@@ -58,8 +64,8 @@ Editable requests, normalized plans and prepared payloads represent different gu
 
 Media budgets are shared below metadata and pixel processing. PNG validation must reach the end of the file; a pixel decoder that stops after the first frame cannot establish complete PNG validity. Structural failures reject media, while supported text that cannot be interpreted produces a diagnostic. Prepared media retains measurements so a custom constructor cannot bypass a stricter request budget or force another pixel decode.
 
-Transports return HTTP status, headers and raw byte streams. The protocol layer owns bounded body reads, SSE framing and image event decoding; client response budgets apply to every transport. Successful responses retain their headers through operation decoding.
+Transports return HTTP status, headers and raw byte streams. The protocol layer owns bounded body reads, SSE/MessagePack framing and image event decoding; client response budgets apply to every transport. Successful responses retain their headers through operation decoding.
 
-A stream handle owns both consumption and terminal callback delivery. Its settlement future must survive cancellation of a single `next()` future; explicit cancellation completes an existing settlement instead of replacing its outcome. Do not move that future into a temporary polling wrapper. EOF establishes success only after all expected samples have validated final images. Unknown events retain their complete SSE source and cannot establish completion; malformed official events fail rather than falling back to Unknown.
+A stream handle owns both consumption and terminal callback delivery. Its settlement future must survive cancellation of a single `next()` future; explicit cancellation completes an existing settlement instead of replacing its outcome. Do not move that future into a temporary polling wrapper. EOF establishes success only after all expected samples have validated final images. Unknown events retain their complete protocol-specific source and cannot establish completion; malformed official events fail rather than falling back to Unknown.
 
 Domain and tokenizer layers retain error sources and typed field locations. Client operation boundaries own failure logging and span context; the executable owns subscriber configuration. API error bodies remain available on returned errors but stay out of logs because a server can echo submitted content.

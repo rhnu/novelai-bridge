@@ -156,7 +156,7 @@ impl Transport for MockTransport {
         if request.endpoint.ends_with("/ai/generate-image-stream") {
             let mut bytes = Vec::new();
             for chunk in &state.sse_chunks {
-                let raw = &chunk.raw;
+                let raw = chunk.raw.as_sse().expect("SSE fixture source");
                 bytes.extend_from_slice(
                     format!("event: {}\nid: {}\n", raw.event, raw.id).as_bytes(),
                 );

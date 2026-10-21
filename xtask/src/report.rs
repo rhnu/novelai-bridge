@@ -30,6 +30,7 @@ pub fn images(images: &[GeneratedImage], args: &RunArgs) -> TaskResult<String> {
             image.mime_type(),
             image.seed(),
         ));
+        lines.push(format!("       source {:?}", image.source()));
         if let Some(directory) = &args.out {
             let extension = image.format().extension();
             std::fs::create_dir_all(directory)

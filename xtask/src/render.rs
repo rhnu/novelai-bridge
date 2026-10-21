@@ -35,7 +35,16 @@ fn elide(value: &Value) -> Value {
         Value::Object(entries) => Value::Object(
             entries
                 .iter()
-                .map(|(key, item)| (key.clone(), elide(item)))
+                .map(|(key, item)| {
+                    (
+                        key.clone(),
+                        if key.ends_with("cache_secret_key") {
+                            Value::String("<redacted>".to_owned())
+                        } else {
+                            elide(item)
+                        },
+                    )
+                })
                 .collect(),
         ),
         other => other.clone(),

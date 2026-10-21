@@ -1,4 +1,4 @@
-use crate::{TransportMethod, TransportRequest};
+use crate::{StreamMode, TransportMethod, TransportRequest};
 
 /// One supported operation and its HTTP request description.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -60,6 +60,18 @@ impl ApiEndpoint {
             content_type: self.content_type().map(str::to_owned),
             body,
         }
+    }
+
+    /// Selects the stream request headers alongside its prepared body.
+    ///
+    /// The captured `MessagePack` frontend omits Accept and selects its protocol in JSON.
+    #[must_use]
+    pub fn stream_request(base_url: &str, body: Vec<u8>, mode: StreamMode) -> TransportRequest {
+        let mut request = Self::GenerateImageStream.request(base_url, Some(body));
+        if mode == StreamMode::MessagePack {
+            request.accept = None;
+        }
+        request
     }
 }
 

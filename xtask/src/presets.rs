@@ -87,7 +87,7 @@ pub fn shape(
         ),
         _ => {
             let delivery = if args.preset == Preset::Stream {
-                GenerationDelivery::Stream(StreamMode::default())
+                GenerationDelivery::Stream(stream_mode(args))
             } else {
                 GenerationDelivery::Images
             };
@@ -107,7 +107,15 @@ pub fn shape(
             )
         },
     };
-    edits.apply(endpoint.request(DEFAULT_IMAGE_BASE, body))?;
+    let mut request = endpoint.request(DEFAULT_IMAGE_BASE, body);
+    if endpoint == ApiEndpoint::GenerateImageStream && stream_mode(args) == StreamMode::MessagePack
+    {
+        request.accept = None;
+    }
+    if endpoint == ApiEndpoint::GenerateImage {
+        request.accept = Some(response_format(args).accept().to_owned());
+    }
+    edits.apply(request)?;
     Ok(())
 }
 
@@ -132,7 +140,7 @@ pub async fn execute<T: Transport + ?Sized>(
             let stream = client
                 .generate_stream(GenerateImageStreamRequest {
                     base: generation_request(args, model, size)?,
-                    stream: StreamMode::default(),
+                    stream: stream_mode(args),
                 })
                 .await?;
             let resolved_seed = stream.resolved_seed;
@@ -147,6 +155,9 @@ pub async fn execute<T: Transport + ?Sized>(
                         chunk.event_type().as_str(),
                         chunk.sample_index()
                     );
+                }
+                if let novelai_bridge::ImageStreamEvent::Final { image, .. } = &chunk.event {
+                    println!("{}", report::images(std::slice::from_ref(image), args)?);
                 }
             }
             Ok(format!("seed {resolved_seed}, {chunks} chunk(s)"))
@@ -203,6 +214,22 @@ fn is_raw_vibe(model: Model) -> bool {
         .support()
         .vibe
         .is_some_and(|profile| profile.input == VibeInputPath::RawImage)
+}
+
+fn stream_mode(args: &RunArgs) -> StreamMode {
+    if args.stream_mode == "msgpack" {
+        StreamMode::MessagePack
+    } else {
+        StreamMode::Sse
+    }
+}
+
+fn response_format(args: &RunArgs) -> novelai_bridge::ImageResponseFormat {
+    if args.response_format == "json" {
+        novelai_bridge::ImageResponseFormat::Json
+    } else {
+        novelai_bridge::ImageResponseFormat::Zip
+    }
 }
 
 fn tag_query(args: &RunArgs, model: Model) -> SuggestTagsRequest {
@@ -302,6 +329,7 @@ fn base_request(args: &RunArgs, model: Model, size: ImageSize) -> GenerateImageR
         .quality(args.quality.into())
         .transparent_background(args.transparent)
         .alpha_mode(args.alpha.into())
+        .response_format(response_format(args))
         .policy(args.policy());
 
     if let Some(negative) = args.negative.as_ref() {

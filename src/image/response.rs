@@ -1,99 +1,135 @@
-use std::io::{Cursor, Read};
-
 use super::{GeneratedImage, ImageMediaFormat, output::GeneratedImageSource};
 use crate::{
     BridgeError, DecodeError, DecodeTarget, GeneratedImageMetadata,
     media_policy::{ImageDecodePolicy, ImageLimit},
 };
 
-/// Strictly decodes a raw image or ZIP image response.
+mod archive;
+mod headers;
+mod json;
+
+/// Decodes raw, ZIP or JSON images without HTTP headers.
 ///
-/// Any malformed supported-image candidate rejects the complete response. Metadata inspection is
-/// best-effort and remains attached as state on an otherwise valid image.
+/// Metadata inspection is best-effort. Any malformed image rejects the complete response.
+/// Use [`decode_generated_image_response`] when response headers are available.
 ///
 /// # Errors
-///
-/// Returns a response decoding error for malformed archives, unsupported or invalid images,
-/// extension/content mismatches, empty archives, and configured extraction-limit violations.
+/// Returns response errors for invalid containers, images or exceeded media budgets.
 pub fn decode_generated_images(payload: Vec<u8>) -> Result<Vec<GeneratedImage>, BridgeError> {
     decode_generated_images_with_policy(payload, ImageDecodePolicy::default())
 }
 
-/// Decodes complete raw images or a bounded ZIP using explicit media budgets.
+/// Decodes raw, ZIP or JSON images within explicit media budgets.
 ///
 /// # Errors
-/// Returns response errors for invalid images, archives or exceeded resource budgets.
+/// Returns response errors for invalid containers, images or exceeded media budgets.
 pub fn decode_generated_images_with_policy(
     payload: Vec<u8>,
     policy: ImageDecodePolicy,
 ) -> Result<Vec<GeneratedImage>, BridgeError> {
-    if payload.starts_with(b"PK") {
-        policy
-            .check(ImageLimit::TotalImageBytes, payload.len() as u64)
-            .map_err(response_error)?;
-        return decode_zip(payload, policy);
-    }
-    Ok(vec![validated_generated_image(
-        payload,
-        GeneratedImageSource::Raw,
-        policy,
-    )?])
+    decode_payload(payload, policy, headers::ResponseKind::Detect)
 }
 
-fn decode_zip(
-    payload: Vec<u8>,
+/// Decodes an HTTP image response, requiring its media type to agree with its content.
+///
+/// Missing media types are detected from the body. An octet-stream is limited to binary raw
+/// images or ZIP archives. Unknown, duplicate and conflicting media types are rejected.
+///
+/// # Errors
+/// Returns response errors for inconsistent headers, invalid content or exceeded budgets.
+pub fn decode_generated_image_response(
+    response: crate::BufferedResponse,
+) -> Result<Vec<GeneratedImage>, BridgeError> {
+    decode_generated_image_response_with_policy(response, ImageDecodePolicy::default())
+}
+
+/// Decodes an HTTP image response within explicit media budgets.
+///
+/// # Errors
+/// Returns response errors for inconsistent headers, invalid content or exceeded budgets.
+pub fn decode_generated_image_response_with_policy(
+    response: crate::BufferedResponse,
     policy: ImageDecodePolicy,
 ) -> Result<Vec<GeneratedImage>, BridgeError> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(payload)).map_err(response_error)?;
-    policy
-        .check(ImageLimit::ArchiveEntries, archive.len() as u64)
-        .map_err(response_error)?;
-    let mut total = 0_u64;
-    let mut images = Vec::new();
-    for index in 0..archive.len() {
-        let mut file = archive.by_index(index).map_err(response_error)?;
-        let name = file.name().map_err(response_error)?.into_owned();
-        if ImageMediaFormat::from_extension(&name).is_none() {
-            continue;
+    let kind = headers::response_kind(&response.headers)?;
+    decode_payload(response.body, policy, kind)
+}
+
+fn decode_payload(
+    payload: Vec<u8>,
+    policy: ImageDecodePolicy,
+    kind: headers::ResponseKind,
+) -> Result<Vec<GeneratedImage>, BridgeError> {
+    use headers::ResponseKind;
+    match kind {
+        ResponseKind::Zip => archive::decode(payload, policy),
+        ResponseKind::Json => json::decode(&payload, policy),
+        ResponseKind::Detect if is_json(&payload) => json::decode(&payload, policy),
+        ResponseKind::Detect | ResponseKind::Binary if payload.starts_with(b"PK") => {
+            archive::decode(payload, policy)
+        },
+        ResponseKind::Detect | ResponseKind::Binary | ResponseKind::Image(_) => {
+            let mut budget = ResponseBudget::new(policy);
+            budget.begin_image()?;
+            budget.add_bytes(payload.len() as u64)?;
+            let image = validated_generated_image(payload, GeneratedImageSource::Raw, policy)?;
+            if let ResponseKind::Image(expected) = kind
+                && image.format() != expected
+            {
+                return Err(response_message(
+                    "image Content-Type does not match its content",
+                ));
+            }
+            Ok(vec![image])
+        },
+    }
+}
+
+fn is_json(payload: &[u8]) -> bool {
+    payload.iter().find(|byte| !byte.is_ascii_whitespace()) == Some(&b'{')
+}
+
+struct ResponseBudget {
+    policy: ImageDecodePolicy,
+    images: u64,
+    bytes: u64,
+}
+
+impl ResponseBudget {
+    const fn new(policy: ImageDecodePolicy) -> Self {
+        Self {
+            policy,
+            images: 0,
+            bytes: 0,
         }
-        policy
-            .check(ImageLimit::EncodedBytes, file.size())
+    }
+
+    fn begin_image(&mut self) -> Result<(), BridgeError> {
+        let images = self.images.saturating_add(1);
+        self.policy
+            .check(ImageLimit::Images, images)
             .map_err(response_error)?;
-        policy
+        self.images = images;
+        Ok(())
+    }
+
+    fn check_bytes(&self, bytes: u64) -> Result<(), BridgeError> {
+        self.policy
+            .check(ImageLimit::EncodedBytes, bytes)
+            .map_err(response_error)?;
+        self.policy
             .check(
                 ImageLimit::TotalImageBytes,
-                total.saturating_add(file.size()),
+                self.bytes.saturating_add(bytes),
             )
-            .map_err(response_error)?;
-        let mut bytes = Vec::with_capacity(usize::try_from(file.size()).unwrap_or(0));
-        file.by_ref()
-            .take(
-                policy
-                    .max_encoded_bytes
-                    .min(policy.max_total_image_bytes.saturating_sub(total))
-                    .saturating_add(1),
-            )
-            .read_to_end(&mut bytes)
-            .map_err(response_error)?;
-        policy
-            .check(ImageLimit::EncodedBytes, bytes.len() as u64)
-            .map_err(response_error)?;
-        total = total.saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-        policy
-            .check(ImageLimit::TotalImageBytes, total)
-            .map_err(response_error)?;
-        images.push(validated_generated_image(
-            bytes,
-            GeneratedImageSource::Archive { name, index },
-            policy,
-        )?);
+            .map_err(response_error)
     }
-    if images.is_empty() {
-        return Err(response_message(
-            "image archive contains no supported images",
-        ));
+
+    fn add_bytes(&mut self, bytes: u64) -> Result<(), BridgeError> {
+        self.check_bytes(bytes)?;
+        self.bytes = self.bytes.saturating_add(bytes);
+        Ok(())
     }
-    Ok(images)
 }
 
 pub fn validated_generated_image(
@@ -148,3 +184,6 @@ fn response_message(message: &str) -> BridgeError {
         message,
     ))
 }
+
+#[cfg(test)]
+mod tests;

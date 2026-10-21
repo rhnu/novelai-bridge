@@ -82,7 +82,10 @@ expected sample has a final image and the stream reaches EOF. Empty or incomplet
 provider errors return `BridgeError::Stream`; a preview alone never establishes success.
 
 Unknown extensions remain available as `ImageStreamEvent::Unknown`. Every chunk retains its
-complete SSE name, ID, retry value and data in `chunk.raw`. Call `stream.cancel().await` to stop
+original source in `chunk.raw`: `StreamEventSource::Sse` retains the name, ID, retry and data;
+`MessagePack` retains the binary payload. Select `StreamMode::MessagePack` for the length-prefixed
+binary protocol. Previews contain decoded bytes and generation IDs are optional in either protocol.
+Call `stream.cancel().await` to stop
 consumption and finish any pending observer notification; dropping a stream cannot run that
 asynchronous notification.
 
@@ -137,6 +140,11 @@ with `client.generate_prepared(...)`, or inspect its JSON with
 Director calls return `RunDirectorToolResult` with every returned image. Returned `GeneratedImage`
 values expose validated bytes, format, source identity, metadata and any embedded image seed. `GenerateImageResult::resolved_seed` is the request seed; it is separate from per-image seeds.
 
+Use `.response_format(ImageResponseFormat::Json)` to request the JSON image envelope instead of ZIP.
+`GeneratedImageSource::Json` retains the response array position and optional provider index/seed;
+`image.seed()` continues to report only an embedded seed. All response formats share image-count and
+byte budgets. Content-Type is checked before selecting a decoder.
+
 Director preparation resizes the source to the official tool's processing canvas. Inspect
 `PreparedDirector::source_size()` and `image_size()` for the original and effective dimensions.
 `DirectorCommand::DeclutterKeepBubbles` preserves dialogue bubbles during cleanup.
@@ -186,7 +194,14 @@ novelai-bridge = { version = "0.6.0", default-features = false }
 
 Response byte limits belong to `ClientConfig` and apply to custom transports as well as reqwest.
 A transport returns response headers and a raw byte stream; the core handles bounded buffering,
-HTTP errors and SSE decoding. `TransportResponse::from_bytes` adapts a complete response body.
+HTTP errors, SSE and MessagePack decoding.
+
+Set `ClientConfig::image_request_encoding` to `ImageRequestEncoding::Multipart` to move supported
+media fields into binary form parts. The JSON `request` part preserves the prepared request.
+`ClientConfig::image_cache = Some(ImageCacheConfig::default())` enables bounded server-cache key
+registration for generation, shared by client clones. Local state stores keys rather than images.
+Only an explicit `400 INVALID_CACHE_KEYS` rejection can trigger one recovery attempt using the
+current request's retained media. Other errors and ambiguous transport failures are returned directly. `TransportResponse::from_bytes` adapts a complete response body.
 
 ## Documentation
 

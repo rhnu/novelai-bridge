@@ -31,9 +31,6 @@ pub use references::{CharacterReference, CharacterReferenceType, ReferenceSet};
 pub use request::{
     GenerateImageRequest, GenerateImageStreamRequest, GenerationCore, GuidanceParams, OutputParams,
 };
-pub use result::{
-    GenerateImageResult, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType,
-    TransportSseEvent,
-};
+pub use result::GenerateImageResult;
 #[cfg(feature = "tokenizer")]
 pub use token_usage::{CharacterTokenUsage, PromptField, PromptTokenUsage};

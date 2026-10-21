@@ -6,7 +6,7 @@ use crate::InvalidRequest;
 use crate::{
     BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
     GenerateImageStreamRequest, GenerationDelivery, PreparedGeneration, StreamMode, Transport,
-    decode_generated_images,
+    decode_generated_image_response,
 };
 
 impl<T: Transport + ?Sized> Client<T> {
@@ -72,9 +72,17 @@ impl<T: Transport + ?Sized> Client<T> {
         self.execute_encoded(
             crate::protocol::ApiEndpoint::GenerateImage,
             body,
+            Some(
+                prepared
+                    .normalized()
+                    .request()
+                    .output
+                    .response_format
+                    .accept(),
+            ),
             observation,
             |payload| {
-                let images = decode_generated_images(payload.body)?;
+                let images = decode_generated_image_response(payload)?;
                 let count = u32::try_from(images.len()).unwrap_or(u32::MAX);
                 Ok((
                     GenerateImageResult {
@@ -154,11 +162,22 @@ impl<T: Transport + ?Sized> Client<T> {
                 request_id,
             )
             .await;
-        let request = crate::protocol::ApiEndpoint::GenerateImageStream
-            .request(&self.config.image_base_url, Some(body));
-        match crate::protocol::post_sse(&*self.transport, request, self.config.response_limits)
-            .await
-        {
+        let request =
+            crate::protocol::ApiEndpoint::stream_request(&self.config.image_base_url, body, mode);
+        let url = request.endpoint.clone();
+        let result = match self.execute_image_request(request, true).await {
+            Ok(response) => {
+                crate::protocol::decode_stream_response(
+                    response,
+                    &url,
+                    mode,
+                    self.config.response_limits,
+                )
+                .await
+            },
+            Err(error) => Err(error),
+        };
+        match result {
             Ok(stream) => {
                 tracing::debug!("image stream opened");
                 Ok(GenerateImageStream::new(

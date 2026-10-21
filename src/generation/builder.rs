@@ -3,8 +3,9 @@ use super::{
     ImageToImageInput, InpaintingInput, ReferenceSet,
 };
 use crate::{
-    AlphaMode, Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule,
-    QualityPreset, Sampler, SamplingParams, UcPreset, ValidationPolicy, VibeTransferConfig,
+    AlphaMode, Character, CharacterReference, ImageFormat, ImageResponseFormat, ImageSize, Model,
+    NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset, ValidationPolicy,
+    VibeTransferConfig,
 };
 
 /// Builder for [`GenerateImageRequest`].
@@ -193,6 +194,13 @@ impl GenerateImageRequestBuilder {
             .references
             .get_or_insert_with(ReferenceSet::default)
             .character_references = references;
+        self
+    }
+
+    /// Selects the ordinary HTTP response container.
+    #[must_use]
+    pub const fn response_format(mut self, response_format: ImageResponseFormat) -> Self {
+        self.request.output.response_format = response_format;
         self
     }
 

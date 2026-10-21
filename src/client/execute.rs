@@ -6,6 +6,7 @@ impl<T: Transport + ?Sized> Client<T> {
         &self,
         endpoint: crate::protocol::ApiEndpoint,
         body: Vec<u8>,
+        accept: Option<&str>,
         observation: PendingObservation,
         decode: impl FnOnce(
             crate::protocol::BufferedResponse,
@@ -14,11 +15,22 @@ impl<T: Transport + ?Sized> Client<T> {
         let started = std::time::Instant::now();
         tracing::Span::current().record("endpoint", endpoint.path());
         tracing::debug!(body_bytes = body.len(), "sending request");
-        let request = endpoint.request(&self.config.image_base_url, Some(body));
-        let result =
-            crate::protocol::post_encoded(&*self.transport, request, self.config.response_limits)
-                .await
-                .and_then(decode);
+        let mut request = endpoint.request(&self.config.image_base_url, Some(body));
+        if let Some(accept) = accept {
+            request.accept = Some(accept.to_owned());
+        }
+        let url = request.endpoint.clone();
+        let result = match self
+            .execute_image_request(request, endpoint == crate::ApiEndpoint::GenerateImage)
+            .await
+        {
+            Ok(response) => {
+                crate::protocol::buffer_response(response, &url, self.config.response_limits)
+                    .await
+                    .and_then(decode)
+            },
+            Err(error) => Err(error),
+        };
         match result {
             Ok((value, image_count)) => {
                 tracing::debug!(

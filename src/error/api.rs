@@ -1,7 +1,6 @@
 use std::{error::Error as StdError, fmt, time::Duration};
 
 /// Non-success response returned by the `NovelAI` API.
-#[derive(Debug)]
 #[non_exhaustive]
 pub struct ApiError {
     /// Category derived from the HTTP status code.
@@ -16,6 +15,22 @@ pub struct ApiError {
     pub raw_body: Option<String>,
     /// Whether the transport retained only a prefix of the error body.
     pub raw_body_truncated: bool,
+}
+
+impl fmt::Debug for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ApiError")
+            .field("kind", &self.kind)
+            .field("status", &self.status)
+            .field(
+                "endpoint",
+                &self.endpoint.split('?').next().unwrap_or_default(),
+            )
+            .field("has_server_reason", &self.server_reason.is_some())
+            .field("has_raw_body", &self.raw_body.is_some())
+            .field("raw_body_truncated", &self.raw_body_truncated)
+            .finish()
+    }
 }
 
 impl ApiError {
