@@ -31,7 +31,6 @@ pub enum ObservedDirectorTool {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObservedOperation {
     GenerateImage(GenerationSummary),
-    #[cfg(feature = "streaming")]
     GenerateImageStream(GenerationSummary),
     EncodeVibe {
         model: Model,
@@ -52,13 +51,10 @@ pub struct RequestFingerprint {
 /// Classification of a failed request without its original payload.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RequestFailure {
-    #[cfg(feature = "streaming")]
     Stream,
     InvalidRequest,
     Preparation,
-    Api {
-        status: u16,
-    },
+    Api { status: u16 },
     Transport,
     Encode,
     Decode,
@@ -69,7 +65,6 @@ impl RequestFailure {
     #[must_use]
     pub const fn from_error(error: &BridgeError) -> Self {
         match error {
-            #[cfg(feature = "streaming")]
             BridgeError::Stream(_) => Self::Stream,
             #[cfg(feature = "tokenizer")]
             BridgeError::Tokenizer(_) => Self::InvalidRequest,
@@ -96,7 +91,6 @@ pub enum RequestOutcome {
     Failed {
         failure: RequestFailure,
     },
-    #[cfg(feature = "streaming")]
     Cancelled,
 }
 

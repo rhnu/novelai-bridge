@@ -20,17 +20,15 @@ impl Transport for Ordinary {
         request: TransportRequest,
     ) -> Result<TransportResponse, TransportError> {
         self.requests.lock().unwrap().push(request);
-        Ok(TransportResponse {
-            body_truncated: false,
-            status: 200,
-            headers: Vec::new(),
-            body: self
-                .responses
+        Ok(TransportResponse::from_bytes(
+            200,
+            Vec::new(),
+            self.responses
                 .lock()
                 .expect("test response mutex is not poisoned")
                 .pop_front()
                 .expect("one response was configured"),
-        })
+        ))
     }
 }
 
@@ -68,11 +66,9 @@ async fn account_cache_is_shared_and_an_invalid_response_does_not_replace_it() {
     assert_eq!(client.last_subscription(), Some(subscription));
 }
 
-#[cfg(feature = "credit-observer")]
 #[derive(Default)]
 struct Observer(Mutex<Vec<crate::CreditEvent>>);
 
-#[cfg(feature = "credit-observer")]
 #[async_trait]
 impl crate::CreditObserver for Observer {
     async fn observe(&self, event: crate::CreditEvent) {
@@ -83,7 +79,6 @@ impl crate::CreditObserver for Observer {
     }
 }
 
-#[cfg(feature = "credit-observer")]
 #[tokio::test]
 async fn common_execution_settles_decode_failure_and_success_with_distinct_identifiers() {
     let observer = Arc::new(Observer::default());
@@ -173,7 +168,7 @@ async fn director_prepared_and_raw_calls_share_transport_and_decode_behavior() {
     let prepared = request.clone().prepare().unwrap();
     let raw_result = client.run_director_tool(request).await.unwrap();
     let prepared_result = client.run_director_tool_prepared(prepared).await.unwrap();
-    assert_eq!(raw_result.bytes(), png);
+    assert_eq!(raw_result.images[0].bytes(), png);
     assert_eq!(raw_result, prepared_result);
     let requests = transport.requests.lock().unwrap();
     assert_eq!(requests.len(), 2);

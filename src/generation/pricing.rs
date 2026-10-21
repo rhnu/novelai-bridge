@@ -90,7 +90,6 @@ impl GenerateImageRequest {
     }
 }
 
-#[cfg(feature = "generation")]
 impl GenerateImageStreamRequest {
     /// Normalizes and estimates the base request.
     ///

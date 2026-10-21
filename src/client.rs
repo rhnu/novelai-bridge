@@ -12,12 +12,10 @@ mod director;
 mod execute;
 mod generate;
 mod observe;
-#[cfg(feature = "streaming")]
 mod stream;
 mod subscription;
 mod vibe;
 
-#[cfg(feature = "streaming")]
 pub use stream::{GenerateImageStream, ImageStreamItem, ImageStreamResult};
 
 /// Default base URL for image-service endpoints.
@@ -27,12 +25,15 @@ pub const DEFAULT_IMAGE_BASE: &str = "https://image.novelai.net";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientConfig {
     pub image_base_url: String,
+    /// Response budgets applied to every transport implementation.
+    pub response_limits: crate::ResponseLimits,
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             image_base_url: DEFAULT_IMAGE_BASE.to_owned(),
+            response_limits: crate::ResponseLimits::default(),
         }
     }
 }
@@ -45,7 +46,6 @@ pub struct Client<T: ?Sized> {
     request_counter: Arc<AtomicU64>,
     #[cfg(feature = "tokenizer")]
     tokenizers: Option<Arc<crate::Tokenizers>>,
-    #[cfg(feature = "credit-observer")]
     observation: Option<observe::ObservationContext>,
 }
 
@@ -58,7 +58,6 @@ impl<T: ?Sized> Clone for Client<T> {
             request_counter: Arc::clone(&self.request_counter),
             #[cfg(feature = "tokenizer")]
             tokenizers: self.tokenizers.clone(),
-            #[cfg(feature = "credit-observer")]
             observation: self.observation.clone(),
         }
     }
@@ -74,14 +73,12 @@ impl<T: ?Sized> Client<T> {
             request_counter: Arc::new(AtomicU64::new(1)),
             #[cfg(feature = "tokenizer")]
             tokenizers: None,
-            #[cfg(feature = "credit-observer")]
             observation: None,
         }
     }
 
     /// Attaches a credit observer. Clones share request identifiers and the observer.
     #[must_use]
-    #[cfg(feature = "credit-observer")]
     pub fn with_credit_observer(mut self, observer: Arc<dyn crate::CreditObserver>) -> Self {
         self.observation = Some(observe::ObservationContext::new(observer));
         self

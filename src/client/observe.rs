@@ -1,51 +1,32 @@
-#[cfg(feature = "credit-observer")]
 use std::sync::Arc;
 
 use super::Client;
-use crate::{BridgeError, NormalizedGeneration};
-#[cfg(feature = "credit-observer")]
 use crate::{
-    CreditEvent, CreditObserver, GenerationSummary, ObservedDirectorTool, ObservedOperation,
-    RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome, SubscriptionInfo,
+    BridgeError, CreditEvent, CreditObserver, GenerationSummary, NormalizedGeneration,
+    ObservedDirectorTool, ObservedOperation, RequestCostEstimate, RequestFailure,
+    RequestFingerprint, RequestOutcome, SubscriptionInfo,
 };
 
 /// Holds the observer only while an observed operation remains pending.
 #[derive(Default)]
 pub(super) struct PendingObservation {
-    #[cfg(feature = "credit-observer")]
     pending: Option<(Arc<dyn CreditObserver>, RequestFingerprint)>,
 }
 
 impl PendingObservation {
     pub(super) async fn succeed(self, image_count: u32) {
-        #[cfg(feature = "credit-observer")]
         self.settle(RequestOutcome::Succeeded { image_count }).await;
-        #[cfg(not(feature = "credit-observer"))]
-        let _ = image_count;
     }
 
     pub(super) fn fail(self, error: &BridgeError) -> impl Future<Output = ()> + Send + 'static {
-        #[cfg(feature = "credit-observer")]
         let failure = RequestFailure::from_error(error);
-        #[cfg(not(feature = "credit-observer"))]
-        let _ = error;
         async move {
-            #[cfg(feature = "credit-observer")]
             self.settle(RequestOutcome::Failed { failure }).await;
-            #[cfg(not(feature = "credit-observer"))]
-            let _ = self;
         }
     }
 
-    #[cfg(feature = "streaming")]
-    pub(super) async fn cancel(self) {
-        #[cfg(feature = "credit-observer")]
-        self.settle(RequestOutcome::Cancelled).await;
-        #[cfg(not(feature = "credit-observer"))]
-        let _ = self;
-    }
+    pub(super) async fn cancel(self) { self.settle(RequestOutcome::Cancelled).await; }
 
-    #[cfg(feature = "credit-observer")]
     async fn settle(self, outcome: RequestOutcome) {
         if let Some((observer, fingerprint)) = self.pending {
             observer
@@ -58,13 +39,11 @@ impl PendingObservation {
     }
 }
 
-#[cfg(feature = "credit-observer")]
 #[derive(Clone)]
 pub(super) struct ObservationContext {
     observer: Arc<dyn CreditObserver>,
 }
 
-#[cfg(feature = "credit-observer")]
 impl ObservationContext {
     pub(super) fn new(observer: Arc<dyn CreditObserver>) -> Self { Self { observer } }
 
@@ -105,21 +84,13 @@ impl<T: crate::Transport + ?Sized> Client<T> {
         delivery: crate::GenerationDelivery,
         request_id: u64,
     ) -> PendingObservation {
-        #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
             let pricing = normalized.anlas_estimate_input(self.last_pricing_context());
             let summary = generation_summary(normalized, pricing);
             let operation = match delivery {
                 crate::GenerationDelivery::Images => ObservedOperation::GenerateImage(summary),
                 crate::GenerationDelivery::Stream(_) => {
-                    #[cfg(feature = "streaming")]
-                    {
-                        ObservedOperation::GenerateImageStream(summary)
-                    }
-                    #[cfg(not(feature = "streaming"))]
-                    {
-                        return PendingObservation::default();
-                    }
+                    ObservedOperation::GenerateImageStream(summary)
                 },
             };
             return context
@@ -130,7 +101,6 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 )
                 .await;
         }
-        let _ = (normalized, delivery, request_id);
         PendingObservation::default()
     }
 
@@ -139,7 +109,6 @@ impl<T: crate::Transport + ?Sized> Client<T> {
         prepared: &crate::PreparedDirector,
         request_id: u64,
     ) -> PendingObservation {
-        #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
             let tool = match prepared.command() {
                 crate::DirectorCommand::Lineart => ObservedDirectorTool::Lineart,
@@ -163,7 +132,6 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 )
                 .await;
         }
-        let _ = (prepared, request_id);
         PendingObservation::default()
     }
 
@@ -172,7 +140,6 @@ impl<T: crate::Transport + ?Sized> Client<T> {
         prepared: &crate::PreparedVibe,
         request_id: u64,
     ) -> PendingObservation {
-        #[cfg(feature = "credit-observer")]
         if let Some(context) = &self.observation {
             return context
                 .begin(
@@ -186,12 +153,10 @@ impl<T: crate::Transport + ?Sized> Client<T> {
                 )
                 .await;
         }
-        let _ = (prepared, request_id);
         PendingObservation::default()
     }
 }
 
-#[cfg(feature = "credit-observer")]
 fn generation_summary(
     normalized: &NormalizedGeneration,
     pricing: crate::AnlasEstimateInput,
@@ -207,5 +172,4 @@ fn generation_summary(
     }
 }
 
-#[cfg(feature = "credit-observer")]
 fn count(value: usize) -> u32 { u32::try_from(value).unwrap_or(u32::MAX) }

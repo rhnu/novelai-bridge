@@ -48,6 +48,7 @@ async fn generate_stream_uses_custom_image_base_url() {
         Arc::new(transport.clone()),
         ClientConfig {
             image_base_url: "https://image.example.test/root/".to_owned(),
+            ..ClientConfig::default()
         },
     );
 

@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::{
     BridgeError, ImageDecodePolicy, ImageStreamChunk, ImageStreamError, ImageStreamEvent,
-    TransportSseEvent, TransportSseStream,
+    TransportSseEvent,
 };
 
 pub type ImageStreamItem = Result<ImageStreamChunk, BridgeError>;
@@ -61,12 +61,16 @@ fn decode_final(raw: &TransportSseEvent) -> Result<ImageStreamEvent, BridgeError
             raw: Box::new(raw.clone()),
             source: Box::new(source),
         })?;
-    let image = crate::image::validated_generated_image(image, None, ImageDecodePolicy::default())
-        .map_err(|source| ImageStreamError::InvalidFinal {
-            samp_ix: body.samp_ix,
-            raw: Box::new(raw.clone()),
-            source: Box::new(source),
-        })?;
+    let image = crate::image::validated_generated_image(
+        image,
+        crate::GeneratedImageSource::Raw,
+        ImageDecodePolicy::default(),
+    )
+    .map_err(|source| ImageStreamError::InvalidFinal {
+        samp_ix: body.samp_ix,
+        raw: Box::new(raw.clone()),
+        source: Box::new(source),
+    })?;
     Ok(ImageStreamEvent::Final {
         samp_ix: body.samp_ix,
         gen_id: body.gen_id,
@@ -165,7 +169,7 @@ fn decode_event(raw: TransportSseEvent) -> ImageStreamItem {
     Ok(chunk)
 }
 
-pub(super) fn decode(mut input: TransportSseStream) -> ImageStreamResult {
+pub(super) fn decode(mut input: super::sse::SseStream) -> ImageStreamResult {
     Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await {
             yield decode_event(event?)?;

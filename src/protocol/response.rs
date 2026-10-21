@@ -2,20 +2,72 @@ use std::time::{Duration, SystemTime};
 
 use crate::{ApiError, ApiErrorReason, TransportHeader, TransportResponse};
 
-pub(super) fn checked_body(
+/// A successful, bounded response retained until operation-specific decoding.
+pub struct BufferedResponse {
+    pub status: u16,
+    pub headers: Vec<TransportHeader>,
+    pub body: Vec<u8>,
+}
+
+impl std::fmt::Debug for BufferedResponse {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BufferedResponse")
+            .field("status", &self.status)
+            .field("header_count", &self.headers.len())
+            .field("body_bytes", &self.body.len())
+            .finish()
+    }
+}
+
+impl BufferedResponse {
+    /// Returns the first matching header, using case-insensitive HTTP field names.
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&[u8]> {
+        self.headers
+            .iter()
+            .find(|header| header.name.eq_ignore_ascii_case(name))
+            .map(|header| header.value.as_slice())
+    }
+}
+
+pub(super) async fn checked_body(
     response: TransportResponse,
     endpoint: &str,
-) -> Result<Vec<u8>, ApiError> {
-    if (200..300).contains(&response.status) {
-        Ok(response.body)
+    limits: super::limits::ResponseLimits,
+) -> Result<BufferedResponse, crate::BridgeError> {
+    use futures_util::StreamExt;
+    let TransportResponse {
+        status,
+        headers,
+        mut body,
+    } = response;
+    let successful = (200..300).contains(&status);
+    let limit = if successful {
+        limits.success_body_bytes
     } else {
-        Err(map_status_error(
-            response.status,
-            &response.headers,
-            &response.body,
-            endpoint,
-            response.body_truncated,
-        ))
+        limits.error_body_bytes
+    };
+    let mut buffer = super::limits::BodyBuffer::new(limit, !successful);
+    let mut truncated = false;
+    while let Some(chunk) = body.next().await {
+        let chunk = chunk?;
+        if !buffer.append(&chunk).map_err(|source| {
+            crate::DecodeError::new(crate::DecodeTarget::HttpResponseBody, Box::new(source))
+        })? {
+            truncated = true;
+            break;
+        }
+    }
+    let body = buffer.into_bytes();
+    if successful {
+        Ok(BufferedResponse {
+            status,
+            headers,
+            body,
+        })
+    } else {
+        Err(map_status_error(status, &headers, &body, endpoint, truncated).into())
     }
 }
 

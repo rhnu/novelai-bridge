@@ -38,7 +38,7 @@ impl<T: Transport + ?Sized> Client<T> {
                 crate::protocol::ApiEndpoint::EncodeVibe,
                 body,
                 observation,
-                |payload| VibeEncoding::from_bytes(payload).map(|encoding| (encoding, 0)),
+                |response| VibeEncoding::from_bytes(response.body).map(|encoding| (encoding, 0)),
             )
             .await
         }

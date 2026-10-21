@@ -4,7 +4,6 @@ use crate::{TransportMethod, TransportRequest};
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ApiEndpoint {
     GenerateImage,
-    #[cfg(feature = "streaming")]
     GenerateImageStream,
     EncodeVibe,
     AugmentImage,
@@ -15,7 +14,6 @@ impl ApiEndpoint {
     pub const fn path(self) -> &'static str {
         match self {
             Self::GenerateImage => "/ai/generate-image",
-            #[cfg(feature = "streaming")]
             Self::GenerateImageStream => "/ai/generate-image-stream",
             Self::EncodeVibe => "/ai/encode-vibe",
             Self::AugmentImage => "/ai/augment-image",
@@ -35,7 +33,6 @@ impl ApiEndpoint {
     pub const fn accept(self) -> &'static str {
         match self {
             Self::Subscription => "application/json",
-            #[cfg(feature = "streaming")]
             Self::GenerateImageStream => "text/event-stream",
             _ => "application/octet-stream",
         }

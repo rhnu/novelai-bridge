@@ -1,56 +1,61 @@
 use serde::de::DeserializeOwned;
 
 use crate::{BridgeError, DecodeError, DecodeTarget, Transport, TransportRequest};
-#[cfg(feature = "streaming")]
-use crate::{StreamingTransport, TransportSseResponse};
 
 mod endpoint;
+pub mod limits;
 mod response;
+mod sse;
 pub use endpoint::ApiEndpoint;
-#[cfg(feature = "streaming")]
+pub use response::BufferedResponse;
 mod generation_stream;
-#[cfg(feature = "streaming")]
 pub use generation_stream::{ImageStreamItem, ImageStreamResult};
 
-/// Executes a JSON account query and validates the HTTP status before deserialization.
+/// Executes a JSON account query and validates status before deserialization.
 pub async fn get_json<T: Transport + ?Sized, Response: DeserializeOwned>(
     transport: &T,
     request: TransportRequest,
+    limits: limits::ResponseLimits,
 ) -> Result<Response, BridgeError> {
-    let endpoint = request.endpoint.clone();
-    let response = transport.execute(request).await?;
-    let body = response::checked_body(response, &endpoint)?;
-    serde_json::from_slice(&body)
+    let response = post_encoded(transport, request, limits).await?;
+    serde_json::from_slice(&response.body)
         .map_err(|source| DecodeError::new(DecodeTarget::JsonResponse, Box::new(source)).into())
 }
 
+/// Buffers a bounded ordinary response, preserving its headers for the operation decoder.
 pub async fn post_encoded<T: Transport + ?Sized>(
     transport: &T,
     request: TransportRequest,
-) -> Result<Vec<u8>, BridgeError> {
+    limits: limits::ResponseLimits,
+) -> Result<BufferedResponse, BridgeError> {
     let endpoint = request.endpoint.clone();
     let response = transport.execute(request).await?;
-    Ok(response::checked_body(response, &endpoint)?)
+    response::checked_body(response, &endpoint, limits).await
 }
 
-#[cfg(feature = "streaming")]
-pub async fn post_sse<T: StreamingTransport + ?Sized>(
+pub async fn post_sse<T: Transport + ?Sized>(
     transport: &T,
     request: TransportRequest,
+    limits: limits::ResponseLimits,
 ) -> Result<ImageStreamResult, BridgeError> {
     let endpoint = request.endpoint.clone();
-    match transport.execute_sse(request).await? {
-        TransportSseResponse::Events(events) => Ok(generation_stream::decode(events)),
-        TransportSseResponse::Http(response) => {
-            response::checked_body(response, &endpoint)?;
-            Err(DecodeError::new(
-                DecodeTarget::StreamChunk,
-                "successful SSE request returned an ordinary HTTP body".into(),
-            )
-            .into())
-        },
+    let response = transport.execute(request).await?;
+    if !(200..300).contains(&response.status) {
+        response::checked_body(response, &endpoint, limits).await?;
+        unreachable!("non-success responses always fail status validation");
     }
+    if !sse::is_event_stream(&response.headers) {
+        return Err(DecodeError::new(
+            DecodeTarget::StreamChunk,
+            "successful stream request did not return text/event-stream".into(),
+        )
+        .into());
+    }
+    Ok(generation_stream::decode(sse::decode(
+        response.body,
+        limits.sse_event_bytes,
+    )))
 }
 
-#[cfg(all(test, feature = "streaming"))]
+#[cfg(test)]
 mod tests;

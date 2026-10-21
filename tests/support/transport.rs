@@ -1,15 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-#[cfg(feature = "streaming")]
-use futures_util::stream;
-#[cfg(feature = "streaming")]
 use novelai_bridge::{
-    ImageStreamChunk, StreamingTransport, TransportSseEvent, TransportSseResponse,
-};
-use novelai_bridge::{
-    Transport, TransportError, TransportMethod, TransportOperation, TransportRequest,
-    TransportResponse,
+    ImageStreamChunk, Transport, TransportError, TransportHeader, TransportMethod,
+    TransportOperation, TransportRequest, TransportResponse,
 };
 use serde_json::Value;
 
@@ -28,7 +22,6 @@ struct MockTransportState {
     byte_paths: Vec<String>,
     bytes_response: Vec<u8>,
     encode_vibe_response: Vec<u8>,
-    #[cfg(feature = "streaming")]
     sse_chunks: Vec<ImageStreamChunk>,
     json_response: Value,
     bytes_error: Option<TransportError>,
@@ -66,7 +59,6 @@ impl MockTransport {
             .encode_vibe_response = encode_vibe_response;
     }
 
-    #[cfg(feature = "streaming")]
     pub fn set_sse_chunks(&self, sse_chunks: Vec<ImageStreamChunk>) {
         self.state
             .lock()
@@ -82,7 +74,6 @@ impl MockTransport {
     }
 
     /// Makes the next `post_bytes` call fail with `bytes_error`.
-    #[cfg(feature = "credit-observer")]
     pub fn set_bytes_error(&self, bytes_error: TransportError) {
         self.state
             .lock()
@@ -147,13 +138,12 @@ impl Transport for MockTransport {
         let mut state = self.state.lock().expect("mock state mutex is not poisoned");
         state.last_path = Some(request.endpoint.clone());
         if request.method == TransportMethod::Get {
-            return Ok(TransportResponse {
-                body_truncated: false,
-                status: 200,
-                headers: Vec::new(),
-                body: serde_json::to_vec(&state.json_response)
+            return Ok(TransportResponse::from_bytes(
+                200,
+                Vec::new(),
+                serde_json::to_vec(&state.json_response)
                     .expect("mock JSON response is serializable"),
-            });
+            ));
         }
         if let Some(body) = body {
             state.last_body = Some(body.clone());
@@ -163,45 +153,35 @@ impl Transport for MockTransport {
         if let Some(error) = state.bytes_error.take() {
             return Err(error);
         }
+        if request.endpoint.ends_with("/ai/generate-image-stream") {
+            let mut bytes = Vec::new();
+            for chunk in &state.sse_chunks {
+                let raw = &chunk.raw;
+                bytes.extend_from_slice(
+                    format!("event: {}\nid: {}\n", raw.event, raw.id).as_bytes(),
+                );
+                if let Some(retry) = raw.retry {
+                    bytes.extend_from_slice(format!("retry: {}\n", retry.as_millis()).as_bytes());
+                }
+                for line in raw.data.split('\n') {
+                    bytes.extend_from_slice(format!("data: {line}\n").as_bytes());
+                }
+                bytes.push(b'\n');
+            }
+            return Ok(TransportResponse::from_bytes(
+                200,
+                vec![TransportHeader {
+                    name: "content-type".to_owned(),
+                    value: b"text/event-stream".to_vec(),
+                }],
+                bytes,
+            ));
+        }
         let body = if request.endpoint.ends_with("/ai/encode-vibe") {
             state.encode_vibe_response.clone()
         } else {
             state.bytes_response.clone()
         };
-        Ok(TransportResponse {
-            body_truncated: false,
-            status: 200,
-            headers: Vec::new(),
-            body,
-        })
-    }
-}
-
-#[cfg(feature = "streaming")]
-#[async_trait]
-impl StreamingTransport for MockTransport {
-    async fn execute_sse(
-        &self,
-        request: TransportRequest,
-    ) -> Result<TransportSseResponse, TransportError> {
-        let body = serde_json::from_slice::<Value>(request.body.as_deref().unwrap_or_default())
-            .map_err(|source| {
-                TransportError::new(
-                    TransportOperation::SendRequest,
-                    Some(request.endpoint.clone()),
-                    Box::new(source),
-                )
-            })?;
-        let mut state = self.state.lock().expect("mock state mutex is not poisoned");
-        state.last_path = Some(request.endpoint.clone());
-        state.last_body = Some(body.clone());
-        state.post_history.push((request.endpoint, body));
-        let items: Vec<Result<TransportSseEvent, TransportError>> = state
-            .sse_chunks
-            .iter()
-            .map(|chunk| Ok(chunk.raw.clone()))
-            .collect();
-        drop(state);
-        Ok(TransportSseResponse::Events(Box::pin(stream::iter(items))))
+        Ok(TransportResponse::from_bytes(200, Vec::new(), body))
     }
 }

@@ -10,17 +10,11 @@ pub fn check() -> TaskResult<()> {
         .context("xtask must be a workspace member")?;
     for features in [
         "",
-        "png-metadata",
-        "image-processing",
         "tokenizer",
         "bundled-assets",
-        "generation",
-        "generation,tokenizer",
-        "client",
         "reqwest-transport",
-        "streaming",
-        "reqwest-streaming",
-        "credit-observer",
+        "reqwest-transport,tokenizer",
+        "reqwest-transport,bundled-assets",
     ] {
         let mut command = Command::new("cargo");
         command.current_dir(root).args([

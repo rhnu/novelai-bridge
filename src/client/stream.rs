@@ -189,5 +189,5 @@ impl Stream for GenerateImageStream {
     }
 }
 
-#[cfg(all(test, feature = "credit-observer"))]
+#[cfg(test)]
 mod tests;

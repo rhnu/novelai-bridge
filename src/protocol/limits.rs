@@ -27,14 +27,12 @@ pub struct ResponseLimitExceeded {
 }
 
 /// Retains a bounded HTTP body, rejecting success overflow and truncating error bodies.
-#[cfg(any(feature = "reqwest-transport", test))]
 pub(super) struct BodyBuffer {
     bytes: Vec<u8>,
     limit: usize,
     truncate: bool,
 }
 
-#[cfg(any(feature = "reqwest-transport", test))]
 impl BodyBuffer {
     pub(super) const fn new(limit: usize, truncate: bool) -> Self {
         Self {
@@ -65,7 +63,6 @@ impl BodyBuffer {
 ///
 /// A CR is resolved on the following byte so split CRLF sequences count as one delimiter
 /// without accidentally charging a following frame for the previous frame's LF.
-#[cfg(feature = "reqwest-streaming")]
 pub(super) struct SseFrameBudget {
     limit: usize,
     bytes: usize,
@@ -73,7 +70,6 @@ pub(super) struct SseFrameBudget {
     pending_cr: bool,
 }
 
-#[cfg(feature = "reqwest-streaming")]
 impl SseFrameBudget {
     pub(super) const fn new(limit: usize) -> Self {
         Self {

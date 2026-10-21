@@ -31,7 +31,7 @@ pub struct SubscriptionInfo {
     /// Numeric tier value.
     pub tier: i32,
     /// Optional expiration timestamp in milliseconds since the Unix epoch.
-    pub expires_at_ms: Option<u64>,
+    pub expires_at_ms: Option<i64>,
     /// V5 generation allowance, when the account reports one.
     pub v5_usage: Option<V5UsageStatus>,
     /// Original response, including fields not represented by this summary.

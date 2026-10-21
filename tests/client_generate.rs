@@ -1,5 +1,3 @@
-#![cfg(feature = "client")]
-
 use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -39,9 +37,7 @@ fn decoded_dimensions(value: &Value) -> (u32, u32) {
 mod characters;
 mod image_inputs;
 mod normalization;
-#[cfg(feature = "credit-observer")]
 mod observation;
 mod ordinary;
 mod prompts;
-#[cfg(feature = "streaming")]
 mod stream;

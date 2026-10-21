@@ -19,7 +19,7 @@ struct SubscriptionFields {
     #[serde(alias = "isActive", alias = "is_active")]
     active: Option<bool>,
     #[serde(alias = "expires_at")]
-    expires_at: Option<u64>,
+    expires_at: Option<i64>,
     #[serde(alias = "training_steps_left")]
     training_steps_left: TrainingSteps,
     usage: Option<Usage>,
@@ -107,7 +107,7 @@ impl SubscriptionResponse {
             fields.tier > 0
                 && fields.expires_at.is_none_or(|seconds| {
                     now.duration_since(UNIX_EPOCH)
-                        .is_ok_and(|elapsed| seconds > elapsed.as_secs())
+                        .is_ok_and(|elapsed| i128::from(seconds) > i128::from(elapsed.as_secs()))
                 })
         });
         let v5_usage = fields.usage.map(Usage::into_status);

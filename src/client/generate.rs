@@ -4,11 +4,10 @@ use super::{Client, diagnostics::report_failure};
 #[cfg(feature = "tokenizer")]
 use crate::InvalidRequest;
 use crate::{
-    BridgeError, GenerateImageRequest, GenerateImageResult, GenerationDelivery, PreparedGeneration,
-    Transport, decode_generated_images,
+    BridgeError, GenerateImageRequest, GenerateImageResult, GenerateImageStream,
+    GenerateImageStreamRequest, GenerationDelivery, PreparedGeneration, StreamMode, Transport,
+    decode_generated_images,
 };
-#[cfg(feature = "streaming")]
-use crate::{GenerateImageStream, GenerateImageStreamRequest, StreamMode, StreamingTransport};
 
 impl<T: Transport + ?Sized> Client<T> {
     /// Normalizes, prepares and sends an image-generation request.
@@ -75,7 +74,7 @@ impl<T: Transport + ?Sized> Client<T> {
             body,
             observation,
             |payload| {
-                let images = decode_generated_images(payload)?;
+                let images = decode_generated_images(payload.body)?;
                 let count = u32::try_from(images.len()).unwrap_or(u32::MAX);
                 Ok((
                     GenerateImageResult {
@@ -93,14 +92,10 @@ impl<T: Transport + ?Sized> Client<T> {
     ///
     /// # Errors
     /// Returns local preparation, transport or stream setup errors.
-    #[cfg(feature = "streaming")]
     pub async fn generate_stream(
         &self,
         request: GenerateImageStreamRequest,
-    ) -> Result<GenerateImageStream, BridgeError>
-    where
-        T: StreamingTransport,
-    {
+    ) -> Result<GenerateImageStream, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current().record("model", request.base.core.model.as_str());
@@ -120,15 +115,11 @@ impl<T: Transport + ?Sized> Client<T> {
     ///
     /// # Errors
     /// Returns capability, token-limit, transport or stream setup errors.
-    #[cfg(feature = "streaming")]
     pub async fn generate_stream_prepared(
         &self,
         prepared: PreparedGeneration,
         mode: StreamMode,
-    ) -> Result<GenerateImageStream, BridgeError>
-    where
-        T: StreamingTransport,
-    {
+    ) -> Result<GenerateImageStream, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current()
@@ -142,16 +133,12 @@ impl<T: Transport + ?Sized> Client<T> {
         .await
     }
 
-    #[cfg(feature = "streaming")]
     async fn send_stream_prepared(
         &self,
         prepared: PreparedGeneration,
         mode: StreamMode,
         request_id: u64,
-    ) -> Result<GenerateImageStream, BridgeError>
-    where
-        T: StreamingTransport,
-    {
+    ) -> Result<GenerateImageStream, BridgeError> {
         tracing::Span::current().record(
             "endpoint",
             crate::protocol::ApiEndpoint::GenerateImageStream.path(),
@@ -169,7 +156,9 @@ impl<T: Transport + ?Sized> Client<T> {
             .await;
         let request = crate::protocol::ApiEndpoint::GenerateImageStream
             .request(&self.config.image_base_url, Some(body));
-        match crate::protocol::post_sse(&*self.transport, request).await {
+        match crate::protocol::post_sse(&*self.transport, request, self.config.response_limits)
+            .await
+        {
             Ok(stream) => {
                 tracing::debug!("image stream opened");
                 Ok(GenerateImageStream::new(

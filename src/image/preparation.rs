@@ -166,7 +166,6 @@ impl ImagePreprocessor for DefaultImagePreprocessor {
     }
 }
 
-#[cfg(any(feature = "generation", test))]
 pub fn prepare_image(
     preprocessor: Option<&dyn ImagePreprocessor>,
     field: RequestField,

@@ -46,8 +46,6 @@ pub enum TransportOperation {
     SendRequest,
     /// Reading response bytes.
     ReadResponseBytes,
-    /// Parsing an SSE stream.
-    ParseSse,
 }
 
 impl fmt::Display for TransportOperation {
@@ -58,7 +56,6 @@ impl fmt::Display for TransportOperation {
             Self::BuildHeader => "build HTTP header",
             Self::SendRequest => "send HTTP request",
             Self::ReadResponseBytes => "read response bytes",
-            Self::ParseSse => "parse SSE stream",
         };
         f.write_str(operation)
     }

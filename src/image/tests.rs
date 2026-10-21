@@ -1,5 +1,6 @@
 use std::{io::Write, sync::Mutex};
 
+use super::output::GeneratedImageSource;
 use crate::{
     BridgeError, DefaultImagePreprocessor, EncodedImage, GeneratedImageMetadata, ImagePreparation,
     ImagePreprocessor, ImageSize, PreparedImage, decode_generated_images,
@@ -48,16 +49,23 @@ fn response_decoder_accepts_valid_raw_image_and_rejects_arbitrary_bytes() {
     assert_eq!(images.len(), 1);
     assert_eq!(images[0].bytes(), png);
     assert_eq!(images[0].mime_type(), "image/png");
+    assert_eq!(images[0].source(), &GeneratedImageSource::Raw);
     assert!(decode_generated_images(b"not an image".to_vec()).is_err());
 }
 
 #[test]
-fn zip_response_decodes_unicode_names_and_stored_or_deflated_images() {
+fn zip_response_preserves_all_image_names_and_original_entry_indices() {
     let first = create_png_bytes(2, 2);
     let second = create_png_bytes(3, 1);
+    let third = create_png_bytes(1, 4);
     let mut cursor = std::io::Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut cursor);
     for (name, compression, bytes) in [
+        (
+            "readme.txt",
+            zip::CompressionMethod::Stored,
+            b"not an image entry".as_slice(),
+        ),
         (
             "图像/first.PNG",
             zip::CompressionMethod::Deflated,
@@ -68,6 +76,11 @@ fn zip_response_decodes_unicode_names_and_stored_or_deflated_images() {
             zip::CompressionMethod::Stored,
             second.as_slice(),
         ),
+        (
+            "other/third.png",
+            zip::CompressionMethod::Deflated,
+            third.as_slice(),
+        ),
     ] {
         let options = zip::write::SimpleFileOptions::default().compression_method(compression);
         writer.start_file(name, options).unwrap();
@@ -75,13 +88,27 @@ fn zip_response_decodes_unicode_names_and_stored_or_deflated_images() {
     }
     writer.finish().unwrap();
     let images = decode_generated_images(cursor.into_inner()).unwrap();
-    assert_eq!(images.len(), 2);
+    assert_eq!(images.len(), 3);
     assert_eq!(images[0].bytes(), first);
     assert_eq!(images[1].bytes(), second);
+    assert_eq!(images[2].bytes(), third);
+    for (image, (name, index)) in images.iter().zip([
+        ("图像/first.PNG", 1),
+        ("second.png", 2),
+        ("other/third.png", 3),
+    ]) {
+        assert_eq!(
+            image.source(),
+            &GeneratedImageSource::Archive {
+                name: name.to_owned(),
+                index,
+            }
+        );
+    }
 }
 
 #[test]
-fn one_invalid_image_candidate_rejects_the_whole_archive() {
+fn an_invalid_non_first_image_rejects_the_whole_archive() {
     let mut cursor = std::io::Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut cursor);
     let options = zip::write::SimpleFileOptions::default();
@@ -134,7 +161,6 @@ impl ImagePreprocessor for CountingPreprocessor {
     }
 }
 
-#[cfg(feature = "generation")]
 #[test]
 fn custom_preprocessor_observes_each_semantic_input_once() {
     use crate::{

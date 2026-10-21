@@ -397,7 +397,6 @@ fn corrupted_post_image_text_crc_is_a_fatal_structure_error() {
     let offset = bytes.windows(4).position(|bytes| bytes == b"tEXt").unwrap();
     bytes[offset + 4] ^= 1;
     assert!(parse_png_metadata_from_bytes(&bytes).is_err());
-    #[cfg(feature = "image-processing")]
     {
         assert!(crate::decode_generated_images(bytes.clone()).is_err());
         assert!(crate::EncodedImage::from_bytes(bytes).is_err());

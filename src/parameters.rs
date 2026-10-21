@@ -322,5 +322,4 @@ serde_string_enum!(
 serde_string_enum!(StreamMode, [Self::Sse]);
 
 serde_string_enum!(ImageFormat, [Self::Png, Self::Webp]);
-#[cfg(feature = "generation")]
 pub mod bounds;

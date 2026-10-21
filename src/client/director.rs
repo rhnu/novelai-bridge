@@ -1,7 +1,9 @@
 use tracing::Instrument;
 
 use super::{Client, diagnostics::report_failure};
-use crate::{BridgeError, GeneratedImage, PreparedDirector, RunDirectorToolRequest, Transport};
+use crate::{
+    BridgeError, PreparedDirector, RunDirectorToolRequest, RunDirectorToolResult, Transport,
+};
 
 impl<T: Transport + ?Sized> Client<T> {
     /// Prepares and runs a director operation against an image.
@@ -11,7 +13,7 @@ impl<T: Transport + ?Sized> Client<T> {
     pub async fn run_director_tool(
         &self,
         request: RunDirectorToolRequest,
-    ) -> Result<GeneratedImage, BridgeError> {
+    ) -> Result<RunDirectorToolResult, BridgeError> {
         let prepared = tracing::debug_span!(
             "novelai.prepare",
             operation = "director",
@@ -28,7 +30,7 @@ impl<T: Transport + ?Sized> Client<T> {
     pub async fn run_director_tool_prepared(
         &self,
         prepared: PreparedDirector,
-    ) -> Result<GeneratedImage, BridgeError> {
+    ) -> Result<RunDirectorToolResult, BridgeError> {
         let request_id = self.next_request_id();
         async {
             tracing::Span::current().record("tool", prepared.command().wire_name());
@@ -38,8 +40,10 @@ impl<T: Transport + ?Sized> Client<T> {
                 crate::protocol::ApiEndpoint::AugmentImage,
                 body,
                 observation,
-                |payload| {
-                    crate::image::decode_first_generated_image(payload).map(|image| (image, 1))
+                |response| {
+                    let images = crate::image::decode_generated_images(response.body)?;
+                    let image_count = u32::try_from(images.len()).unwrap_or(u32::MAX);
+                    Ok((RunDirectorToolResult { images }, image_count))
                 },
             )
             .await
@@ -48,3 +52,6 @@ impl<T: Transport + ?Sized> Client<T> {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -9,13 +9,10 @@ use crate::{
 pub struct ExtractedPngText {
     pub(super) text_chunks: BTreeMap<String, Vec<String>>,
     pub(super) warnings: Vec<PngMetadataWarning>,
-    #[cfg(feature = "image-processing")]
     pub usage: crate::media_policy::ImageResourceUsage,
-    #[cfg(feature = "image-processing")]
     pub pixels: Option<PngPixels>,
 }
 
-#[cfg(feature = "image-processing")]
 pub struct PngPixels {
     pub bytes: Vec<u8>,
     pub color: png::ColorType,
@@ -49,7 +46,6 @@ pub fn extract_png_text_chunks(
     policy
         .check(ImageLimit::DecodedBytes, output_size as u64)
         .map_err(invalid_png_payload)?;
-    #[cfg(feature = "image-processing")]
     let pixels = if retain_pixels {
         let mut output = vec![0_u8; output_size];
         let frame = reader
@@ -65,11 +61,6 @@ pub fn extract_png_text_chunks(
         while reader.next_row().map_err(invalid_png_payload)?.is_some() {}
         None
     };
-    #[cfg(not(feature = "image-processing"))]
-    {
-        let _ = retain_pixels;
-        while reader.next_row().map_err(invalid_png_payload)?.is_some() {}
-    }
     reader.finish().map_err(invalid_png_payload)?;
     let info = reader.info();
 
@@ -111,7 +102,6 @@ pub fn extract_png_text_chunks(
     Ok(ExtractedPngText {
         text_chunks: chunks,
         warnings,
-        #[cfg(feature = "image-processing")]
         usage: crate::media_policy::ImageResourceUsage {
             encoded_bytes: bytes.len() as u64,
             width,
@@ -120,7 +110,6 @@ pub fn extract_png_text_chunks(
             text_chunk_bytes: max_text_bytes as u64,
             total_text_bytes: total_text_bytes as u64,
         },
-        #[cfg(feature = "image-processing")]
         pixels,
     })
 }

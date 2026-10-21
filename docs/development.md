@@ -22,7 +22,7 @@ cargo test --workspace --lib --bins --all-features --locked
 cargo xtask check-features
 ```
 
-For a read-only formatting check, use `cargo dev format --check --diff --locked`. Feature checks compile each independent capability and its important intersections. They do not contact NovelAI or run live probes. Top-level integration scenarios are compiled by the first command but are separate from the pure unit test command.
+For a read-only formatting check, use `cargo dev format --check --diff --locked`. Feature checks compile all six effective combinations of the HTTP adapter, tokenizer and bundled assets. They do not contact NovelAI or run live probes. Top-level integration scenarios are compiled by the first command but are separate from the pure unit test command.
 
 Markdown uses [rumdl](https://rumdl.dev/) and the repository's `.rumdl.toml`. Line-length enforcement and automatic prose reflow are disabled. After editing documents, pass the changed files to `rumdl check --fix`.
 
@@ -55,6 +55,8 @@ The asset package owns embedded bytes and integrity checks. Runtime parsing and 
 Editable requests, normalized plans and prepared payloads represent different guarantees. Normalize once to decide model identity, applicable mode fields, conditioning and pricing inputs; wire serialization projects that immutable state. Operation-specific input variants prevent image-to-image options from silently disappearing when a mask is added.
 
 Media budgets are shared below metadata and pixel processing. PNG validation must reach the end of the file; a pixel decoder that stops after the first frame cannot establish complete PNG validity. Structural failures reject media, while supported text that cannot be interpreted produces a diagnostic. Prepared media retains measurements so a custom constructor cannot bypass a stricter request budget or force another pixel decode.
+
+Transports return HTTP status, headers and raw byte streams. The protocol layer owns bounded body reads, SSE framing and image event decoding; client response budgets apply to every transport. Successful responses retain their headers through operation decoding.
 
 A stream handle owns both consumption and terminal callback delivery. Its settlement future must survive cancellation of a single `next()` future; explicit cancellation completes an existing settlement instead of replacing its outcome. Do not move that future into a temporary polling wrapper. EOF establishes success only after all expected samples have validated final images. Unknown events retain their complete SSE source and cannot establish completion; malformed official events fail rather than falling back to Unknown.
 

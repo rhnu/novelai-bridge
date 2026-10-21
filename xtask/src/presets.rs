@@ -3,7 +3,7 @@ use novelai_bridge::{
     ApiEndpoint, CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE,
     EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
     GenerationInput, ImageSize, ImageToImageInput, InpaintingInput, Model, ReferenceSet,
-    StreamMode, StreamingTransport, VibeReference, VibeTransferConfig,
+    StreamMode, Transport, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -90,7 +90,7 @@ pub fn shape(
     Ok(())
 }
 
-pub async fn execute<T: StreamingTransport + ?Sized>(
+pub async fn execute<T: Transport + ?Sized>(
     client: &Client<T>,
     args: &RunArgs,
     model: Model,

@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use novelai_bridge::{
-    StreamingTransport, Transport, TransportError, TransportOperation, TransportRequest,
-    TransportResponse, TransportSseResponse,
+    Transport, TransportError, TransportOperation, TransportRequest, TransportResponse,
 };
 use serde_json::Value;
 
@@ -79,16 +78,6 @@ impl<T: Transport> Transport for CaptureTransport<T> {
         request: TransportRequest,
     ) -> Result<TransportResponse, TransportError> {
         self.inner.execute(self.edits.apply(request)?).await
-    }
-}
-
-#[async_trait]
-impl<T: StreamingTransport> StreamingTransport for CaptureTransport<T> {
-    async fn execute_sse(
-        &self,
-        request: TransportRequest,
-    ) -> Result<TransportSseResponse, TransportError> {
-        self.inner.execute_sse(self.edits.apply(request)?).await
     }
 }
 

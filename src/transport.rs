@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 
 use crate::TransportError;
-
-mod limits;
-pub use limits::{ResponseLimitExceeded, ResponseLimits};
+pub use crate::protocol::limits::{ResponseLimitExceeded, ResponseLimits};
 
 #[cfg(feature = "reqwest-transport")]
 mod reqwest;
@@ -45,14 +43,27 @@ pub struct TransportHeader {
     pub value: Vec<u8>,
 }
 
-/// Complete ordinary HTTP response, including non-success status bodies.
-#[derive(Clone, PartialEq, Eq)]
+/// Raw HTTP body chunks. Framing and response budgets are owned by the protocol layer.
+pub type TransportByteStream =
+    std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<Vec<u8>, TransportError>> + Send>>;
+
+/// HTTP response headers and its unconsumed byte stream, including non-success statuses.
 pub struct TransportResponse {
     pub status: u16,
     pub headers: Vec<TransportHeader>,
-    pub body: Vec<u8>,
-    /// Whether an error response body was cut short at its configured limit.
-    pub body_truncated: bool,
+    pub body: TransportByteStream,
+}
+
+impl TransportResponse {
+    /// Wraps an already buffered body for a custom transport.
+    #[must_use]
+    pub fn from_bytes(status: u16, headers: Vec<TransportHeader>, body: Vec<u8>) -> Self {
+        Self {
+            status,
+            headers,
+            body: Box::pin(futures_util::stream::iter([Ok(body)])),
+        }
+    }
 }
 
 impl std::fmt::Debug for TransportResponse {
@@ -61,42 +72,15 @@ impl std::fmt::Debug for TransportResponse {
             .debug_struct("TransportResponse")
             .field("status", &self.status)
             .field("header_count", &self.headers.len())
-            .field("body_bytes", &self.body.len())
-            .field("body_truncated", &self.body_truncated)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
-#[cfg(feature = "streaming")]
-pub use crate::generation::TransportSseEvent;
-
-#[cfg(feature = "streaming")]
-pub type TransportSseStream = std::pin::Pin<
-    Box<dyn futures_core::Stream<Item = Result<TransportSseEvent, TransportError>> + Send>,
->;
-
-/// An opened successful event stream, or an ordinary HTTP response.
-#[cfg(feature = "streaming")]
-pub enum TransportSseResponse {
-    Events(TransportSseStream),
-    Http(TransportResponse),
-}
-
-/// Ordinary HTTP capability. Serialization and API semantics remain above it.
+/// HTTP capability. Serialization, body limits and framing remain above it.
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn execute(&self, request: TransportRequest)
     -> Result<TransportResponse, TransportError>;
-}
-
-/// Optional SSE framing capability of the same backend.
-#[cfg(feature = "streaming")]
-#[async_trait]
-pub trait StreamingTransport: Transport {
-    async fn execute_sse(
-        &self,
-        request: TransportRequest,
-    ) -> Result<TransportSseResponse, TransportError>;
 }
 
 #[cfg(test)]

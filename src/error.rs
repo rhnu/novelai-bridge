@@ -6,7 +6,6 @@ mod encode;
 mod metadata;
 mod preparation;
 mod request;
-#[cfg(feature = "streaming")]
 mod stream;
 mod transport;
 pub use api::{ApiError, ApiErrorKind, ApiErrorReason};
@@ -15,7 +14,6 @@ pub use encode::{EncodeError, EncodeTarget};
 pub use metadata::MetadataError;
 pub use preparation::PreparationError;
 pub use request::{DataUrlError, InvalidRequest};
-#[cfg(feature = "streaming")]
 pub use stream::ImageStreamError;
 pub use transport::{TransportError, TransportOperation};
 
@@ -24,7 +22,6 @@ pub use transport::{TransportError, TransportOperation};
 #[non_exhaustive]
 pub enum BridgeError {
     /// Opened image stream failed its provider or completion contract.
-    #[cfg(feature = "streaming")]
     #[error(transparent)]
     Stream(#[from] ImageStreamError),
     /// Valid input could not be prepared for execution.

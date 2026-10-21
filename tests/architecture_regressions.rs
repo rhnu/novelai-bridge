@@ -1,5 +1,3 @@
-#![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
-
 //! Contracts shared by generation preparation and client execution.
 
 use std::sync::{Arc, Mutex};

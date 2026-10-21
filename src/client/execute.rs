@@ -7,15 +7,18 @@ impl<T: Transport + ?Sized> Client<T> {
         endpoint: crate::protocol::ApiEndpoint,
         body: Vec<u8>,
         observation: PendingObservation,
-        decode: impl FnOnce(Vec<u8>) -> Result<(ResultValue, u32), BridgeError>,
+        decode: impl FnOnce(
+            crate::protocol::BufferedResponse,
+        ) -> Result<(ResultValue, u32), BridgeError>,
     ) -> Result<ResultValue, BridgeError> {
         let started = std::time::Instant::now();
         tracing::Span::current().record("endpoint", endpoint.path());
         tracing::debug!(body_bytes = body.len(), "sending request");
         let request = endpoint.request(&self.config.image_base_url, Some(body));
-        let result = crate::protocol::post_encoded(&*self.transport, request)
-            .await
-            .and_then(decode);
+        let result =
+            crate::protocol::post_encoded(&*self.transport, request, self.config.response_limits)
+                .await
+                .and_then(decode);
         match result {
             Ok((value, image_count)) => {
                 tracing::debug!(

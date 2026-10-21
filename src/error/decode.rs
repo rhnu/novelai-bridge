@@ -26,6 +26,8 @@ impl DecodeError {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DecodeTarget {
+    /// Raw HTTP response body before operation-specific decoding.
+    HttpResponseBody,
     /// HTTP JSON response body.
     JsonResponse,
     /// SSE image stream chunk.
@@ -37,6 +39,7 @@ pub enum DecodeTarget {
 impl fmt::Display for DecodeTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let target = match self {
+            Self::HttpResponseBody => "HTTP response body",
             Self::JsonResponse => "JSON response",
             Self::StreamChunk => "stream chunk",
             Self::ImageResponse => "image response",

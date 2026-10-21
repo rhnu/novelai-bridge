@@ -11,6 +11,24 @@ pub struct GeneratedImage {
     pub(super) format: ImageMediaFormat,
     /// Best-effort interpretation of this image's embedded metadata.
     pub(super) metadata: GeneratedImageMetadata,
+    /// Identity of this image within the provider response.
+    pub(super) source: GeneratedImageSource,
+}
+
+/// Provider response location retained without guessing an image's semantic role.
+#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GeneratedImageSource {
+    /// The response contains a single image directly.
+    Raw,
+    /// The image was extracted from this ZIP entry.
+    Archive {
+        /// Original entry name, including its path and extension.
+        name: String,
+        /// Zero-based ZIP entry index, including preceding non-image entries.
+        index: usize,
+    },
 }
 
 /// Supported media formats with a single MIME/extension mapping.
@@ -76,6 +94,10 @@ impl GeneratedImage {
 
     #[must_use]
     pub const fn metadata(&self) -> &GeneratedImageMetadata { &self.metadata }
+
+    /// Original response location, independent from embedded image metadata.
+    #[must_use]
+    pub const fn source(&self) -> &GeneratedImageSource { &self.source }
 
     /// Seed recovered from this image, without a request-level fallback.
     #[must_use]

@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read};
 
-use super::{GeneratedImage, ImageMediaFormat};
+use super::{GeneratedImage, ImageMediaFormat, output::GeneratedImageSource};
 use crate::{
     BridgeError, DecodeError, DecodeTarget, GeneratedImageMetadata,
     media_policy::{ImageDecodePolicy, ImageLimit},
@@ -33,15 +33,11 @@ pub fn decode_generated_images_with_policy(
             .map_err(response_error)?;
         return decode_zip(payload, policy);
     }
-    Ok(vec![validated_generated_image(payload, None, policy)?])
-}
-
-#[cfg(feature = "client")]
-pub fn decode_first_generated_image(payload: Vec<u8>) -> Result<GeneratedImage, BridgeError> {
-    decode_generated_images(payload)?
-        .into_iter()
-        .next()
-        .ok_or_else(|| response_message("image response contains no images"))
+    Ok(vec![validated_generated_image(
+        payload,
+        GeneratedImageSource::Raw,
+        policy,
+    )?])
 }
 
 fn decode_zip(
@@ -86,7 +82,11 @@ fn decode_zip(
         policy
             .check(ImageLimit::TotalImageBytes, total)
             .map_err(response_error)?;
-        images.push(validated_generated_image(bytes, Some(&name), policy)?);
+        images.push(validated_generated_image(
+            bytes,
+            GeneratedImageSource::Archive { name, index },
+            policy,
+        )?);
     }
     if images.is_empty() {
         return Err(response_message(
@@ -98,7 +98,7 @@ fn decode_zip(
 
 pub fn validated_generated_image(
     bytes: Vec<u8>,
-    name: Option<&str>,
+    source: GeneratedImageSource,
     policy: ImageDecodePolicy,
 ) -> Result<GeneratedImage, BridgeError> {
     policy
@@ -108,7 +108,8 @@ pub fn validated_generated_image(
         ImageMediaFormat::from_image_format(image::guess_format(&bytes).map_err(response_error)?)
             .ok_or_else(|| response_message("response image format is unsupported"))?;
 
-    if let Some(extension) = name.and_then(ImageMediaFormat::from_extension)
+    if let GeneratedImageSource::Archive { name, .. } = &source
+        && let Some(extension) = ImageMediaFormat::from_extension(name)
         && extension != format
     {
         return Err(response_message(
@@ -133,6 +134,7 @@ pub fn validated_generated_image(
         bytes,
         format,
         metadata,
+        source,
     })
 }
 

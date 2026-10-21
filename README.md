@@ -43,8 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Configure credentials, timeout and response limits through `ReqwestOptions`. Use `ClientConfig`
-to change the service URL, or supply your own `Transport` implementation. Cloned clients share
+Configure credentials and timeout through `ReqwestOptions`. Use `ClientConfig`
+to change the service URL and response limits, or supply your own `Transport` implementation. Cloned clients share
 the transport and cached subscription state.
 
 ## Stream images
@@ -106,8 +106,8 @@ then `plan.prepare()` to transform images and resolve an automatic seed. Send th
 with `client.generate_prepared(...)`, or inspect its JSON with
 `prepared.encode(GenerationDelivery::Images)`. Preparing and encoding do not contact NovelAI.
 
-Returned `GeneratedImage` values expose validated bytes, format, metadata and any embedded image
-seed. `GenerateImageResult::resolved_seed` is the request seed; it is separate from per-image seeds.
+Director calls return `RunDirectorToolResult` with every returned image. Returned `GeneratedImage`
+values expose validated bytes, format, source identity, metadata and any embedded image seed. `GenerateImageResult::resolved_seed` is the request seed; it is separate from per-image seeds.
 
 ## Tokenization and cost estimates
 
@@ -128,28 +128,27 @@ without installing a subscriber.
 
 ## Choose Cargo features
 
-Defaults include the client, reqwest HTTP/SSE transport, credit observation and tokenizers.
-Bundled tokenizer assets are opt-in. Use `default-features = false` to select a smaller subset:
+The core always includes request planning, media processing, metadata parsing, the client,
+streaming and optional runtime credit observation. Cargo features select external adapters and
+local tokenizer dependencies:
 
-| Feature             | Provides                                                 |
-| ------------------- | -------------------------------------------------------- |
-| No features         | Model descriptors, common types and Anlas pricing        |
-| `generation`        | Request planning, image preparation and payload encoding |
-| `client`            | Client with an injected HTTP `Transport`                 |
-| `reqwest-transport` | Authenticated reqwest HTTP transport                     |
-| `streaming`         | SSE transport contract and image stream handling         |
-| `reqwest-streaming` | Reqwest SSE transport                                    |
-| `png-metadata`      | PNG metadata parsing                                     |
-| `image-processing`  | Image inputs, preprocessing and raw/ZIP image decoding   |
-| `credit-observer`   | Request and subscription observation                     |
-| `tokenizer`         | Local CLIP, T5 and Qwen encoders                         |
-| `bundled-assets`    | Pinned tokenizer assets                                  |
+| Feature | Provides |
+| --- | --- |
+| No features | Complete core with an injected `Transport` |
+| `reqwest-transport` | Authenticated reqwest HTTP byte transport |
+| `tokenizer` | Local CLIP, T5 and Qwen encoders |
+| `bundled-assets` | Pinned tokenizer assets; enables `tokenizer` |
 
-For example, a metadata-only consumer can use:
+Defaults enable `reqwest-transport` and `tokenizer`. Embedded assets remain opt-in. For a custom
+transport without local tokenization, use:
 
 ```toml
-novelai-bridge = { version = "0.6.0", default-features = false, features = ["png-metadata"] }
+novelai-bridge = { version = "0.6.0", default-features = false }
 ```
+
+Response byte limits belong to `ClientConfig` and apply to custom transports as well as reqwest.
+A transport returns response headers and a raw byte stream; the core handles bounded buffering,
+HTTP errors and SSE decoding. `TransportResponse::from_bytes` adapts a complete response body.
 
 ## Documentation
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Include request planning, media processing, metadata, the client, streaming and credit observation in the core. Retain only `reqwest-transport`, `tokenizer` and `bundled-assets` Cargo features.
+- Use one raw-byte `Transport` contract for ordinary and streamed responses. Parse SSE and apply response budgets in the core so custom transports share the same limits.
+
+### Fixed
+
+- Retain every Director result instead of discarding images after the first. Preserve each decoded image's raw or archive source identity, including archive entry name and index.
+- Accept pre-epoch subscription expiration timestamps returned by the service and preserve their signed millisecond value.
+
+### Migration
+
+- Remove the `client`, `generation`, `image-processing`, `png-metadata`, `streaming`, `reqwest-streaming` and `credit-observer` feature selections. Use `reqwest-transport` for the default HTTP adapter; runtime observation uses `Client::with_credit_observer`.
+- Implement `Transport::execute` with `TransportResponse` headers and a `TransportByteStream`, or use `TransportResponse::from_bytes` for complete bodies. Remove separate `StreamingTransport` implementations and configure response budgets through `ClientConfig::response_limits`.
+- Read Director images from `RunDirectorToolResult::images`. Use `GeneratedImage::source()` to inspect raw versus named archive entries.
+- `SubscriptionInfo::expires_at_ms` is now `Option<i64>` to represent expiration timestamps before the Unix epoch.
+
 ## 0.6.0 - 2026-10-21
 
 ### Changed

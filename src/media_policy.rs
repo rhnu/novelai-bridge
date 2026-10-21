@@ -132,7 +132,6 @@ impl ImageDecodePolicy {
 }
 
 /// Measurements retained by validated prepared payloads, avoiding a second pixel decode.
-#[cfg(feature = "image-processing")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageResourceUsage {
     pub encoded_bytes: u64,
@@ -143,7 +142,6 @@ pub struct ImageResourceUsage {
     pub total_text_bytes: u64,
 }
 
-#[cfg(feature = "image-processing")]
 impl ImageResourceUsage {
     pub fn validate(self, policy: ImageDecodePolicy) -> Result<(), ImagePolicyError> {
         policy.check(ImageLimit::EncodedBytes, self.encoded_bytes)?;

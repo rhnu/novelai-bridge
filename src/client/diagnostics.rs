@@ -5,7 +5,6 @@ use crate::BridgeError;
 /// Records a failure once at the client boundary without server-echoed request data.
 pub(super) fn report_failure(error: &BridgeError) {
     match error {
-        #[cfg(feature = "streaming")]
         BridgeError::Stream(_) => {
             // Provider messages and extension data may echo prompts; callers retain the error.
             tracing::error!("image stream failed");
@@ -24,7 +23,12 @@ pub(super) fn report_failure(error: &BridgeError) {
             tracing::error!(operation = %transport.operation, causes = %ErrorChain(error), "transport failed");
         },
         BridgeError::Decode(decode) => {
-            tracing::error!(target = %decode.target, causes = %ErrorChain(error), "response decoding failed");
+            if decode.target == crate::DecodeTarget::StreamChunk {
+                // A framing parser may retain submitted content in its source error.
+                tracing::error!(target = %decode.target, "response decoding failed");
+            } else {
+                tracing::error!(target = %decode.target, causes = %ErrorChain(error), "response decoding failed");
+            }
         },
         BridgeError::Encode(encode) => {
             tracing::error!(target = %encode.target, causes = %ErrorChain(error), "request encoding failed");

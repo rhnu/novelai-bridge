@@ -22,10 +22,13 @@ impl<T: Transport + ?Sized> Client<T> {
             );
             let request = crate::protocol::ApiEndpoint::Subscription
                 .request(&self.config.image_base_url, None);
-            let raw =
-                crate::protocol::get_json::<_, SubscriptionResponse>(&*self.transport, request)
-                    .await
-                    .inspect_err(super::diagnostics::report_failure)?;
+            let raw = crate::protocol::get_json::<_, SubscriptionResponse>(
+                &*self.transport,
+                request,
+                self.config.response_limits,
+            )
+            .await
+            .inspect_err(super::diagnostics::report_failure)?;
             let info = raw
                 .into_info(SystemTime::now())
                 .map_err(BridgeError::from)
@@ -34,7 +37,6 @@ impl<T: Transport + ?Sized> Client<T> {
                 .account
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(info.clone());
-            #[cfg(feature = "credit-observer")]
             if let Some(observation) = &self.observation {
                 observation.observe_subscription(&info).await;
             }

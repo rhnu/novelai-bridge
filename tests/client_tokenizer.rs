@@ -1,4 +1,4 @@
-#![cfg(all(feature = "tokenizer", feature = "client"))]
+#![cfg(feature = "tokenizer")]
 
 use std::sync::{Arc, LazyLock};
 
@@ -147,7 +147,6 @@ async fn reject_policy_token_limits_fail_before_transport() {
     }
 }
 
-#[cfg(feature = "streaming")]
 #[tokio::test]
 async fn streaming_shares_token_limits_and_normalize_policy_keeps_text() {
     let transport = MockTransport::default();

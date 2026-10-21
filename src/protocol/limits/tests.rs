@@ -20,7 +20,6 @@ fn error_body_keeps_a_prefix_and_only_marks_actual_overflow() {
     assert_eq!(empty.into_bytes(), b"");
 }
 
-#[cfg(feature = "reqwest-streaming")]
 #[test]
 fn sse_budget_counts_split_lines_before_framing() {
     let mut budget = SseFrameBudget::new(12);
@@ -28,7 +27,6 @@ fn sse_budget_counts_split_lines_before_framing() {
     assert!(budget.check(b"abcdefg").is_err());
 }
 
-#[cfg(feature = "reqwest-streaming")]
 #[test]
 fn sse_budget_resets_on_blank_lines_across_all_delimiters() {
     for event in [b"data:x\n\n".as_slice(), b"data:x\r\r", b"data:x\r\n\r\n"] {
@@ -41,7 +39,6 @@ fn sse_budget_resets_on_blank_lines_across_all_delimiters() {
     }
 }
 
-#[cfg(feature = "reqwest-streaming")]
 #[test]
 fn a_single_network_chunk_can_contain_many_bounded_events() {
     let mut budget = SseFrameBudget::new(8);

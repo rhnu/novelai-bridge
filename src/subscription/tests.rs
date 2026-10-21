@@ -75,6 +75,21 @@ fn activity_uses_the_injected_time_and_honors_explicit_state() {
 }
 
 #[test]
+fn pre_epoch_expiration_is_preserved_and_inactive() {
+    let info = decode(
+        json!({
+            "tier": 3,
+            "expiresAt": -62_135_596_800_i64,
+            "trainingStepsLeft": { "fixedTrainingStepsLeft": 0 }
+        }),
+        100,
+    )
+    .unwrap();
+    assert_eq!(info.expires_at_ms, Some(-62_135_596_800_000));
+    assert!(!info.subscription_active);
+}
+
+#[test]
 fn malformed_or_incomplete_subscription_is_an_error() {
     for value in [
         Value::Null,

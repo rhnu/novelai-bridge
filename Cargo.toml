@@ -18,6 +18,7 @@ exclude = [
     "/crates/**",
     "/scripts/**",
     "/xtask/**",
+    "/exa-results/**",
 ]
 
 [workspace]
@@ -56,28 +57,28 @@ unicode-normalization = "0.1.26"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
 [dependencies]
-async-stream = { workspace = true, optional = true }
-async-trait = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
-eventsource-stream = { workspace = true, optional = true }
+async-stream.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+eventsource-stream.workspace = true
 fancy-regex = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
-futures-core = { workspace = true, optional = true }
-futures-util = { workspace = true, optional = true }
-getrandom = { workspace = true, optional = true }
-httpdate = { workspace = true, optional = true }
-image = { workspace = true, optional = true }
-tracing = { workspace = true, optional = true }
+futures-core.workspace = true
+futures-util.workspace = true
+getrandom.workspace = true
+httpdate.workspace = true
+image.workspace = true
+tracing.workspace = true
 novelai-bridge-tokenizer-assets = { workspace = true, optional = true }
-png = { workspace = true, optional = true }
+png.workspace = true
 reqwest = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde.workspace = true
-serde_json = { workspace = true, optional = true }
-serde_with = { workspace = true, optional = true }
+serde_json.workspace = true
+serde_with.workspace = true
 thiserror.workspace = true
 unicode-normalization = { workspace = true, optional = true }
-zip = { workspace = true, optional = true }
+zip.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -86,39 +87,12 @@ tokio.workspace = true
 
 [[test]]
 name = "client"
-required-features = ["client"]
 
 [features]
-default = ["client", "reqwest-streaming", "credit-observer", "tokenizer"]
-# Complete request planning and wire preparation without a network client.
-generation = ["image-processing", "dep:serde_with", "dep:serde_json", "dep:getrandom"]
-# High-level client and injectable ordinary transport contract, without reqwest.
-client = [
-    "generation",
-    "dep:async-trait",
-    "dep:httpdate",
-    "dep:tracing",
-    "dep:serde_json",
-]
-# Default ordinary HTTP adapter. Streaming remains a separate capability.
-reqwest-transport = ["client", "dep:reqwest", "dep:secrecy"]
-# SSE contract, protocol decoding and stream lifecycle for custom transports.
-streaming = ["client", "dep:async-stream", "dep:futures-core", "dep:futures-util"]
-# Reqwest SSE framing. This intersection alone pulls eventsource-stream.
-reqwest-streaming = ["reqwest-transport", "streaming", "dep:eventsource-stream"]
-# PNG metadata parsing without the image crate and ZIP response stack.
-png-metadata = ["dep:base64", "dep:png", "dep:serde_json"]
-# Validated image inputs, preprocessing and strict raw/ZIP response decoding.
-image-processing = ["png-metadata", "dep:image", "dep:zip"]
-# Optional request-credit observation. Pure pricing is always available.
-credit-observer = ["client"]
-# Local CLIP / T5 / Qwen prompt tokenizers. Disable to drop the regex, Unicode and gzip
-# dependencies when only request building and metadata helpers are needed.
-tokenizer = [
-    "dep:fancy-regex",
-    "dep:unicode-normalization",
-    "dep:flate2",
-    "dep:serde_json",
-]
-# Embeds pinned upstream assets from the independently versioned asset package.
+default = ["reqwest-transport", "tokenizer"]
+# Optional authenticated HTTP adapter; custom transports use the complete core API.
+reqwest-transport = ["dep:reqwest", "dep:secrecy"]
+# Local CLIP, T5 and Qwen encoding without embedded assets.
+tokenizer = ["dep:fancy-regex", "dep:unicode-normalization", "dep:flate2"]
+# Pinned embedded tokenizer assets remain opt-in.
 bundled-assets = ["tokenizer", "dep:novelai-bridge-tokenizer-assets"]

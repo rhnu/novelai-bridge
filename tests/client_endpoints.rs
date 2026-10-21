@@ -1,25 +1,17 @@
-#![cfg(feature = "client")]
+use std::sync::{Arc, Mutex};
 
-use std::sync::Arc;
-#[cfg(feature = "credit-observer")]
-use std::sync::Mutex;
-
-#[cfg(feature = "credit-observer")]
 use async_trait::async_trait;
 use novelai_bridge::{
-    BridgeError, Client, ClientConfig, DirectorCommand, EncodeVibeRequest, EncodedImage,
-    InvalidRequest, Model, RunDirectorToolRequest,
+    BridgeError, Client, ClientConfig, CreditEvent, CreditObserver, DirectorCommand,
+    EncodeVibeRequest, EncodedImage, InvalidRequest, Model, RequestCostEstimate,
+    RunDirectorToolRequest,
 };
-#[cfg(feature = "credit-observer")]
-use novelai_bridge::{CreditEvent, CreditObserver, RequestCostEstimate};
 
-#[cfg(feature = "credit-observer")]
 #[derive(Default)]
 struct RecordingObserver {
     events: Mutex<Vec<CreditEvent>>,
 }
 
-#[cfg(feature = "credit-observer")]
 #[async_trait]
 impl CreditObserver for RecordingObserver {
     async fn observe(&self, event: CreditEvent) {
@@ -66,7 +58,6 @@ async fn encode_vibe_returns_base64() {
 }
 
 #[tokio::test]
-#[cfg(feature = "credit-observer")]
 async fn encode_vibe_observation_reports_a_fixed_cost() {
     let transport = MockTransport::default();
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
@@ -194,7 +185,7 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
 }
 
 #[tokio::test]
-async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
+async fn director_preserves_all_zip_images_and_accepts_raw_images() {
     let transport_zip = MockTransport::with_bytes_response(create_zip_with_two_images());
     let client_zip = Client::new(Arc::new(transport_zip), ClientConfig::default());
     let generated = client_zip
@@ -205,7 +196,11 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         })
         .await
         .unwrap();
-    assert_eq!(generated.bytes(), crate::support::create_png_bytes(2, 2));
+    assert_eq!(generated.images.len(), 2);
+    assert_eq!(
+        generated.images[0].bytes(),
+        crate::support::create_png_bytes(2, 2)
+    );
 
     let raw_png = crate::support::create_png_bytes(2, 2);
     let transport_raw = MockTransport::with_bytes_response(raw_png.clone());
@@ -218,8 +213,9 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         })
         .await
         .unwrap();
-    assert_eq!(fallback.bytes(), raw_png);
-    assert_eq!(Some(fallback.mime_type()), Some("image/png"));
+    assert_eq!(fallback.images.len(), 1);
+    assert_eq!(fallback.images[0].bytes(), raw_png);
+    assert_eq!(fallback.images[0].mime_type(), "image/png");
 }
 
 #[tokio::test]
@@ -332,6 +328,7 @@ async fn custom_base_urls_route_image_service_endpoints() {
         Arc::new(transport.clone()),
         ClientConfig {
             image_base_url: "https://image.example.test/root/".to_owned(),
+            ..Default::default()
         },
     );
 
