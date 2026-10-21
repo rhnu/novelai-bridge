@@ -1,248 +1,111 @@
 # novelai-bridge
 
-`novelai-bridge` is a Rust library for NovelAI image-generation APIs and a small set of related helpers.
+A Rust library for NovelAI image generation, director tools, vibe encoding, model descriptors, local tokenization, PNG metadata and Anlas estimates.
 
-Scope:
+The default model is NovelAI Diffusion V5 Full. V5 Curated, V4.5, V4, V3 and Furry V3 are also supported. This project is experimental and RC APIs may change.
 
-- `generate` (text-to-image, image-to-image and inpainting)
-- `generate_stream`
-- `encode_vibe`
-- `augment-image` director tools
-- `get_subscription`
-- model capability descriptions
-- optional credit observation and NAI 3, 4, 4.5, 5 Anlas cost estimation
-- PNG metadata parsing
-- embedded vibe document extraction
-- local image payload normalization / reference preprocessing helpers
+## Quick start
 
-Supported models: NovelAI Diffusion V5, V4.5, V4, V3 and Furry V3.
-
-The default model is `Model::NaiDiffusion5Full` (`nai-diffusion-5-full`), with guidance scale 7.
-
-## Cargo features
-
-Default features provide the complete client: request planning and image handling, reqwest ordinary
-and streaming transports, credit observation, and local tokenizers. Smaller consumers can select
-only the boundary they use:
-
-| Feature | Adds |
-| --- | --- |
-| `generation` | Complete request planning, validated images, preprocessing and response decoding |
-| `client` | High-level client and injectable ordinary `Transport`, without reqwest |
-| `reqwest-transport` | Ordinary `reqwest + rustls` transport |
-| `streaming` | SSE transport contract, decoding and stream lifecycle |
-| `reqwest-streaming` | Reqwest SSE framing; implies the previous reqwest and streaming features |
-| `png-metadata` | PNG metadata parsing without HTTP, image pixel decoding or ZIP |
-| `image-processing` | Validated image inputs, pixel transforms and raw/ZIP response decoding |
-| `credit-observer` | Client credit event injection; pure pricing remains available without it |
-| `tokenizer` | Local CLIP, T5 and Qwen encoders |
-| `bundled-assets` | The separately versioned pinned tokenizer asset package |
-
-`--no-default-features` retains model descriptors, common parameters and pure Anlas pricing. For
-example, a metadata-only consumer can enable only `png-metadata`, while a custom HTTP adapter can
-enable `client` without compiling reqwest. Features compose; disabling one never silently skips a
-validation step in an API that remains available.
-
-## Model descriptors
-
-`Model::descriptor()` returns a read-only registry entry with separate identity, support,
-constraints, defaults, prompt, sampling, wire and pricing profiles. Builders, normalization,
-tokenization, pricing and sending all consume these profiles.
-
-```rust
-use novelai_bridge::{GenerationMode, Model, ReferenceIntent};
-
-let descriptor = Model::NaiDiffusion45Full.descriptor();
-assert_eq!(descriptor.prompt().token_limit, 512);
-let references = descriptor.resolve_references(
-    GenerationMode::ImageToImage,
-    ReferenceIntent { vibe: true, character: true },
-);
-assert!(references.character.is_available());
-assert!(!references.vibe.is_available());
-```
-
-Optional profiles bind capability and parameters together: an inpainting sibling supplies its
-model ID, a character-reference profile supplies its allowed modes, and variety boost supplies
-its sigma coefficient. V5 has no reference profiles. V3's provider-only legacy vibe path remains
-inspectable but cannot be encoded or sent by this bridge.
-
-`ModelCapabilities` and `capabilities()` have been removed. See
-[model descriptors and migration](docs/model-descriptors.md) for replacements and design decisions.
-
-## Local prompt token counts
-
-The default feature set includes `tokenizer`, which provides CLIP, T5 and Qwen encoders. Disable
-default features to omit encoder dependencies; model capabilities and prompt limits remain
-available.
-
-Load your own assets with `Tokenizers::with_clip_merges`, `with_t5_sentencepiece` or
-`with_qwen_json`, or enable the optional asset package:
-
-```toml
-novelai-bridge = { version = "0.5.0-rc.2", features = ["bundled-assets"] }
-```
+Set `NOVELAI_API_KEY` before creating the default HTTP transport:
 
 ```rust,no_run
-use novelai_bridge::{GenerateImageRequest, Model, Tokenizers};
-
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
-let tokenizers = Tokenizers::bundled()?;
-let request = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build();
-let usage = request.count_tokens(&tokenizers)?;
-println!("{} of {}", usage.prompt.used, usage.prompt.limit);
-# Ok(())
-# }
-```
-
-Counting includes resolved quality/UC presets and enabled characters, with an independent limit
-for each field. Inject an `Arc<Tokenizers>` through `Client::with_tokenizers` to check generation
-requests locally: strict requests reject overflow; non-strict requests warn without truncation.
-Without injection, generation does not check token limits.
-
-The asset package is versioned separately; `Tokenizers::bundled()` shares parsed encoders across
-calls. Neither asset-loading path performs network I/O. CLIP implements NFC and HTML cleanup but
-not full `ftfy` text repair. See [image prompt tokenization](docs/image-tokenizers.md) for encoding,
-framing and loading behavior.
-
-## Image generation
-
-Image-bearing request fields use `EncodedImage`, which validates bytes and caches decoded pixels
-at construction. Use `EncodedImage::from_bytes` for binary input or `from_base64` at text/config
-boundaries. Vibe data is deliberately separate: `Client::encode_vibe` returns `VibeEncoding`, and
-`VibeReference::vibe_data_cache` accepts that type directly. `NormalizedGeneration::prepare_with`
-can inject an `ImagePreprocessor`; the default preserves the existing source, mask and director
-reference fitting behavior.
-
-```rust
-use novelai_bridge::{ApiKeySource, BaseUrls, Client, ClientOptions, GenerateImageRequest, Model};
+use std::sync::Arc;
+use novelai_bridge::{
+    Client, ClientConfig, GenerateImageRequest, Model, ReqwestOptions, ReqwestTransport,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(ClientOptions {
-        api_key_source: ApiKeySource::Environment,
-        base_urls: BaseUrls::default(),
-        ..Default::default()
-    })?;
-
+    let transport = ReqwestTransport::new(ReqwestOptions::default())?;
+    let client = Client::new(Arc::new(transport), ClientConfig::default());
     let result = client
         .generate(GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build())
         .await?;
-
-    println!(
-        "generated {} image(s) with request seed {}",
-        result.images.len(),
-        result.resolved_seed
-    );
-    for image in &result.images {
-        println!("embedded output seed: {:?}", image.seed());
-    }
+    println!("{} images; request seed {}", result.images.len(), result.resolved_seed);
     Ok(())
 }
 ```
 
-When using `ApiKeySource::Environment`, set `NOVELAI_API_KEY` before constructing the client.
+`Client` accepts a shared transport, including `Arc<dyn Transport>`. Cloning a client shares the transport and sampled account state; the transport itself does not need to implement `Clone`. HTTP credentials and timeout belong to `ReqwestOptions`, while service routing belongs to `ClientConfig`.
 
-### Custom transports and streaming
+## Cargo features
 
-`Transport` receives a fully encoded `TransportRequest` and returns status, headers and raw bytes
-in `TransportResponse`. It does not serialize generic Rust values or interpret NovelAI errors.
-Implement `StreamingTransport` only when SSE is needed; its events contain generic SSE `data`,
-while the bridge decodes `ImageStreamChunk` above the transport boundary.
+Defaults enable the client, reqwest ordinary/SSE transport, credit observation and local tokenizers. Assets are loaded separately.
 
-Streaming observations settle on actual EOF or stream error, not when the HTTP connection opens.
-Call `GenerateImageStream::cancel().await` to record explicit cancellation. Dropping a stream cannot
-run an async observer and deliberately emits no guessed terminal result.
+| Feature | Capability |
+| --- | --- |
+| No features | Model descriptors, common value types and pure Anlas pricing |
+| `generation` | Request planning, image preparation and offline payload encoding |
+| `client` | Client execution with an injected ordinary `Transport` |
+| `reqwest-transport` | Authenticated reqwest/rustls HTTP adapter |
+| `streaming` | Optional `StreamingTransport`, generation stream and lifecycle |
+| `reqwest-streaming` | Reqwest SSE framing |
+| `png-metadata` | Strict PNG metadata parsing without the image crate or ZIP |
+| `image-processing` | Validated image inputs, preprocessing and raw/ZIP response decoding |
+| `credit-observer` | Request lifecycle and sampled-account notifications |
+| `tokenizer` | Independent CLIP, T5 and Qwen encoding |
+| `bundled-assets` | Pinned, independently versioned tokenizer assets |
 
-### Effective generation plans
+Tokenizer-only consumers do not compile generation, pixel processing or ZIP. Request-level token usage is available when both `generation` and `tokenizer` are enabled. Features never disable validation inside an API that remains available.
 
-`GenerateImageRequest` remains editable input. `normalize()` follows its `strict_mode`;
-`normalize_with(NormalizationPolicy::Reject | Normalize)` overrides that policy explicitly.
-The resulting `NormalizedGeneration` has immutable effective fields, cached conditioning text,
-and structured diagnostics describing clamps, fallbacks, conflicts and dropped features.
+## Prepare once
 
-Normalize once when a caller needs both prompt inspection and pricing:
+Editable input becomes an immutable effective plan. Reject policy rejects invalid input; Normalize policy clamps or removes unsupported fields and records typed diagnostics.
 
 ```rust
-use novelai_bridge::{AnlasPricingContext, GenerateImageRequest, Model};
+use novelai_bridge::{
+    AnlasPricingContext, GenerateImageRequest, GenerationDelivery, Model,
+};
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-let request = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Curated).build();
-let plan = request.normalize()?;
-let context = AnlasPricingContext::default();
-let estimate = plan.estimate_anlas_cost(context);
+let plan = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
+    .build()
+    .normalize()?;
+let estimate = plan.estimate_anlas_cost(AnlasPricingContext::default());
 println!("{} Anlas; {:?}", estimate.total, plan.diagnostics());
-println!("conditioning: {}", plan.resolved_prompts().prompt);
 let prepared = plan.prepare()?;
-// client.generate_prepared(prepared).await?;
-// Or: client.generate_stream_prepared(prepared, StreamMode::default()).await?;
+let body = prepared.encode(GenerationDelivery::Images)?;
+println!("{} bytes; seed {}", body.len(), prepared.resolved_seed());
 # Ok(())
 # }
 ```
 
-Image payloads are already validated and decoded when `EncodedImage` is constructed.
-Normalization and estimates do not repeat that work, resolve random seeds or access the network.
-`prepare()` fits cached pixels and resolves the seed once; the client can send that
-`PreparedGeneration` without repeating these steps. Normal `generate` and `generate_stream`
-perform preparation automatically.
+Normalization resolves conditioning text, enabled characters, coordinates and reference decisions once. Preparation transforms cached image pixels and resolves an automatic seed from the system random source. Encoding exposes read-only bytes for offline inspection or custom senders. `GenerationDelivery::Stream(mode)` selects streaming wire encoding and checks model support.
 
-Ordinary generation and director responses accept only validated PNG, JPEG or WebP bytes, either
-raw or in a bounded ZIP archive. A malformed image candidate rejects the whole response;
-best-effort metadata parsing remains represented on an otherwise valid `GeneratedImage`.
+`Client::generate_prepared` and `generate_stream_prepared` reuse this result. Director and vibe requests likewise expose `prepare()` and their prepared values expose `encode()`, without constructing a client.
 
-Director operations use `DirectorCommand`: parameterless variants such as `Lineart` cannot carry
-irrelevant fields, while `Colorize { prompt, defry }` and `Emotion { prompt, defry }` carry their
-own valid inputs. This prevents invalid tool/option combinations before the client is called.
+## Images and references
 
-Disabled characters do not participate in validation, counting or wire arrays. Normalize policy
-keeps the first model-limit enabled characters and disables the rest, preserving original indices;
-Reject policy errors on overflow. V4/V4.5 coordinates use the five-by-five wire grid, including
-in Reject mode, while V5 preserves normalized freeform coordinates. Native noise scheduling on
-V4+ retains the existing Karras fallback and reports it.
+`EncodedImage::from_bytes` and `from_base64` validate image bytes and cache decoded pixels. Custom `ImagePreprocessor` implementations can borrow `EncodedImage::pixels()`; operations carry their target canvas, and preparation rejects an output whose dimensions differ.
 
-Raw-request `resolve_prompts`, `count_tokens`, `anlas_estimate_input` and `estimate_anlas_cost`
-now return `Result` because they normalize first. Repeated calls clone the raw input; reuse a plan
-to avoid copying image payloads and rebuilding prompts. Normalized token counting still returns
-`TokenizerError`. The client estimate uses its most recently sampled account context; estimates
-agree for the same effective request and context, but later account samples may change pricing.
+`DirectorCommand` binds each operation to its valid parameters. Opaque `VibeEncoding` is distinct from image input. Generation reference support is resolved through the model descriptor for the actual request mode.
 
-`estimate_anlas_cost(AnlasEstimateInput { .. })` is the independent mathematical entry point:
-it does not normalize or guarantee that its input is sendable. The calculator
-implements the NAI 3, 4, 4.5, 5 branch only; older and unrelated model price tables are intentionally out
-of scope. Check `AnlasEstimate::is_too_expensive()` for the web client's over-140 state.
+Generated images accept valid PNG, JPEG or WebP, raw or inside a bounded ZIP. Invalid image candidates reject the response. Metadata failures on an otherwise valid image remain visible through `GeneratedImageMetadata`. Request seeds and embedded per-image seeds are distinct.
 
-Disclaimer:
+## Local tokenization
 
-- This project is under experimental development and does not guarantee API or behavior stability.
-- Development of this project has been assisted by Codex.
+Load caller-provided assets with `Tokenizers::with_clip_merges`, `with_t5_sentencepiece` or `with_qwen_json`, or enable `bundled-assets` and call `Tokenizers::bundled()`. No loading or encoding path downloads assets.
 
-Notes:
+`TokenEncoder` is the encoding capability. `Tokenizers::register(kind, Arc<dyn TokenEncoder>)` accepts an already loaded implementation; built-in encoders implement the same interface. Model descriptors select the encoder kind and field limit.
 
-- `Model::descriptor()` describes static model knowledge; `resolve_references(mode, intent)`
-  answers request-specific reference availability using the same rules as normalization.
-- Request fields are grouped by capability. A group the selected model does not support is
-  rejected in `strict_mode` and dropped with a normalization diagnostic otherwise. Inspect a plan
-  before sending when these decisions need to be displayed; they are no longer only log warnings.
-- Image streaming is supported by V4, V4.5, and V5. `Client::generate_stream` always rejects
-  V3 and Furry V3 locally; it does not silently downgrade to a non-streaming request.
-- `QualityPreset::Light` and `transparent_background` are V5-only; on earlier models they fall
-  back to the standard behaviour, or are rejected in `strict_mode`.
-- V4, V4.5 and V5 support `furry_mode`; it prepends `fur dataset` to the effective positive
-  prompt. Anime mode remains the default. V3 requests drop this toggle, or reject it in
-  `strict_mode`.
-- Image-to-image sources and inpaint masks are fitted to the requested canvas before sending.
-- Image-to-image strength accepts `0.01..=0.99`; masked Inpaint requests use their separate
-  `0.01..=1.0` strength constraint.
-- `GenerateImageResult::resolved_seed` is the request-level seed actually sent to NovelAI.
-- Per-image seeds come only from embedded PNG metadata via `GeneratedImage::seed`; the request
-  seed is never presented as an image seed.
-- `inspect_generated_image_metadata` provides a non-failing metadata inspection path for complete
-  generated images, while `parse_png_metadata_from_bytes` remains the strict PNG parser.
-- Attaching a `CreditObserver` reports de-identified request fingerprints, local Anlas estimates
-  and sampled balances; the crate itself persists nothing.
-- The default transport uses `reqwest + rustls`.
-- This project is not affiliated with NovelAI.
+Attach the registry with `Client::with_tokenizers` to check effective conditioning before sending. Strict requests reject overflow; non-strict requests warn without truncating. Without injection, sending skips local token checks. See [tokenization](docs/image-tokenizers.md).
 
-Credits: see [CREDITS.md](CREDITS.md).
+## Accounts and observation
 
-License: [Apache-2.0](LICENSE)
+`get_subscription()` updates the client's sampled `SubscriptionInfo`, available through `last_subscription()`. Client estimates use that snapshot; pure estimates accept an explicit `AnlasPricingContext`. Invalid subscription responses do not overwrite a valid snapshot.
+
+The optional `CreditObserver` receives operation-specific summaries, estimates and terminal outcomes, plus sampled subscriptions. The library does not persist these events.
+
+Streaming settles on actual EOF, failure or explicit `GenerateImageStream::cancel().await`. Its successful count represents distinct samples received. Dropping a stream cannot run asynchronous callbacks and does not invent a terminal result.
+
+## Further reading
+
+- [Model descriptors and request availability](docs/model-descriptors.md)
+- [Tokenization, framing and asset loading](docs/image-tokenizers.md)
+- [Anlas estimate formula](docs/anlas-pricing.md)
+- [Development tools and checks](docs/development.md)
+- [Changelog](CHANGELOG.md) and [credits](CREDITS.md)
+
+This project is not affiliated with NovelAI. Development has been assisted by Codex.
+
+License: [Apache-2.0](LICENSE).

@@ -11,6 +11,16 @@
 - Separate account snapshots from optional credit observation and share request settlement logic.
 - Consolidate payload decoding, character geometry and byte-level BPE execution.
 - Replace the standalone strict Clippy alias with the Rusteward formatting and lint workflow.
+- Move pure domain and asset-integrity tests beside their implementations, retaining independent upstream token-ID fixtures.
+- Configure rumdl for structural Markdown checks without line-length enforcement or automatic prose reflow.
+
+### Fixed
+
+- Make independent image-processing and tokenizer feature boundaries usable without generation-only types.
+- Validate custom image-preprocessor output dimensions and expose cached input pixels to implementations.
+- Reject malformed subscription responses before updating sampled account state.
+- Preserve vibe-reference array indices when an individual metadata value is invalid.
+- Resolve automatic generation seeds from the system random source and preserve failures.
 
 ### Breaking
 
@@ -18,6 +28,8 @@
 - Replace concrete tokenizer dispatch and generation-shaped observation records with capability
   interfaces and operation-specific data.
 - Remove obsolete constructors and configuration rather than retaining RC compatibility wrappers.
+- Replace ambiguous pricing-mode fields with `PricingMode` and expose typed normalization field paths.
+- Distinguish request encoding errors from response decoding errors and simplify the SSE transport response contract.
 
 ## 0.5.0-rc.2 - 2026-09-04
 

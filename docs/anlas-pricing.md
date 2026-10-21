@@ -60,14 +60,13 @@ round the final per-image value.
 | NAI 3, NAI 4, NAI 4.5 | 1.0 |
 | NAI 5 | 1.5 |
 
-The sampler does not change this formula for these model families. It remains part of the request
-shape for API compatibility.
+The sampler does not change this formula for these model families. It belongs to the generation request and is absent from the independent pricing input.
 
 ### Strength selection
 
-- Text-to-image uses `1.0`.
-- Image-to-image without an inpainting mask uses `img2img_strength`.
-- Inpainting uses `inpaint_img2img_strength` when supplied, otherwise `1.0`.
+- `PricingMode::TextToImage` uses `1.0`.
+- `PricingMode::ImageToImage { strength }` uses the source-image strength.
+- `PricingMode::Inpainting { strength }` uses the masked-generation strength.
 - A non-finite strength is treated as `1.0`.
 
 If `per_image` exceeds 140 Anlas, the estimate is marked as too expensive because the web client
@@ -138,7 +137,7 @@ the NAI 5 family — the free first image is paid for out of a separate allowanc
 ```
 
 The object is absent for accounts that do not receive the allowance, which is why
-[`crate::SubscriptionInfo::v5_usage`] is optional. A free-tier account (`tier: 0`) returns no
+`SubscriptionInfo::v5_usage` is optional. A free-tier account (`tier: 0`) returns no
 `usage` key at all.
 
 Measured field behaviour:

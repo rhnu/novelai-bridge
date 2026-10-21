@@ -21,7 +21,7 @@ combined budget for positive, negative and character prompts.
 
 ## Encoding
 
-`ImageTokenizer::encode(text, framing)` returns ordered token IDs. `count` returns the length of
+`TokenEncoder::encode(text, framing)` returns ordered token IDs. `count` returns the length of
 the same sequence. Both return errors rather than a partial result when encoding fails.
 
 ### CLIP
@@ -99,9 +99,9 @@ still reports a missing encoder and never performs network I/O.
 
 ## Asset loading
 
-The default `tokenizer` feature enables encoders but does not load assets. `Tokenizers` accepts
+The `tokenizer` feature enables encoders independently of generation and image processing, but does not load assets. `Tokenizers` accepts
 caller-provided bytes through `with_clip_merges` (gzip or text), `with_t5_sentencepiece` (raw model)
-and `with_qwen_json` (raw JSON plus optional configuration).
+and `with_qwen_json` (raw JSON plus optional configuration). `Tokenizers::register(kind, Arc<dyn TokenEncoder>)` accepts a loaded custom implementation. Built-in encoders implement the same capability; registry lookup returns a borrowed encoder interface. Request-level usage and limit aggregation require both `generation` and `tokenizer`.
 
 The optional `bundled-assets` feature uses `novelai-bridge-tokenizer-assets`: pinned OpenAI CLIP,
 google-t5/t5-base and Qwen/Qwen3.5-35B-A3B files. `Tokenizers::bundled()` decompresses and validates

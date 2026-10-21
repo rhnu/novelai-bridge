@@ -136,9 +136,9 @@ pub fn parse_override(raw: &str) -> Result<(String, Value), String> {
 pub fn subscription_summary(info: &novelai_bridge::SubscriptionInfo) -> String {
     let mut summary = Map::new();
     summary.insert("anlas_balance".into(), info.anlas_balance.into());
-    summary.insert("is_opus".into(), info.is_opus.into());
+    summary.insert("is_opus".into(), info.is_opus().into());
     summary.insert("tier".into(), info.tier.into());
-    summary.insert("tier_name".into(), info.tier_name.clone().into());
+    summary.insert("tier_name".into(), info.tier_name().into());
     summary.insert(
         "v5_usage".into(),
         info.v5_usage.map_or(Value::Null, |usage| {

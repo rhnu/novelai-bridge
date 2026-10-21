@@ -1,0 +1,6 @@
+[global]
+respect-gitignore = true
+disable = ["MD013"]
+
+[MD013]
+reflow = false

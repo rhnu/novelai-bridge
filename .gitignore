@@ -16,6 +16,7 @@ __pycache__/
 .env.*
 !.env.example
 scripts/out/
+.rumdl_cache/
 
 # Agent
 AGENTS.md

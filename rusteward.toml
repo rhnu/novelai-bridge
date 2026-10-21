@@ -1,0 +1,14 @@
+version = 1
+
+[lint]
+all-features = true
+deny-warnings = true
+
+[lint.clippy-lints]
+nursery = "warn"
+cargo = "warn"
+multiple_crate_versions = "allow"
+
+[rules]
+mod-rs = "error"
+inline-tests = "error"

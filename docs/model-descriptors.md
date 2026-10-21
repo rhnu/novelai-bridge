@@ -1,8 +1,6 @@
 # Model descriptors
 
-`Model::descriptor()` returns `&'static ModelDescriptor`. The descriptor owns no transport,
-payload or tokenizer assets. It cannot be constructed, mutated or deserialized by callers.
-`GenerateImageRequest::descriptor()` delegates to its selected model.
+`Model::descriptor()` returns the immutable registry entry for a supported base model. Descriptors contain model knowledge, not transport state, image payloads or tokenizer assets. Model serialization and API identifiers use the same registry mapping.
 
 ## Responsibilities
 
@@ -10,86 +8,35 @@ payload or tokenizer assets. It cannot be constructed, mutated or deserialized b
 | --- | --- |
 | `identity()` | Base model and API identifier |
 | `support()` | Streaming and optional inpainting/reference profiles |
-| `constraints()` | Canvas and numeric bounds consumed by normalization |
-| `defaults()` | Factory core and sampling values consumed by builders |
-| `prompt()` | Encoder, independent context limit, character count and prompt options |
-| `sampling()` | Noise schedules, fallback, SMEA/decrisp and optional variety boost |
-| `wire()` | Conditioning representation, parameter version and protocol extensions |
+| `constraints()` | Canvas and numeric bounds |
+| `defaults()` | Core and sampling defaults used by request builders |
+| `prompt()` | Encoder kind, per-field limit and conditioning support |
+| `sampling()` | Noise schedules, fallback and sampling capabilities |
+| `wire()` | Conditioning representation and protocol extensions |
 | `pricing()` | Model multiplier and Opus allowance policy |
 
-Registry entries explicitly combine small profiles. There is no cross-generation whole-descriptor
-inheritance. Inpainting exists only with a sibling ID; character reference support exists only with
-a mode profile; variety boost exists only with its coefficient. Missing profiles mean unsupported
-capabilities. Shared profiles do not imply inheritance of unrelated features.
+Registry entries compose small profiles. Inpainting support carries its sibling identifier, character-reference support carries its allowed modes, and variety boost carries its coefficient. A missing profile means the capability is unavailable.
 
-These are not bitfields: current consumers need parameters and request-context decisions, not bit
-set operations. No per-model capability traits or bare public bit layouts are introduced.
+Request factories read `model.descriptor().defaults()`; basic parameter values do not consult the registry. When composing sampling manually, use `model.descriptor().defaults().sampling`.
 
-## Static support versus request availability
+## Request availability
 
-`GenerationMode` is `TextToImage`, `ImageToImage` or `Inpainting`.
-`request.mode()` derives the raw shape; `descriptor.model_id_for(mode)` selects a supported API
-identity and returns `None` if the mode has no registered sibling.
+`request.mode()` derives TextToImage, ImageToImage or Inpainting from its input. `descriptor.model_id_for(mode)` returns the corresponding supported identifier.
 
-`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query.
-It returns a decision for each requested group:
+`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unimplemented input, unsupported mode and conflict with character references.
 
-- `Available` / `NotRequested`;
-- `Unsupported` when the provider capability is absent;
-- `InputNotImplemented` for a provider-only input path;
-- `UnsupportedMode` for a mode rejected by the model or reference profile;
-- `ConflictWithCharacterReference` when a valid character reference takes precedence over vibe.
+Character support is resolved first. Unsupported character input cannot suppress valid vibe input. Empty reference subgroups are treated consistently before availability and retained-value validation. Reject policy turns unavailable input into an error; Normalize removes it and records diagnostics.
 
-Character support is resolved first. An unsupported character input cannot suppress otherwise
-valid vibe input. Normalization uses these same decisions: Reject converts them to local errors;
-Normalize drops rejected groups and reports diagnostics. The query does not inspect payloads,
-validate numeric ranges, count tokens or make requests.
+V3 retains provider-only legacy vibe metadata knowledge, but its generation input and encode-vibe operation are not implemented. Use `can_encode_vibe()` for encoding capability. V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
 
-V3's `VibeInputPath::ProviderOnlyLegacy` preserves provider/metadata information, but the bridge
-does not implement its generation input or encode-vibe operation. Use `can_encode_vibe()` for that
-operation, not `vibe_model_key().is_some()`. V4/V4.5 use encoded input; V5 has neither vibe nor
-character-reference profiles. Character-reference modes are also intersected with model mode
-support, so an optional reference profile cannot create an inpainting sibling.
+## Effective plans
 
-## Migration
+Normalization assembles effective positive/negative text and enabled character conditioning once. Each resolved character retains its original index and effective coordinate. V4/V4.5 use the five-by-five grid; V5 keeps normalized freeform coordinates. Wire adaptation uses these values without projecting coordinates again.
 
-The default model is now `Model::NaiDiffusion5Full`, including default generation and estimate
-inputs. Default sampling follows V5 Full (guidance scale 7). To keep the old behavior, choose
-`Model::NaiDiffusion45Full` explicitly in the builder; when composing fields manually, use
-`SamplingParams::for_model(model)` alongside `GenerationCore::new(prompt, model)`.
+V5 allows 32 enabled character prompts; V4/V4.5 allow six. Normalize disables enabled overflow while preserving original indices; Reject reports it. Disabled characters do not participate in validation, token counting or wire conditioning.
 
-The old `ModelCapabilities`, `Model::capabilities()` and request `capabilities()` are removed.
-Given `let d = model.descriptor();`:
+Quality presets, transparency, furry mode and sampling support follow the selected descriptor. Native noise scheduling on V4+ retains its Karras fallback and reports the change.
 
-| Previous query | Replacement |
-| --- | --- |
-| `default_steps`, `default_scale` | `d.defaults().sampling.steps`, `.scale` |
-| `tokenizer`, `prompt_token_limit` | `d.prompt().tokenizer`, `.token_limit` |
-| `max_characters`, `supports_characters()` | `d.prompt().max_characters()`, `.characters.is_some()` |
-| `supports_inpainting` | `d.support().inpainting.is_some()` |
-| `supports_streaming` | `d.support().streaming` |
-| `supports_vibe_transfer` | `d.support().vibe.is_some()` (provider capability only) |
-| `supports_encoded_vibe` | `d.can_encode_vibe()` |
-| Character-reference flags | `d.support().character_reference`; query `resolve_references` for modes |
-| Variety flag and coefficient | `d.sampling().variety` / `variety_sigma(width, height)` |
-| SMEA / dynamic thresholding | `d.sampling().smea` / `.dynamic_thresholding` |
-| Light quality / transparency / furry mode | `d.prompt().quality.supports(QualityPreset::Light)` / `.transparent_background` / `.furry_mode` |
-| Prompt structure / parameter version | `d.wire().prompt_structure()` / `.params_version()` |
-| V5 protocol extensions | `d.wire().uses_v5_extensions()` |
-| Pricing multiplier / usage limit | `d.pricing().multiplier` / `.opus_allowance` |
+`NormalizationDiagnostic::field` is a typed `GenerationField`. Its display value is the complete editable request path, including original character indices. Conflict diagnostics identify the retained field with the same type.
 
-`Model::inpainting_id()` now returns `Option<&'static str>`; it delegates to the same profile that
-declares inpainting support. `Model::as_str()` and `vibe_model_key()` also delegate to the registry.
-The `Model` enum's serialized identifiers are unchanged.
-
-Replace `schedule.resolve_for(...)` with
-`d.sampling().resolve_noise_schedule(schedule)`. Native-to-Karras fallback on V4+ is unchanged
-(including Reject policy) but no longer inferred from prompt representation.
-
-Persist `Model` and editable request data. If an application needs a serializable UI snapshot,
-project the fields it needs into its own DTO; registry descriptors are not writable configuration.
-A detached profile copy is inspectable and editable, but cannot override the active registry.
-
-For explicitly selected models, this change preserves valid wire payloads, independent Anlas
-formula results and tokenizer framing.
-It does not change streaming lifecycle, response validation or Cargo feature boundaries.
+Persist models and editable requests. Registry descriptors and prepared values are not writable configuration; edit a request and normalize it again to change effective behavior.

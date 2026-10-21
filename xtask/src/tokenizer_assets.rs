@@ -22,7 +22,7 @@ struct Asset {
     upstream_gzip: bool,
 }
 
-pub async fn fetch() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn fetch() -> crate::TaskResult<()> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/tokenizer-assets/assets");
     let sources: Sources =
         toml::from_str(&std::fs::read_to_string(directory.join("SOURCES.toml"))?)?;
