@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased (draft)
+
+### Changed
+
+- Reorganize backend modules around request planning, media processing, encoding, protocol
+  adaptation and client execution, with one owner for each capability and its effective data.
+- Expose prepared generation, director and vibe payloads for offline inspection and custom senders.
+- Separate tokenizer encoders from generation and allow callers to register encoding implementations.
+- Separate account snapshots from optional credit observation and share request settlement logic.
+- Consolidate payload decoding, character geometry and byte-level BPE execution.
+- Replace the standalone strict Clippy alias with the Rusteward formatting and lint workflow.
+
+### Breaking
+
+- Replace client and reqwest construction with explicit shared-transport and adapter configuration.
+- Replace concrete tokenizer dispatch and generation-shaped observation records with capability
+  interfaces and operation-specific data.
+- Remove obsolete constructors and configuration rather than retaining RC compatibility wrappers.
+
 ## 0.5.0-rc.2 - 2026-09-04
 
 ### Added
