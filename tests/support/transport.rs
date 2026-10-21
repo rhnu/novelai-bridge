@@ -199,11 +199,7 @@ impl StreamingTransport for MockTransport {
         let items: Vec<Result<TransportSseEvent, TransportError>> = state
             .sse_chunks
             .iter()
-            .map(|chunk| {
-                Ok(TransportSseEvent {
-                    data: serde_json::to_string(chunk).expect("mock stream chunk is serializable"),
-                })
-            })
+            .map(|chunk| Ok(chunk.raw.clone()))
             .collect();
         drop(state);
         Ok(TransportSseResponse::Events(Box::pin(stream::iter(items))))

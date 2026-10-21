@@ -96,7 +96,7 @@ fn decode_zip(
     Ok(images)
 }
 
-fn validated_generated_image(
+pub fn validated_generated_image(
     bytes: Vec<u8>,
     name: Option<&str>,
     policy: ImageDecodePolicy,

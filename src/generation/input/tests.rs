@@ -1,9 +1,100 @@
 use serde_json::json;
 
 use crate::{
-    GenerateImageRequest, GenerationInput, GenerationMode, ImageToImageInput, InpaintingInput,
-    Model, generation::test_support::image,
+    Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
+    GenerateImageRequest, GenerateImageStreamRequest, GenerationInput, GenerationMode,
+    ImageToImageInput, InpaintingInput, Model, ReferenceSet, ValidationPolicy, VibeEncoding,
+    VibeReference, VibeTransferConfig, generation::test_support::image,
 };
+
+fn request_with_nested_inputs() -> GenerateImageRequest {
+    let mut request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full).build();
+    request.characters = Some(CharacterSet::new(vec![Character {
+        prompt: "cat".to_owned(),
+        negative_prompt: None,
+        position: CharacterPosition::default(),
+        enabled: true,
+    }]));
+    request.references = Some(ReferenceSet {
+        vibe_transfer: Some(VibeTransferConfig {
+            references: vec![VibeReference {
+                vibe_data_cache: VibeEncoding::from_bytes(vec![0, 1, 255]).unwrap(),
+                strength: 0.5,
+            }],
+            strength: 0.5,
+        }),
+        character_references: vec![CharacterReference {
+            image: image(),
+            reference_type: CharacterReferenceType::Character,
+            fidelity: 0.5,
+            strength: 0.5,
+        }],
+    });
+    request.operation = GenerationInput::ImageToImage(ImageToImageInput::new(image(), 0.5, 0.0));
+    request
+}
+
+#[test]
+fn editable_requests_reject_unknown_fields_at_every_nested_input_group() {
+    for policy in [ValidationPolicy::Normalize, ValidationPolicy::Reject] {
+        let mut request = request_with_nested_inputs();
+        request.policy = policy;
+        let serialized = serde_json::to_value(&request).unwrap();
+        assert_eq!(
+            serde_json::from_value::<GenerateImageRequest>(serialized.clone()).unwrap(),
+            request,
+        );
+        for path in [
+            "",
+            "/core",
+            "/core/size",
+            "/sampling",
+            "/characters",
+            "/characters/characters/0",
+            "/characters/characters/0/position",
+            "/guidance",
+            "/operation",
+            "/operation/input",
+            "/references",
+            "/references/character_references/0",
+            "/references/vibe_transfer",
+            "/references/vibe_transfer/references/0",
+            "/output",
+        ] {
+            let mut value = serialized.clone();
+            value.pointer_mut(path).unwrap()["unknown_option"] = json!(true);
+            assert!(
+                serde_json::from_value::<GenerateImageRequest>(value.clone()).is_err(),
+                "{path}, {policy:?}",
+            );
+            let stream = json!({"base": value, "stream": "sse"});
+            assert!(
+                serde_json::from_value::<GenerateImageStreamRequest>(stream).is_err(),
+                "stream {path}, {policy:?}",
+            );
+        }
+        let mut value = serialized;
+        value["output"]["straight_alpha"] = json!(true);
+        assert!(serde_json::from_value::<GenerateImageRequest>(value).is_err());
+    }
+}
+
+#[test]
+fn inpainting_input_rejects_unknown_fields_inside_an_editable_request() {
+    let mut request = request_with_nested_inputs();
+    request.operation =
+        GenerationInput::Inpainting(InpaintingInput::new(image(), image(), 1.0, 0.0));
+    for policy in [ValidationPolicy::Normalize, ValidationPolicy::Reject] {
+        request.policy = policy;
+        let mut value = serde_json::to_value(&request).unwrap();
+        assert_eq!(
+            serde_json::from_value::<GenerateImageRequest>(value.clone()).unwrap(),
+            request,
+        );
+        value["operation"]["input"]["color_correct"] = json!(true);
+        assert!(serde_json::from_value::<GenerateImageRequest>(value).is_err());
+    }
+}
 
 #[test]
 fn operation_envelopes_reject_fields_that_would_discard_mode_specific_input() {

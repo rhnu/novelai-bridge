@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0 - 2026-10-21
+
+### Fixed
+
+- Model official `intermediate`, `final` and `error` stream events explicitly. Validate final image bytes and require every expected sample's final image before successful EOF; previews, unknown extensions, duplicate finals and out-of-range sample indices cannot establish success.
+- Return typed stream provider, protocol, image and incomplete-stream failures with their original sources. Retain complete SSE names, IDs, retry values and data on events and event-related failures, including arbitrary unknown extension payloads. Keep image data and provider error messages out of Debug summaries and library logs.
+- Expose V5 purchased allowance and preserve percentages above 100. Retain complete subscription response JSON, including extensions, while hiding that JSON in Debug output. Reject fractional, negative or incorrectly typed percentage fields instead of silently changing them.
+- Reject unknown fields recursively throughout editable generation and reference inputs under both validation policies. Unsupported nested fields can no longer disappear before validation.
+- Distinguish omitted Qwen token tables from invalid table types. Reject incorrectly typed known asset structures and flags while preserving original JSON error causes, valid special tokens and unrelated metadata.
+
+### Migration
+
+- Replace direct `ImageStreamChunk` image fields with a match on `chunk.event`: `ImageStreamEvent::Intermediate` carries a base64 preview, while `Final` carries a validated `GeneratedImage`. Read the original provider payload through `chunk.raw`. Use `chunk.event_type()` and `chunk.sample_index()` for summaries. Parsed chunks no longer deserialize unchecked image bytes.
+- Handle `BridgeError::Stream` and, for credit observation, `RequestFailure::Stream`. A provider failure contains the error event in `ImageStreamError::Provider { event }`; match `event.event` to read its message and sample. Missing finals now return `ImageStreamError::Incomplete` instead of successful EOF.
+- Custom streaming transports populate `TransportSseEvent::{event, id, data, retry}`. Use `..Default::default()` for unavailable SSE metadata. `ImageStreamEventType::Step` is replaced by the official `Intermediate`, `Final` and `Error` identities; `step` is now an unknown extension.
+- Add `V5UsageStatus::purchased_percent` and `SubscriptionInfo::raw_response` to structure literals. The former defaults to zero when omitted; the latter contains the complete account response and should only be explicitly serialized where that private information is intended. Percentages are whole integers and are no longer truncated from fractional input.
+- Remove unsupported or misspelled nested request keys before deserialization; `ValidationPolicy::Normalize` only normalizes recognized fields and does not permit unknown keys.
+
 ## 0.5.0 - 2026-10-21
 
 Stable release of the 0.5 series, including the composable Cargo features, model descriptors,

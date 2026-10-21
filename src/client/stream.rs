@@ -11,6 +11,7 @@ use tracing::Instrument;
 
 use super::observe::PendingObservation;
 pub use crate::protocol::{ImageStreamItem, ImageStreamResult};
+use crate::{ImageStreamError, ImageStreamEvent};
 
 type SettlementFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
@@ -32,6 +33,7 @@ pub struct GenerateImageStream {
     pub resolved_seed: i64,
     lifecycle: Lifecycle,
     samples: BTreeSet<u32>,
+    expected_samples: u32,
     span: tracing::Span,
     started: Instant,
 }
@@ -39,6 +41,7 @@ pub struct GenerateImageStream {
 impl GenerateImageStream {
     pub(super) fn new(
         resolved_seed: i64,
+        expected_samples: u32,
         stream: ImageStreamResult,
         observation: PendingObservation,
     ) -> Self {
@@ -49,6 +52,7 @@ impl GenerateImageStream {
                 pending: observation,
             },
             samples: BTreeSet::new(),
+            expected_samples,
             span: tracing::Span::current(),
             started: Instant::now(),
         }
@@ -80,7 +84,18 @@ impl GenerateImageStream {
         .await;
     }
 
-    fn begin_settlement(&mut self, pending: PendingObservation, terminal: Option<ImageStreamItem>) {
+    fn begin_settlement(
+        &mut self,
+        pending: PendingObservation,
+        mut terminal: Option<ImageStreamItem>,
+    ) {
+        if terminal.is_none() && self.samples.len() != self.expected_samples as usize {
+            terminal = Some(Err(ImageStreamError::Incomplete {
+                expected_samples: self.expected_samples,
+                completed_samples: self.samples.iter().copied().collect(),
+            }
+            .into()));
+        }
         let future: SettlementFuture = if let Some(Err(error)) = &terminal {
             tracing::debug!(
                 outcome = "failed",
@@ -117,8 +132,34 @@ impl Stream for GenerateImageStream {
                     pending,
                 } => match stream.as_mut().poll_next(context) {
                     Poll::Ready(Some(Ok(chunk))) => {
-                        if !chunk.image.is_empty() {
-                            self.samples.insert(chunk.samp_ix);
+                        let failure = if matches!(chunk.event, ImageStreamEvent::Error { .. }) {
+                            Some(ImageStreamError::Provider {
+                                event: Box::new(chunk.clone()),
+                            })
+                        } else if let Some(samp_ix) = chunk.sample_index() {
+                            if samp_ix >= self.expected_samples {
+                                Some(ImageStreamError::InvalidSample {
+                                    samp_ix,
+                                    expected_samples: self.expected_samples,
+                                    raw: Box::new(chunk.raw.clone()),
+                                })
+                            } else if matches!(chunk.event, ImageStreamEvent::Final { .. })
+                                && !self.samples.insert(samp_ix)
+                            {
+                                Some(ImageStreamError::DuplicateFinal {
+                                    samp_ix,
+                                    raw: Box::new(chunk.raw.clone()),
+                                })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(error) = failure {
+                            drop(stream);
+                            self.begin_settlement(pending, Some(Err(error.into())));
+                            continue;
                         }
                         self.lifecycle = Lifecycle::Active { stream, pending };
                         return Poll::Ready(Some(Ok(chunk)));

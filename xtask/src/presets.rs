@@ -115,10 +115,9 @@ pub async fn execute<T: StreamingTransport + ?Sized>(
                 chunks += 1;
                 if chunks <= 3 {
                     println!(
-                        "  chunk {chunks} type={} samp={} step={:?}",
-                        chunk.event_type.as_str(),
-                        chunk.samp_ix,
-                        chunk.step_ix
+                        "  chunk {chunks} type={} samp={:?}",
+                        chunk.event_type().as_str(),
+                        chunk.sample_index()
                     );
                 }
             }

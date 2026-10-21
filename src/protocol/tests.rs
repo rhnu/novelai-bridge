@@ -82,9 +82,11 @@ async fn malformed_chunk_terminates_the_decoded_stream() {
         stream::iter([
             Ok(TransportSseEvent {
                 data: "not JSON".to_owned(),
+                ..Default::default()
             }),
             Ok(TransportSseEvent {
                 data: "{}".to_owned(),
+                ..Default::default()
             }),
         ]),
     )))));
@@ -96,7 +98,7 @@ async fn malformed_chunk_terminates_the_decoded_stream() {
     .unwrap();
     assert!(matches!(
         output.next().await,
-        Some(Err(BridgeError::Decode(_)))
+        Some(Err(BridgeError::Stream(_)))
     ));
     assert!(output.next().await.is_none());
 }
@@ -106,6 +108,7 @@ async fn unknown_event_types_cross_the_wire_boundary_without_losing_their_name()
     let backend = Backend(Mutex::new(Some(TransportSseResponse::Events(Box::pin(
         stream::iter([Ok(TransportSseEvent {
             data: r#"{"event_type":"future-event","samp_ix":1,"gen_id":2,"image":""}"#.to_owned(),
+            ..Default::default()
         })]),
     )))));
     let mut output = post_sse(
@@ -116,6 +119,6 @@ async fn unknown_event_types_cross_the_wire_boundary_without_losing_their_name()
     .unwrap();
     let chunk = output.next().await.unwrap().unwrap();
     assert!(
-        matches!(chunk.event_type, crate::ImageStreamEventType::Unknown(ref name) if name == "future-event")
+        matches!(chunk.event_type(), crate::ImageStreamEventType::Unknown(ref name) if name == "future-event")
     );
 }

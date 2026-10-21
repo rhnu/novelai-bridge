@@ -52,9 +52,13 @@ pub struct RequestFingerprint {
 /// Classification of a failed request without its original payload.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RequestFailure {
+    #[cfg(feature = "streaming")]
+    Stream,
     InvalidRequest,
     Preparation,
-    Api { status: u16 },
+    Api {
+        status: u16,
+    },
     Transport,
     Encode,
     Decode,
@@ -65,6 +69,8 @@ impl RequestFailure {
     #[must_use]
     pub const fn from_error(error: &BridgeError) -> Self {
         match error {
+            #[cfg(feature = "streaming")]
+            BridgeError::Stream(_) => Self::Stream,
             #[cfg(feature = "tokenizer")]
             BridgeError::Tokenizer(_) => Self::InvalidRequest,
             BridgeError::InvalidRequest(_) => Self::InvalidRequest,

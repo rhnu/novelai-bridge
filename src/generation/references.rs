@@ -44,6 +44,7 @@ crate::parameters::serde_string_enum!(
 
 /// Character reference input used by director references.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CharacterReference {
     /// Validated reference image.
     pub image: crate::EncodedImage,
@@ -57,6 +58,7 @@ pub struct CharacterReference {
 
 /// Reference images attached to a generation request.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ReferenceSet {
     /// Optional vibe transfer configuration.
     pub vibe_transfer: Option<VibeTransferConfig>,

@@ -37,6 +37,8 @@ pub use client::{Client, ClientConfig, DEFAULT_IMAGE_BASE};
 pub use client::{GenerateImageStream, ImageStreamItem, ImageStreamResult};
 #[cfg(feature = "generation")]
 pub use director::{DirectorCommand, PreparedDirector, RunDirectorToolRequest};
+#[cfg(feature = "streaming")]
+pub use error::ImageStreamError;
 pub use error::{
     ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DataUrlError, DecodeError, DecodeTarget,
     EncodeError, EncodeTarget, InvalidRequest, MetadataError, PreparationError, TransportError,
@@ -51,9 +53,10 @@ pub use generation::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
     GenerateImageRequest, GenerateImageRequestBuilder, GenerateImageResult,
     GenerateImageStreamRequest, GenerationCore, GenerationDelivery, GenerationInput,
-    GuidanceParams, ImageStreamChunk, ImageStreamEventType, ImageToImageInput, InpaintingInput,
-    NormalizationChange, NormalizationDiagnostic, NormalizedGeneration, OutputParams,
-    PreparedGeneration, ReferenceSet, ResolvedCharacterPrompt, ResolvedPrompts,
+    GuidanceParams, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType, ImageToImageInput,
+    InpaintingInput, NormalizationChange, NormalizationDiagnostic, NormalizedGeneration,
+    OutputParams, PreparedGeneration, ReferenceSet, ResolvedCharacterPrompt, ResolvedPrompts,
+    TransportSseEvent,
 };
 #[cfg(all(feature = "generation", feature = "tokenizer"))]
 pub use generation::{CharacterTokenUsage, PromptField, PromptTokenUsage};
@@ -111,9 +114,7 @@ pub use transport::{
     TransportRequest, TransportResponse,
 };
 #[cfg(feature = "streaming")]
-pub use transport::{
-    StreamingTransport, TransportSseEvent, TransportSseResponse, TransportSseStream,
-};
+pub use transport::{StreamingTransport, TransportSseResponse, TransportSseStream};
 pub use validation::{ValidationAdjustment, ValidationPolicy};
 #[cfg(feature = "png-metadata")]
 pub use vibe::VibeEncoding;

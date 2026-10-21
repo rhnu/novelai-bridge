@@ -4,6 +4,7 @@ use crate::{EncodedImage, Model, ValidationPolicy, VibeEncoding};
 
 /// One vibe transfer reference.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct VibeReference {
     /// Precomputed payload produced by the vibe-encoding operation.
     pub vibe_data_cache: VibeEncoding,
@@ -13,6 +14,7 @@ pub struct VibeReference {
 
 /// Vibe transfer configuration.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct VibeTransferConfig {
     /// One or more precomputed vibe payloads.
     pub references: Vec<VibeReference>,

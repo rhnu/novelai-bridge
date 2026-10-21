@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CharacterPosition {
     /// Horizontal position in the `[0, 1]` range.
     pub x: f32,
@@ -14,6 +15,7 @@ impl Default for CharacterPosition {
 
 /// Character prompt input used by V4 and later models.
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Character {
     /// Positive prompt for the character.
     pub prompt: String,
@@ -36,6 +38,7 @@ impl std::fmt::Debug for Character {
 
 /// Character prompts and their positioning behavior.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CharacterSet {
     /// Character prompts sent with the request.
     pub characters: Vec<Character>,

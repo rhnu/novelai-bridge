@@ -143,22 +143,31 @@ the NAI 5 family — the free first image is paid for out of a separate allowanc
 `GET /user/subscription` reports it as a `usage` object:
 
 ```json
-"usage": { "percent": 100, "isNegative": false, "timeUntilNextPercent": 7888 }
+"usage": { "percent": 100, "purchasedPercent": 0, "isNegative": false, "timeUntilNextPercent": 7888 }
 ```
 
 The object is absent for accounts that do not receive the allowance, which is why
 `SubscriptionInfo::v5_usage` is optional. A free-tier account (`tier: 0`) returns no
 `usage` key at all.
 
-Measured field behaviour:
+The current [official schema](https://image.novelai.net/docs/doc.json) defines integer
+`percent` values that can exceed 100 and a separate `purchasedPercent`. The library exposes
+these as `percent` and `purchased_percent` without a display cap; a missing purchase field
+means zero. Negative, fractional and incorrectly typed percentages are rejected.
+`SubscriptionInfo::raw_response` retains all response fields, including unknown extensions.
+Its Debug summary omits this JSON because it can contain private account and payment data.
 
-- `percent` is the **remaining** allowance as an integer in `[0, 100]`, not the amount consumed.
-  The API reports whole percents.
+Field behaviour (the measured examples below predate purchased allowance):
+
+- `percent` is the **remaining** allowance as a whole percentage, not the amount consumed.
+  Values above 100 remain available to callers; apply a cap only when displaying a bounded meter.
+- `purchasedPercent` is a separate purchased allowance, exposed as `purchased_percent`.
 - `isNegative` marks the allowance as overdrawn. It is the only field the estimator reads: an
   overdrawn allowance removes the free first image for models that carry the usage limit, which
   is exactly the condition in the section above.
 - `timeUntilNextPercent` is a **rate constant** — the number of seconds needed to recharge one
-  percent. It is not a countdown: it held at `7888` across eight samples over ~35 minutes,
+  percent. The official schema also allows zero when refill is paused above the cap.
+  It is not a countdown: it held at `7888` across eight samples over ~35 minutes,
   including across a `percent` change. At that rate one percent returns in ~2h11m and a full
   0 → 100 recharge takes ~9.1 days. Present it as a rate, never as a deadline.
 

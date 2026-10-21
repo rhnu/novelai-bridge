@@ -162,10 +162,22 @@ impl StreamingTransport for ReqwestTransport {
             while let Some(item) = events.next().await {
                 let event = item.map_err(|source| TransportError::new(
                     TransportOperation::ParseSse, Some(endpoint.clone()), Box::new(source)))?;
-                if !event.data.is_empty() { yield TransportSseEvent { data: event.data }; }
+                yield TransportSseEvent::from(event);
             }
         };
         Ok(TransportSseResponse::Events(Box::pin(output)))
+    }
+}
+
+#[cfg(feature = "reqwest-streaming")]
+impl From<eventsource_stream::Event> for TransportSseEvent {
+    fn from(event: eventsource_stream::Event) -> Self {
+        Self {
+            event: event.event,
+            id: event.id,
+            data: event.data,
+            retry: event.retry,
+        }
     }
 }
 

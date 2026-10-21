@@ -68,20 +68,7 @@ impl std::fmt::Debug for TransportResponse {
 }
 
 #[cfg(feature = "streaming")]
-#[derive(Clone, PartialEq, Eq)]
-pub struct TransportSseEvent {
-    pub data: String,
-}
-
-#[cfg(feature = "streaming")]
-impl std::fmt::Debug for TransportSseEvent {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("TransportSseEvent")
-            .field("data_bytes", &self.data.len())
-            .finish()
-    }
-}
+pub use crate::generation::TransportSseEvent;
 
 #[cfg(feature = "streaming")]
 pub type TransportSseStream = std::pin::Pin<

@@ -1,5 +1,8 @@
 use futures_util::StreamExt;
-use novelai_bridge::{GenerateImageStreamRequest, ImageStreamChunk, ImageStreamEventType};
+use novelai_bridge::{
+    GenerateImageStreamRequest, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType,
+    TransportSseEvent,
+};
 
 use super::*;
 
@@ -7,12 +10,8 @@ use super::*;
 async fn generate_stream_parses_chunk() {
     let transport = MockTransport::default();
     transport.set_sse_chunks(vec![ImageStreamChunk {
-        event_type: "step".into(),
-        samp_ix: 0,
-        step_ix: Some(1),
-        gen_id: 1,
-        sigma: Some(1.1),
-        image: "abc".to_owned(),
+        event: ImageStreamEvent::Intermediate { samp_ix: 0, step_ix: 1, gen_id: 1, sigma: Some(1.1), image: "abc".into() },
+        raw: TransportSseEvent { event: "intermediate".into(), data: r#"{"event_type":"intermediate","samp_ix":0,"step_ix":1,"gen_id":1,"sigma":1.1,"image":"abc"}"#.into(), ..Default::default() },
     }]);
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -30,8 +29,11 @@ async fn generate_stream_parses_chunk() {
             .unwrap()
     );
     let item = stream.next().await.unwrap().unwrap();
-    assert_eq!(item.event_type, ImageStreamEventType::Step);
-    assert_eq!(item.step_ix, Some(1));
+    assert_eq!(item.event_type(), ImageStreamEventType::Intermediate);
+    assert!(matches!(
+        item.event,
+        ImageStreamEvent::Intermediate { step_ix: 1, .. }
+    ));
     assert_eq!(
         transport.last_path().as_deref(),
         Some("https://image.novelai.net/ai/generate-image-stream")

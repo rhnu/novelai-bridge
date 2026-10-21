@@ -5,6 +5,11 @@ use crate::BridgeError;
 /// Records a failure once at the client boundary without server-echoed request data.
 pub(super) fn report_failure(error: &BridgeError) {
     match error {
+        #[cfg(feature = "streaming")]
+        BridgeError::Stream(_) => {
+            // Provider messages and extension data may echo prompts; callers retain the error.
+            tracing::error!("image stream failed");
+        },
         BridgeError::Api(api) => {
             if api.status() >= 500 {
                 tracing::error!(status = api.status(), kind = ?api.kind(), body_truncated = api.raw_body_truncated, "API request failed");

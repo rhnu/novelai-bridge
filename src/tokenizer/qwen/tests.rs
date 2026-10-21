@@ -105,6 +105,159 @@ fn qwen_rejects_disagreeing_companion_config() {
 }
 
 #[test]
+fn qwen_rejects_present_added_token_tables_with_wrong_types_and_retains_causes() {
+    use std::error::Error as _;
+
+    for wrong in [
+        Value::Null,
+        json!(false),
+        json!(23),
+        json!("tokens"),
+        json!({}),
+    ] {
+        let mut asset = qwen_asset();
+        asset["added_tokens"] = wrong;
+        let error = load_qwen(&asset).unwrap_err();
+        assert!(matches!(
+            error,
+            TokenizerError::InvalidAssetData {
+                asset: TokenizerAsset::QwenTokenizer,
+                context: "added_tokens",
+                ..
+            }
+        ));
+        assert!(error.source().unwrap().is::<serde_json::Error>());
+    }
+
+    let asset = qwen_asset().to_string();
+    for wrong in [
+        Value::Null,
+        json!(false),
+        json!(23),
+        json!("tokens"),
+        json!([]),
+    ] {
+        let config = json!({"added_tokens_decoder": wrong}).to_string();
+        let error =
+            QwenTokenizer::from_assets(asset.as_bytes(), Some(config.as_bytes())).unwrap_err();
+        assert!(matches!(
+            error,
+            TokenizerError::InvalidAssetData {
+                asset: TokenizerAsset::QwenTokenizerConfig,
+                context: "added_tokens_decoder",
+                ..
+            }
+        ));
+        assert!(error.source().unwrap().is::<serde_json::Error>());
+    }
+}
+
+#[test]
+fn qwen_checks_known_structural_types_without_treating_them_as_defaults() {
+    use std::error::Error as _;
+
+    for (pointer, wrong) in [
+        ("/version", json!(1)),
+        ("/model", json!([])),
+        ("/model/vocab", json!([])),
+        ("/model/vocab/a", json!("1")),
+        ("/model/merges", json!({})),
+        ("/normalizer", json!([])),
+        ("/normalizer/type", json!(true)),
+        ("/pre_tokenizer", json!([])),
+        ("/pre_tokenizer/pretokenizers", json!({})),
+        ("/pre_tokenizer/pretokenizers/0", json!([])),
+        ("/pre_tokenizer/pretokenizers/0/invert", json!("false")),
+        ("/pre_tokenizer/pretokenizers/0/pattern", json!([])),
+        ("/pre_tokenizer/pretokenizers/0/pattern/Regex", json!(false)),
+        ("/pre_tokenizer/pretokenizers/1/use_regex", json!(0)),
+        ("/decoder", json!([])),
+        ("/added_tokens", json!([{"id": 256, "content": 42}])),
+        (
+            "/added_tokens",
+            json!([{"id": "256", "content": "special"}]),
+        ),
+        (
+            "/added_tokens",
+            json!([{"id": 256, "content": "special", "special": "true"}]),
+        ),
+        (
+            "/added_tokens",
+            json!([{"id": 256, "content": "special", "normalized": null}]),
+        ),
+    ] {
+        let mut asset = qwen_asset();
+        *asset.pointer_mut(pointer).unwrap() = wrong;
+        let error = load_qwen(&asset).unwrap_err();
+        assert!(
+            matches!(error, TokenizerError::InvalidAssetData { .. }),
+            "{pointer}: {error:?}"
+        );
+        assert!(
+            error.source().unwrap().is::<serde_json::Error>(),
+            "{pointer}"
+        );
+    }
+
+    let asset = qwen_asset().to_string();
+    for config in [
+        json!([]),
+        Value::Null,
+        json!({"add_bos_token": "false"}),
+        json!({"added_tokens_decoder": {"256": []}}),
+        json!({"added_tokens_decoder": {"256": {"content": 42}}}),
+        json!({"added_tokens_decoder": {"256": {"content": "special", "lstrip": "false"}}}),
+    ] {
+        let error =
+            QwenTokenizer::from_assets(asset.as_bytes(), Some(config.to_string().as_bytes()))
+                .unwrap_err();
+        assert!(matches!(
+            error,
+            TokenizerError::InvalidAssetData {
+                asset: TokenizerAsset::QwenTokenizerConfig,
+                ..
+            }
+        ));
+        assert!(error.source().unwrap().is::<serde_json::Error>());
+    }
+}
+
+#[test]
+fn qwen_missing_tables_keep_defaults_and_known_special_tokens_survive_metadata() {
+    let mut asset = qwen_asset();
+    asset.as_object_mut().unwrap().remove("added_tokens");
+    let without_tables =
+        QwenTokenizer::from_assets(asset.to_string().as_bytes(), Some(b"{}")).unwrap();
+    assert_eq!(without_tables.vocabulary_size(), 256);
+
+    asset["added_tokens"] = json!([{
+        "id": 256, "content": "<|first|>", "special": true,
+        "single_word": false, "lstrip": false, "rstrip": false, "normalized": false,
+        "export_metadata": {"future": true},
+    }]);
+    asset["export_metadata"] = json!({"not_used_for_encoding": [1, 2, 3]});
+    let config = json!({
+        "added_tokens_decoder": {
+            "256": {"content": "<|first|>", "special": true},
+            "257": {"content": "<|second|>", "special": true},
+        },
+        "chat_template": "unused template",
+        "future_metadata": {"anything": null},
+    });
+    let tokenizer = QwenTokenizer::from_assets(
+        asset.to_string().as_bytes(),
+        Some(config.to_string().as_bytes()),
+    )
+    .unwrap();
+    assert_eq!(
+        tokenizer
+            .encode("<|first|><|second|>", FramingPolicy::ContentOnly)
+            .unwrap(),
+        [256, 257],
+    );
+}
+
+#[test]
 fn asset_failures_keep_merge_and_vocabulary_categories() {
     let mut dangling = qwen_asset();
     dangling["model"]["merges"] = json!([["a", "b"]]);

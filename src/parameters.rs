@@ -214,6 +214,7 @@ impl ImageFormat {
 
 /// Image dimensions in pixels.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ImageSize {
     /// Width in pixels.
     pub width: u32,
@@ -278,6 +279,7 @@ impl Default for ImageSize {
 
 /// Sampling parameters.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct SamplingParams {
     /// Sampling step count in the `[1, 50]` range.
     pub steps: u32,

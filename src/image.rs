@@ -5,7 +5,6 @@ mod input;
 mod output;
 mod preparation;
 mod response;
-
 pub use input::EncodedImage;
 pub use output::{GeneratedImage, ImageMediaFormat};
 #[cfg(any(feature = "generation", test))]
@@ -15,6 +14,8 @@ pub use preparation::{
 };
 #[cfg(feature = "client")]
 pub use response::decode_first_generated_image;
+#[cfg(feature = "streaming")]
+pub use response::validated_generated_image;
 pub use response::{decode_generated_images, decode_generated_images_with_policy};
 
 #[cfg(test)]

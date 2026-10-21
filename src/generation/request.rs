@@ -8,6 +8,7 @@ use crate::{
 
 /// Prompt, model and canvas fields shared by every generation request.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct GenerationCore {
     /// Positive prompt text.
     pub prompt: String,
@@ -83,6 +84,7 @@ impl Default for GenerationCore {
     reason = "Provider guidance options are independent capability switches"
 )]
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct GuidanceParams {
     /// Enables `NovelAI`'s variety boost (`skip_cfg_above_sigma`).
     ///
@@ -112,6 +114,7 @@ impl GuidanceParams {
 
 /// Output encoding options.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct OutputParams {
     /// Optional output image format.
     pub image_format: Option<ImageFormat>,

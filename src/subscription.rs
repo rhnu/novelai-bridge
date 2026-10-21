@@ -1,22 +1,28 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 mod wire;
 
 pub use wire::SubscriptionResponse;
 
-/// Free V5 generation allowance reported by `/user/subscription`.
+/// V5 generation allowance reported by `/user/subscription`.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct V5UsageStatus {
     /// Whether the allowance is currently overdrawn.
     pub is_negative: bool,
-    /// Remaining allowance as an integer percentage in the `[0, 100]` range.
+    /// Remaining allowance as an integer percentage, which may exceed 100.
     pub percent: u32,
+    /// Purchased allowance as an integer percentage; zero when omitted.
+    #[serde(default)]
+    pub purchased_percent: u32,
     /// Seconds required to recharge one percent.
     pub seconds_until_next_percent: u64,
 }
 
 /// Subscription summary returned by [`crate::Client::get_subscription`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SubscriptionInfo {
     /// Combined fixed and purchased Anlas balance.
     pub anlas_balance: i64,
@@ -26,8 +32,27 @@ pub struct SubscriptionInfo {
     pub tier: i32,
     /// Optional expiration timestamp in milliseconds since the Unix epoch.
     pub expires_at_ms: Option<u64>,
-    /// Free V5 generation allowance, when the account reports one.
+    /// V5 generation allowance, when the account reports one.
     pub v5_usage: Option<V5UsageStatus>,
+    /// Original response, including fields not represented by this summary.
+    ///
+    /// This can contain private account and payment information. It is omitted
+    /// from `Debug` output, but included when explicitly serializing this value.
+    #[serde(default)]
+    pub raw_response: Value,
+}
+
+impl fmt::Debug for SubscriptionInfo {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SubscriptionInfo")
+            .field("anlas_balance", &self.anlas_balance)
+            .field("subscription_active", &self.subscription_active)
+            .field("tier", &self.tier)
+            .field("expires_at_ms", &self.expires_at_ms)
+            .field("v5_usage", &self.v5_usage)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SubscriptionInfo {

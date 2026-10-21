@@ -172,7 +172,12 @@ impl<T: Transport + ?Sized> Client<T> {
         match crate::protocol::post_sse(&*self.transport, request).await {
             Ok(stream) => {
                 tracing::debug!("image stream opened");
-                Ok(GenerateImageStream::new(resolved_seed, stream, observation))
+                Ok(GenerateImageStream::new(
+                    resolved_seed,
+                    prepared.normalized().request().core.n_samples,
+                    stream,
+                    observation,
+                ))
             },
             Err(error) => {
                 report_failure(&error);
