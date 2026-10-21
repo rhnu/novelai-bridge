@@ -6,12 +6,19 @@ impl<T: Transport + ?Sized> Client<T> {
     ///
     /// # Errors
     /// Returns preparation, transport or response errors.
-    pub async fn encode_vibe(&self, request: EncodeVibeRequest) -> Result<VibeEncoding, BridgeError> {
+    pub async fn encode_vibe(
+        &self,
+        request: EncodeVibeRequest,
+    ) -> Result<VibeEncoding, BridgeError> {
         let prepared = request.prepare()?;
         let body = prepared.encode()?;
         let observation = self.observe_vibe(&prepared).await;
-        self.execute_encoded(crate::protocol::Endpoint::EncodeVibe, body, observation, |payload| {
-            VibeEncoding::from_bytes(payload).map(|encoding| (encoding, 0))
-        }).await
+        self.execute_encoded(
+            crate::protocol::Endpoint::EncodeVibe,
+            body,
+            observation,
+            |payload| VibeEncoding::from_bytes(payload).map(|encoding| (encoding, 0)),
+        )
+        .await
     }
 }

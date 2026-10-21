@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+
 use fancy_regex::Regex;
 use serde_json::Value;
+
 use super::Normalization;
-use crate::tokenizer::{bpe::{ByteBpe, byte_to_unicode}, TokenId, TokenizerAsset, TokenizerError};
+use crate::tokenizer::{
+    TokenId, TokenizerAsset, TokenizerError,
+    bpe::{ByteBpe, byte_to_unicode},
+};
 
 pub(super) struct QwenAsset {
     pub(super) bpe: ByteBpe,
@@ -12,53 +17,51 @@ pub(super) struct QwenAsset {
 }
 
 pub(super) fn load(
-        tokenizer_json: &[u8],
-        tokenizer_config_json: Option<&[u8]>,
-    ) -> Result<QwenAsset, TokenizerError> {
-        let root: Value = serde_json::from_slice(tokenizer_json).map_err(|error| {
-            TokenizerError::MalformedAsset {
-                asset: TokenizerAsset::QwenTokenizer,
-                reason: format!("not valid JSON: {error}"),
-            }
+    tokenizer_json: &[u8],
+    tokenizer_config_json: Option<&[u8]>,
+) -> Result<QwenAsset, TokenizerError> {
+    let root: Value =
+        serde_json::from_slice(tokenizer_json).map_err(|error| TokenizerError::MalformedAsset {
+            asset: TokenizerAsset::QwenTokenizer,
+            reason: format!("not valid JSON: {error}"),
         })?;
 
-        let model = root
-            .get("model")
-            .ok_or_else(|| malformed("missing `model`"))?;
-        if let Some(kind) = model.get("type").and_then(Value::as_str)
-            && kind != "BPE"
-        {
-            return Err(malformed(&format!(
-                "expected a BPE model definition, found {kind:?}"
-            )));
-        }
-
-        let vocab = parse_vocab(model)?;
-        let merge_pairs = parse_merges(model)?;
-        validate_merges(&merge_pairs, &vocab)?;
-
-        let mut added_tokens = parse_added_tokens(&root, &vocab)?;
-        if let Some(config) = tokenizer_config_json {
-            merge_config_special_tokens(config, &vocab, &mut added_tokens)?;
-        }
-        validate_added_ids(&vocab, &added_tokens)?;
-        validate_profile(&root)?;
-        for symbol in byte_to_unicode() {
-            if !vocab.contains_key(&symbol.to_string()) {
-                return Err(malformed("missing byte alphabet symbol"));
-            }
-        }
-        // Longest match wins, so a token that is a prefix of another never shadows it.
-        added_tokens.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
-
-        Ok(QwenAsset {
-            bpe: ByteBpe::new(vocab, merge_pairs, None),
-            added_tokens,
-            normalization: parse_normalization(&root)?,
-            pattern: parse_pattern(&root)?,
-        })
+    let model = root
+        .get("model")
+        .ok_or_else(|| malformed("missing `model`"))?;
+    if let Some(kind) = model.get("type").and_then(Value::as_str)
+        && kind != "BPE"
+    {
+        return Err(malformed(&format!(
+            "expected a BPE model definition, found {kind:?}"
+        )));
     }
 
+    let vocab = parse_vocab(model)?;
+    let merge_pairs = parse_merges(model)?;
+    validate_merges(&merge_pairs, &vocab)?;
+
+    let mut added_tokens = parse_added_tokens(&root, &vocab)?;
+    if let Some(config) = tokenizer_config_json {
+        merge_config_special_tokens(config, &vocab, &mut added_tokens)?;
+    }
+    validate_added_ids(&vocab, &added_tokens)?;
+    validate_profile(&root)?;
+    for symbol in byte_to_unicode() {
+        if !vocab.contains_key(&symbol.to_string()) {
+            return Err(malformed("missing byte alphabet symbol"));
+        }
+    }
+    // Longest match wins, so a token that is a prefix of another never shadows it.
+    added_tokens.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
+
+    Ok(QwenAsset {
+        bpe: ByteBpe::new(vocab, merge_pairs, None),
+        added_tokens,
+        normalization: parse_normalization(&root)?,
+        pattern: parse_pattern(&root)?,
+    })
+}
 
 fn malformed(reason: &str) -> TokenizerError {
     TokenizerError::MalformedAsset {
@@ -109,7 +112,7 @@ fn parse_merges(model: &Value) -> Result<Vec<(String, String)>, TokenizerError> 
                     (Some(left), Some(right)) => Some((left.to_owned(), right.to_owned())),
                     _ => None,
                 }
-            }
+            },
             Value::String(text) => text
                 .split_once(' ')
                 .map(|(left, right)| (left.to_owned(), right.to_owned())),
@@ -249,8 +252,11 @@ fn merge_config_special_tokens(
 }
 
 fn parse_pattern(root: &Value) -> Result<Regex, TokenizerError> {
-    let pattern = root["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"].as_str().ok_or_else(|| unsupported("missing validated Split expression"))?;
-    Regex::new(pattern).map_err(|error| malformed(&format!("pre-tokenizer pattern is unsupported: {error}")))
+    let pattern = root["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"]
+        .as_str()
+        .ok_or_else(|| unsupported("missing validated Split expression"))?;
+    Regex::new(pattern)
+        .map_err(|error| malformed(&format!("pre-tokenizer pattern is unsupported: {error}")))
 }
 
 /// Reads the normalizer the asset declares, defaulting to none.

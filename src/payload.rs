@@ -1,10 +1,11 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
+
 use crate::{BridgeError, DataUrlError, InvalidRequest};
 
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn decode_image(field: &str, value: &str) -> Result<Vec<u8>, BridgeError> {
+pub fn decode_image(field: &str, value: &str) -> Result<Vec<u8>, BridgeError> {
     let trimmed = value.trim();
     let payload = if trimmed.starts_with("data:") {
         let (meta, payload) =
@@ -35,7 +36,8 @@ pub(crate) fn decode_image(field: &str, value: &str) -> Result<Vec<u8>, BridgeEr
     };
     decode_base64(field, payload)
 }
-pub(crate) fn decode_base64(field: &str, value: &str) -> Result<Vec<u8>, BridgeError> {
+
+pub fn decode_base64(field: &str, value: &str) -> Result<Vec<u8>, BridgeError> {
     let compact: String = value.chars().filter(|ch| !ch.is_whitespace()).collect();
     if compact.is_empty() {
         return Err(InvalidRequest::EmptyField {

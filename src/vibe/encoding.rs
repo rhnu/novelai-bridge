@@ -1,6 +1,8 @@
 use std::sync::Arc;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
+
 use crate::{BridgeError, InvalidRequest};
 
 #[cfg(test)]
@@ -26,6 +28,7 @@ impl VibeEncoding {
         }
         Ok(Self(bytes.into()))
     }
+
     /// Decodes canonical or whitespace-padded base64.
     ///
     /// # Errors
@@ -34,20 +37,20 @@ impl VibeEncoding {
     pub fn from_base64(value: &str) -> Result<Self, BridgeError> {
         Self::from_bytes(crate::payload::decode_base64("vibe_encoding", value)?)
     }
+
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
+    pub fn as_bytes(&self) -> &[u8] { &self.0 }
+
     #[must_use]
-    pub fn to_base64(&self) -> String {
-        STANDARD.encode(&self.0)
-    }
+    pub fn to_base64(&self) -> String { STANDARD.encode(&self.0) }
 }
+
 impl Serialize for VibeEncoding {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.to_base64())
     }
 }
+
 impl<'de> Deserialize<'de> for VibeEncoding {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;

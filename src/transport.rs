@@ -43,9 +43,9 @@ pub struct TransportSseEvent {
 }
 
 #[cfg(feature = "streaming")]
-pub type TransportSseStream = std::pin::Pin<Box<
-    dyn futures_core::Stream<Item = Result<TransportSseEvent, TransportError>> + Send,
->>;
+pub type TransportSseStream = std::pin::Pin<
+    Box<dyn futures_core::Stream<Item = Result<TransportSseEvent, TransportError>> + Send>,
+>;
 
 /// An opened successful event stream, or an ordinary HTTP response.
 #[cfg(feature = "streaming")]
@@ -57,14 +57,18 @@ pub enum TransportSseResponse {
 /// Ordinary HTTP capability. Serialization and API semantics remain above it.
 #[async_trait]
 pub trait Transport: Send + Sync {
-    async fn execute(&self, request: TransportRequest) -> Result<TransportResponse, TransportError>;
+    async fn execute(&self, request: TransportRequest)
+    -> Result<TransportResponse, TransportError>;
 }
 
 /// Optional SSE framing capability of the same backend.
 #[cfg(feature = "streaming")]
 #[async_trait]
 pub trait StreamingTransport: Transport {
-    async fn execute_sse(&self, request: TransportRequest) -> Result<TransportSseResponse, TransportError>;
+    async fn execute_sse(
+        &self,
+        request: TransportRequest,
+    ) -> Result<TransportSseResponse, TransportError>;
 }
 
 #[cfg(test)]

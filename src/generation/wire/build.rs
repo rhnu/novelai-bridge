@@ -1,6 +1,12 @@
-use crate::{BridgeError, GenerateImageRequest, GenerationMode, ImagePreparation, ImagePreprocessor, InvalidRequest, ModelDescriptor, ResolvedPrompts, VibeTransferConfig};
-use crate::generation::NormalizedGeneration;
-use super::{build_character_captions, build_character_prompts, convert_character_references, CharacterPrompt, ImageGenerationRequestBody, ImageParameters, V4Caption, V4ConditionInput};
+use super::{
+    CharacterPrompt, ImageGenerationRequestBody, ImageParameters, V4Caption, V4ConditionInput,
+    build_character_captions, build_character_prompts, convert_character_references,
+};
+use crate::{
+    BridgeError, GenerateImageRequest, GenerationMode, ImagePreparation, ImagePreprocessor,
+    InvalidRequest, ModelDescriptor, ResolvedPrompts, VibeTransferConfig,
+    generation::NormalizedGeneration,
+};
 
 struct VibeWireParts {
     images: Vec<String>,
@@ -29,7 +35,7 @@ struct Img2ImgWireParts {
     inpaint_strength: Option<f32>,
 }
 
-pub(crate) fn build_generate_request(
+pub(in crate::generation) fn build_generate_request(
     normalized: &NormalizedGeneration,
     resolved_seed: i64,
     preprocessor: &dyn ImagePreprocessor,
@@ -60,7 +66,10 @@ pub(crate) fn build_generate_request(
     })
 }
 
-#[allow(clippy::too_many_lines, reason = "The provider parameter object is assembled explicitly in one place")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The provider parameter object is assembled explicitly in one place"
+)]
 fn build_image_parameters(
     normalized: &NormalizedGeneration,
     action: GenerationMode,
@@ -270,12 +279,12 @@ fn build_img2img_wire_parts(
     };
 
     let image = crate::image::prepare_image(
-            preprocessor,
-            "img2img.image",
-            &img2img.image,
-            ImagePreparation::Source(params.core.size),
-        )?
-        .to_base64();
+        preprocessor,
+        "img2img.image",
+        &img2img.image,
+        ImagePreparation::Source(params.core.size),
+    )?
+    .to_base64();
 
     if action == GenerationMode::Inpainting {
         let mask = img2img
@@ -283,12 +292,12 @@ fn build_img2img_wire_parts(
             .as_ref()
             .map(|mask| {
                 crate::image::prepare_image(
-                        preprocessor,
-                        "img2img.mask",
-                        mask,
-                        ImagePreparation::Mask(params.core.size),
-                    )
-                    .map(|image| image.to_base64())
+                    preprocessor,
+                    "img2img.mask",
+                    mask,
+                    ImagePreparation::Mask(params.core.size),
+                )
+                .map(|image| image.to_base64())
             })
             .transpose()?;
 

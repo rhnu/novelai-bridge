@@ -2,13 +2,12 @@
 
 use std::io::Read;
 
-use crate::{
-    FramingPolicy, TokenEncoder, ImageTokenizerKind, TokenizerError, Tokenizers,
-};
 use novelai_bridge_tokenizer_assets::{
     CLIP_MERGES_GZ, QWEN_TOKENIZER_CONFIG_GZ, QWEN_TOKENIZER_GZ, T5_SENTENCEPIECE_GZ,
 };
 use serde::Deserialize;
+
+use crate::{FramingPolicy, ImageTokenizerKind, TokenEncoder, TokenizerError, Tokenizers};
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -138,12 +137,18 @@ fn truncated_clip_asset_is_rejected_at_load_time() {
     );
 }
 
-
 #[test]
 fn bundled_registries_share_validated_encoders() {
     let first = Tokenizers::bundled().unwrap();
     let second = Tokenizers::bundled().unwrap();
-    for kind in [ImageTokenizerKind::Clip, ImageTokenizerKind::T5, ImageTokenizerKind::Qwen] {
-        assert!(std::ptr::eq(first.get(kind).unwrap(), second.get(kind).unwrap()));
+    for kind in [
+        ImageTokenizerKind::Clip,
+        ImageTokenizerKind::T5,
+        ImageTokenizerKind::Qwen,
+    ] {
+        assert!(std::ptr::eq(
+            first.get(kind).unwrap(),
+            second.get(kind).unwrap()
+        ));
     }
 }

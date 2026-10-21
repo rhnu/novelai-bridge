@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
-use crate::{BridgeError, MetadataError};
+
 use super::PngMetadataWarning;
+use crate::{BridgeError, MetadataError};
 const TEXT_CHUNK_DECOMPRESSION_LIMIT: usize = 2 * 1024 * 1024;
 
 pub(super) struct ExtractedPngText {

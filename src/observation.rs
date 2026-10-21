@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 
-use crate::{AnlasEstimate, AnlasEstimateInput, BridgeError, ImageSize, Model, Sampler, SubscriptionInfo};
+use crate::{
+    AnlasEstimate, AnlasEstimateInput, BridgeError, ImageSize, Model, Sampler, SubscriptionInfo,
+};
 
 /// Cost-bearing generation properties without prompt text or image payloads.
 #[derive(Clone, Debug, PartialEq)]
@@ -31,8 +33,13 @@ pub enum ObservedOperation {
     GenerateImage(GenerationSummary),
     #[cfg(feature = "streaming")]
     GenerateImageStream(GenerationSummary),
-    EncodeVibe { model: Model },
-    AugmentImage { tool: ObservedDirectorTool, size: ImageSize },
+    EncodeVibe {
+        model: Model,
+    },
+    AugmentImage {
+        tool: ObservedDirectorTool,
+        size: ImageSize,
+    },
 }
 
 /// De-identified operation paired with a client-local identifier.
@@ -73,8 +80,12 @@ impl RequestFailure {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RequestOutcome {
     /// Decoded images for ordinary generation, or distinct samples received from a stream.
-    Succeeded { image_count: u32 },
-    Failed { failure: RequestFailure },
+    Succeeded {
+        image_count: u32,
+    },
+    Failed {
+        failure: RequestFailure,
+    },
     #[cfg(feature = "streaming")]
     Cancelled,
 }

@@ -7,13 +7,13 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
     name = "xtask",
     about = "Assemble, inspect and send NovelAI requests through novelai-bridge"
 )]
-pub(crate) struct Cli {
+pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand)]
-pub(crate) enum Command {
+pub enum Command {
     /// Download pinned tokenizer assets, verify SHA-256 and store deterministic gzip files.
     FetchTokenizerAssets,
     /// Check every supported feature boundary without running tests.
@@ -62,7 +62,10 @@ pub enum Preset {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent probe flags select different generation capabilities."
+)]
 pub struct RunArgs {
     /// What to build.
     #[arg(value_enum)]

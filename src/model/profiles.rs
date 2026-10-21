@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 use super::Model;
 use crate::{ImageSize, NoiseSchedule, QualityPreset, SamplingParams, UcPreset};
-use serde::{Deserialize, Serialize};
 
 /// Prompt tokenizer used by a model family.
 ///
@@ -65,6 +66,7 @@ pub enum ReferenceModes {
     /// All generation modes, subject to the model also supporting the mode.
     All,
 }
+
 impl ReferenceModes {
     /// Whether the profile permits this mode.
     #[must_use]
@@ -213,7 +215,7 @@ impl CharacterPositionProfile {
                     }
                 }
                 best
-            }
+            },
             Self::Freeform => value,
         }
     }
@@ -238,6 +240,7 @@ pub enum QualitySupport {
     /// Standard, light or no quality tags.
     StandardAndLight,
 }
+
 impl QualitySupport {
     /// Whether this preset is supported without fallback.
     #[must_use]
@@ -263,6 +266,7 @@ pub struct PromptProfile {
     /// Anime/furry prompt dataset switching support.
     pub furry_mode: bool,
 }
+
 impl PromptProfile {
     /// Maximum enabled characters, or zero when unsupported.
     #[must_use]
@@ -283,6 +287,7 @@ pub enum NoiseScheduleSupport {
     /// Native is replaced by Karras; explicit schedules are preserved.
     ExplicitOnly,
 }
+
 impl NoiseScheduleSupport {
     /// Whether a schedule is accepted unchanged.
     #[must_use]
@@ -308,12 +313,16 @@ pub struct VarietyBoostProfile {
     /// Base sigma coefficient at 832 by 1216 pixels.
     pub sigma_coefficient: f32,
 }
+
 impl VarietyBoostProfile {
     /// Scales sigma with the square root of canvas area.
     #[must_use]
     pub fn sigma(self, width: u32, height: u32) -> f32 {
         let ratio = (f64::from(width) * f64::from(height)) / f64::from(832 * 1216);
-        #[allow(clippy::cast_possible_truncation, reason = "The public sigma coefficient and output use provider f32 precision")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "The public sigma coefficient and output use provider f32 precision"
+        )]
         let scale = ratio.sqrt() as f32;
         self.sigma_coefficient * scale
     }
@@ -332,6 +341,7 @@ pub struct SamplingProfile {
     /// Optional variety boost with its coefficient.
     pub variety: Option<VarietyBoostProfile>,
 }
+
 impl SamplingProfile {
     /// Returns the effective schedule.
     #[must_use]
@@ -368,6 +378,7 @@ pub enum WireProfile {
     /// Version 4 parameters with structured conditioning and V5 extensions.
     StructuredV5,
 }
+
 impl WireProfile {
     /// Protocol parameter version.
     #[must_use]
@@ -389,15 +400,11 @@ impl WireProfile {
 
     /// Whether structured captions are used.
     #[must_use]
-    pub const fn uses_structured_prompt(self) -> bool {
-        !matches!(self, Self::LegacyV3)
-    }
+    pub const fn uses_structured_prompt(self) -> bool { !matches!(self, Self::LegacyV3) }
 
     /// Whether V5 protocol extension fields are emitted.
     #[must_use]
-    pub const fn uses_v5_extensions(self) -> bool {
-        matches!(self, Self::StructuredV5)
-    }
+    pub const fn uses_v5_extensions(self) -> bool { matches!(self, Self::StructuredV5) }
 }
 
 /// Free generation allowance policy, separate from pricing multipliers.

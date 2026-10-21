@@ -1,5 +1,8 @@
+use super::{
+    AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode, estimate_anlas_cost,
+    estimate_director_tool_cost,
+};
 use crate::{ImageSize, Model};
-use super::{AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode, estimate_anlas_cost, estimate_director_tool_cost};
 
 fn input(model: Model, size: ImageSize, steps: u32) -> AnlasEstimateInput {
     AnlasEstimateInput {
@@ -172,7 +175,6 @@ fn director_discount_requires_an_active_opus_subscription() {
     assert_eq!(estimate_director_tool_cost(size, inactive), 1);
     assert_eq!(estimate_director_tool_cost(size, active), 0);
 }
-
 
 #[test]
 fn vibe_overage_obeys_reference_availability_for_the_selected_mode() {

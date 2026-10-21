@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+
 use crate::GeneratedImageMetadata;
 
 /// Validated image payload returned by image response decoding.
@@ -15,7 +16,5 @@ pub struct GeneratedImage {
 impl GeneratedImage {
     /// Seed recovered from this image, without a request-level fallback.
     #[must_use]
-    pub fn seed(&self) -> Option<i64> {
-        self.metadata.seed()
-    }
+    pub fn seed(&self) -> Option<i64> { self.metadata.seed() }
 }

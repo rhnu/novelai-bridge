@@ -1,7 +1,8 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::{ImageFormat, imageops::FilterType};
-use crate::{BridgeError, ImageSize, InvalidRequest};
+
 use super::EncodedImage;
+use crate::{BridgeError, ImageSize, InvalidRequest};
 
 /// Semantic image preparation operation.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -40,6 +41,7 @@ pub struct PreparedImage {
     bytes: Vec<u8>,
     size: ImageSize,
 }
+
 impl PreparedImage {
     /// Validates a caller-produced PNG payload for use by a custom preprocessor.
     ///
@@ -66,21 +68,15 @@ impl PreparedImage {
 
     /// Validated PNG bytes.
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
+    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
 
     /// Canonical base64 PNG representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String {
-        STANDARD.encode(&self.bytes)
-    }
+    pub fn to_base64(&self) -> String { STANDARD.encode(&self.bytes) }
 
     /// Prepared image dimensions.
     #[must_use]
-    pub const fn size(&self) -> ImageSize {
-        self.size
-    }
+    pub const fn size(&self) -> ImageSize { self.size }
 }
 
 /// Replaceable pixel transformation boundary. Inputs have already been validated and decoded.
@@ -113,16 +109,17 @@ impl ImagePreprocessor for DefaultImagePreprocessor {
         validate_size(field, size)?;
         let filter = match operation {
             ImagePreparation::Mask(_) => FilterType::Nearest,
-            ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => FilterType::CatmullRom,
+            ImagePreparation::Source(_) | ImagePreparation::CharacterReference(_) => {
+                FilterType::CatmullRom
+            },
         };
         let bytes = super::fit::fit_decoded(field, image.pixels(), size, filter)?;
         Ok(PreparedImage { bytes, size })
     }
 }
 
-
 #[cfg(any(feature = "generation", test))]
-pub(crate) fn prepare_image(
+pub fn prepare_image(
     preprocessor: &dyn ImagePreprocessor,
     field: &str,
     image: &EncodedImage,
@@ -133,15 +130,21 @@ pub(crate) fn prepare_image(
     let prepared = preprocessor.prepare(field, image, operation)?;
     if prepared.size() != expected {
         return Err(InvalidRequest::PreparedImageSizeMismatch {
-            field: field.to_owned(), expected, actual: prepared.size(),
-        }.into());
+            field: field.to_owned(),
+            expected,
+            actual: prepared.size(),
+        }
+        .into());
     }
     Ok(prepared)
 }
 
 fn validate_size(field: &str, size: ImageSize) -> Result<(), BridgeError> {
     if size.width == 0 || size.height == 0 {
-        return Err(InvalidRequest::ZeroImageDimension { field: field.to_owned() }.into());
+        return Err(InvalidRequest::ZeroImageDimension {
+            field: field.to_owned(),
+        }
+        .into());
     }
     Ok(())
 }

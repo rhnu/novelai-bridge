@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+
 use super::{CharacterPosition, GenerateImageRequest, GenerationCore};
 
 const TRANSPARENT_BACKGROUND_TAG: &str = ", transparent background";
@@ -35,7 +36,7 @@ pub struct ResolvedPrompts {
 #[non_exhaustive]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ResolvedCharacterPrompt {
-    /// Index in the originating [`CharacterSet::characters`].
+    /// Index in the originating [`crate::CharacterSet::characters`].
     pub index: usize,
     /// Effective normalized position used by every wire representation.
     pub position: CharacterPosition,
@@ -107,8 +108,11 @@ impl GenerateImageRequest {
             prompt: self.core.assemble_prompt(),
             negative_prompt: self.core.assemble_negative_prompt(),
             characters,
-            use_coords: self.characters.as_ref().and_then(|set| set.use_coords).unwrap_or(false),
+            use_coords: self
+                .characters
+                .as_ref()
+                .and_then(|set| set.use_coords)
+                .unwrap_or(false),
         }
     }
 }
-

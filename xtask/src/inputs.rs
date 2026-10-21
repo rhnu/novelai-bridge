@@ -23,7 +23,11 @@ pub fn mask(args: &RunArgs, size: ImageSize) -> TaskResult<EncodedImage> {
     let horizontal = size.width / 4..size.width * 3 / 4;
     let vertical = size.height / 4..size.height * 3 / 4;
     let image = image::RgbImage::from_fn(size.width, size.height, |column, row| {
-        let value = if horizontal.contains(&column) && vertical.contains(&row) { 255 } else { 0 };
+        let value = if horizontal.contains(&column) && vertical.contains(&row) {
+            255
+        } else {
+            0
+        };
         image::Rgb([value, value, value])
     });
     synthesized(args, "mask", image)

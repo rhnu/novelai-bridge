@@ -9,7 +9,7 @@ use unicode_normalization::UnicodeNormalization;
 mod asset;
 #[cfg(test)]
 mod tests;
-use super::{bpe::ByteBpe, FramingPolicy, TokenId, TokenizerAsset, TokenizerError};
+use super::{FramingPolicy, TokenId, TokenizerAsset, TokenizerError, bpe::ByteBpe};
 
 /// Unicode normalization applied before pre-tokenization.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -40,9 +40,17 @@ impl QwenTokenizer {
     /// Returns [`TokenizerError`] when either file is not valid JSON, the tokenizer model is not a
     /// BPE definition, vocabulary IDs are duplicated, a merge references a symbol outside the
     /// vocabulary, or a special token collides with an ordinary vocabulary entry.
-    pub fn from_assets(tokenizer_json: &[u8], tokenizer_config_json: Option<&[u8]>) -> Result<Self, TokenizerError> {
+    pub fn from_assets(
+        tokenizer_json: &[u8],
+        tokenizer_config_json: Option<&[u8]>,
+    ) -> Result<Self, TokenizerError> {
         let parsed = asset::load(tokenizer_json, tokenizer_config_json)?;
-        Ok(Self { bpe: parsed.bpe, added_tokens: parsed.added_tokens, normalization: parsed.normalization, pattern: parsed.pattern })
+        Ok(Self {
+            bpe: parsed.bpe,
+            added_tokens: parsed.added_tokens,
+            normalization: parsed.normalization,
+            pattern: parsed.pattern,
+        })
     }
 
     /// Returns the number of vocabulary entries.
@@ -112,7 +120,8 @@ impl QwenTokenizer {
             })?;
             // Split(Isolated) keeps unmatched spans as well as matches.
             if cursor < piece.start() {
-                self.bpe.encode_piece(&normalized[cursor..piece.start()], out);
+                self.bpe
+                    .encode_piece(&normalized[cursor..piece.start()], out);
             }
             self.bpe.encode_piece(piece.as_str(), out);
             cursor = piece.end();
@@ -122,14 +131,12 @@ impl QwenTokenizer {
         }
         Ok(())
     }
-
 }
 
 impl super::TokenEncoder for QwenTokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
-        QwenTokenizer::encode(self, text, framing)
+        Self::encode(self, text, framing)
     }
-    fn vocabulary_size(&self) -> usize {
-        QwenTokenizer::vocabulary_size(self)
-    }
+
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }

@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
-use crate::Model;
 
 /// Image-to-image and inpainting input.
 ///
 /// Presence of [`Img2ImgRequest::mask`] switches the request from `img2img` to `infill`, which
-/// also swaps the wire model to the inpainting sibling returned by [`Model::inpainting_id`].
+/// also swaps the wire model to the inpainting sibling returned by [`crate::Model::inpainting_id`].
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Img2ImgRequest {
     /// Validated source image.
@@ -47,7 +46,5 @@ impl Img2ImgRequest {
 
     /// Returns `true` when this request targets the infill pipeline.
     #[must_use]
-    pub const fn is_infill(&self) -> bool {
-        self.mask.is_some()
-    }
+    pub const fn is_infill(&self) -> bool { self.mask.is_some() }
 }

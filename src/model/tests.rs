@@ -7,7 +7,10 @@ fn registry_identity_is_unique_and_serialization_uses_it() {
     for model in Model::ALL {
         assert_eq!(model.descriptor().identity().model, model);
         let serialized = serde_json::to_string(&model).unwrap();
-        assert_eq!(serde_json::from_str::<String>(&serialized).unwrap(), model.as_str());
+        assert_eq!(
+            serde_json::from_str::<String>(&serialized).unwrap(),
+            model.as_str()
+        );
         assert_eq!(serde_json::from_str::<Model>(&serialized).unwrap(), model);
     }
     assert!(serde_json::from_str::<Model>("\"unknown-model\"").is_err());
@@ -24,7 +27,10 @@ fn registered_factory_values_satisfy_their_constraints() {
         assert!((constraints.samples.min..=constraints.samples.max).contains(&defaults.n_samples));
         assert!(defaults.size.pixels() <= constraints.canvas.max_pixels);
         for dimension in [defaults.size.width, defaults.size.height] {
-            assert!((constraints.canvas.dimension.min..=constraints.canvas.dimension.max).contains(&dimension));
+            assert!(
+                (constraints.canvas.dimension.min..=constraints.canvas.dimension.max)
+                    .contains(&dimension)
+            );
             assert!(dimension.is_multiple_of(constraints.canvas.multiple));
         }
     }
@@ -32,9 +38,22 @@ fn registered_factory_values_satisfy_their_constraints() {
 
 #[test]
 fn geometry_and_schedule_rules_are_independent_of_wire_shape() {
-    assert!((CharacterPositionProfile::Grid5x5.resolve_coordinate(0.49) - 0.5).abs() < f32::EPSILON);
-    assert!((CharacterPositionProfile::Freeform.resolve_coordinate(0.681) - 0.681).abs() < f32::EPSILON);
-    assert_eq!(NoiseScheduleSupport::ExplicitOnly.resolve(crate::NoiseSchedule::Native), crate::NoiseSchedule::Karras);
-    assert_eq!(NoiseScheduleSupport::NativeAndExplicit.resolve(crate::NoiseSchedule::Native), crate::NoiseSchedule::Native);
-    assert_eq!(NoiseScheduleSupport::ExplicitOnly.resolve(crate::NoiseSchedule::Exponential), crate::NoiseSchedule::Exponential);
+    assert!(
+        (CharacterPositionProfile::Grid5x5.resolve_coordinate(0.49) - 0.5).abs() < f32::EPSILON
+    );
+    assert!(
+        (CharacterPositionProfile::Freeform.resolve_coordinate(0.681) - 0.681).abs() < f32::EPSILON
+    );
+    assert_eq!(
+        NoiseScheduleSupport::ExplicitOnly.resolve(crate::NoiseSchedule::Native),
+        crate::NoiseSchedule::Karras
+    );
+    assert_eq!(
+        NoiseScheduleSupport::NativeAndExplicit.resolve(crate::NoiseSchedule::Native),
+        crate::NoiseSchedule::Native
+    );
+    assert_eq!(
+        NoiseScheduleSupport::ExplicitOnly.resolve(crate::NoiseSchedule::Exponential),
+        crate::NoiseSchedule::Exponential
+    );
 }

@@ -76,7 +76,7 @@ impl fmt::Display for ApiErrorKind {
             Self::AuthenticationFailed => f.write_str("API authentication failed"),
             Self::InsufficientCredit => {
                 f.write_str("API reported insufficient credit or subscription access")
-            }
+            },
             Self::RequestConflict => f.write_str("API reported a request conflict"),
             Self::RateLimited { retry_after } => {
                 if let Some(delay) = retry_after {
@@ -84,7 +84,7 @@ impl fmt::Display for ApiErrorKind {
                 } else {
                     f.write_str("API rate limited the request")
                 }
-            }
+            },
             Self::ServerError => f.write_str("API returned a server error"),
             Self::UnexpectedStatus => f.write_str("API returned an unexpected status"),
         }
@@ -114,7 +114,5 @@ impl ApiErrorReason {
 }
 
 impl fmt::Display for ApiErrorReason {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
 }

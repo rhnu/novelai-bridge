@@ -1,6 +1,9 @@
-use super::{Normalizer, Field};
-use crate::{BridgeError, Character, CharacterPositionProfile, CharacterSet, GenerateImageRequest, InvalidRequest, ModelDescriptor};
-use crate::generation::{CharacterField, NormalizationChange, characters::is_center_position};
+use super::{Field, Normalizer};
+use crate::{
+    BridgeError, Character, CharacterPositionProfile, CharacterSet, GenerateImageRequest,
+    InvalidRequest, ModelDescriptor,
+    generation::{CharacterField, NormalizationChange, characters::is_center_position},
+};
 
 impl Normalizer {
     pub(super) fn gate_characters(
@@ -42,7 +45,10 @@ impl Normalizer {
             {
                 character.enabled = false;
                 self.record(
-                    Field::Character { index, field: CharacterField::Entry },
+                    Field::Character {
+                        index,
+                        field: CharacterField::Entry,
+                    },
                     NormalizationChange::CharacterLimit {
                         index,
                         limit: descriptor.prompt().max_characters(),
@@ -53,12 +59,21 @@ impl Normalizer {
         Ok(())
     }
 
-    pub(super) fn validate_character_inputs(&self, characters: &[Character]) -> Result<(), BridgeError> {
-        for (index, character) in characters.iter().enumerate().filter(|(_, character)| character.enabled) {
+    pub(super) fn validate_character_inputs(characters: &[Character]) -> Result<(), BridgeError> {
+        for (index, character) in characters
+            .iter()
+            .enumerate()
+            .filter(|(_, character)| character.enabled)
+        {
             if character.prompt.trim().is_empty() {
                 return Err(InvalidRequest::EmptyField {
-                    field: Field::Character { index, field: CharacterField::Prompt }.to_string(),
-                }.into());
+                    field: Field::Character {
+                        index,
+                        field: CharacterField::Prompt,
+                    }
+                    .to_string(),
+                }
+                .into());
             }
         }
         Ok(())
@@ -76,13 +91,19 @@ impl Normalizer {
             .filter(|(_, ch)| ch.enabled)
         {
             ch.position.x = self.normalize_f32_range(
-                Field::Character { index, field: CharacterField::X },
+                Field::Character {
+                    index,
+                    field: CharacterField::X,
+                },
                 ch.position.x,
                 0.0,
                 1.0,
             )?;
             ch.position.y = self.normalize_f32_range(
-                Field::Character { index, field: CharacterField::Y },
+                Field::Character {
+                    index,
+                    field: CharacterField::Y,
+                },
                 ch.position.y,
                 0.0,
                 1.0,
@@ -97,7 +118,10 @@ impl Normalizer {
             .enumerate()
             .filter(|(_, ch)| ch.enabled)
         {
-            for (axis, value) in [(CharacterField::X, &mut ch.position.x), (CharacterField::Y, &mut ch.position.y)] {
+            for (axis, value) in [
+                (CharacterField::X, &mut ch.position.x),
+                (CharacterField::Y, &mut ch.position.y),
+            ] {
                 let effective = if use_coords {
                     positioning.resolve_coordinate(*value)
                 } else {

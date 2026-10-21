@@ -1,4 +1,7 @@
-use crate::{GenerateImageRequest, GenerateImageStreamRequest, ImageTokenizerKind, FramingPolicy, TokenCount, TokenizerError, Tokenizers};
+use crate::{
+    FramingPolicy, GenerateImageRequest, GenerateImageStreamRequest, ImageTokenizerKind,
+    TokenCount, TokenizerError, Tokenizers,
+};
 
 /// Identifies which prompt field a token count belongs to.
 #[non_exhaustive]
@@ -84,9 +87,7 @@ impl PromptTokenUsage {
 
     /// Returns `true` when any counted field exceeds the model's limit.
     #[must_use]
-    pub fn is_over_limit(&self) -> bool {
-        self.over_limit().next().is_some()
-    }
+    pub fn is_over_limit(&self) -> bool { self.over_limit().next().is_some() }
 }
 
 impl PromptField {
@@ -103,7 +104,7 @@ impl PromptField {
                     ".prompt"
                 };
                 format!("characters[{index}]{suffix}")
-            }
+            },
         }
     }
 }
@@ -225,7 +226,6 @@ impl GenerateImageStreamRequest {
         self.base.count_tokens_with(tokenizers, framing)
     }
 }
-
 
 #[cfg(test)]
 mod tests;

@@ -1,9 +1,9 @@
 use futures_util::StreamExt;
 use novelai_bridge::{
-    CharacterReference, CharacterReferenceType, Client, EncodeVibeRequest, GenerateImageRequest,
-    GenerateImageStreamRequest, GenerationDelivery, ImageSize, Img2ImgRequest, Model, ReferenceSet,
-    StreamMode, StreamingTransport, TransportMethod, TransportRequest, VibeReference,
-    VibeTransferConfig, DEFAULT_IMAGE_BASE,
+    CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE, EncodeVibeRequest,
+    GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery, ImageSize,
+    Img2ImgRequest, Model, ReferenceSet, StreamMode, StreamingTransport, TransportMethod,
+    TransportRequest, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -48,12 +48,21 @@ pub fn print_capabilities() {
     }
 }
 
-pub fn shape(args: &RunArgs, model: Model, size: ImageSize, edits: &RequestEdits) -> TaskResult<()> {
+pub fn shape(
+    args: &RunArgs,
+    model: Model,
+    size: ImageSize,
+    edits: &RequestEdits,
+) -> TaskResult<()> {
     let (path, body, method) = match args.preset {
         Preset::Subscription => ("/user/subscription", None, TransportMethod::Get),
         Preset::Vibe => (
             "/ai/encode-vibe",
-            Some(encode_vibe_request(args, model, size)?.prepare()?.encode()?),
+            Some(
+                encode_vibe_request(args, model, size)?
+                    .prepare()?
+                    .encode()?,
+            ),
             TransportMethod::Post,
         ),
         _ => {
@@ -67,8 +76,17 @@ pub fn shape(args: &RunArgs, model: Model, size: ImageSize, edits: &RequestEdits
             } else {
                 "/ai/generate-image"
             };
-            (path, Some(generation_request(args, model, size)?.normalize()?.prepare()?.encode(delivery)?), TransportMethod::Post)
-        }
+            (
+                path,
+                Some(
+                    generation_request(args, model, size)?
+                        .normalize()?
+                        .prepare()?
+                        .encode(delivery)?,
+                ),
+                TransportMethod::Post,
+            )
+        },
     };
     edits.apply(TransportRequest {
         method,
@@ -80,15 +98,22 @@ pub fn shape(args: &RunArgs, model: Model, size: ImageSize, edits: &RequestEdits
 }
 
 pub async fn execute<T: StreamingTransport + ?Sized>(
-    client: &Client<T>, args: &RunArgs, model: Model, size: ImageSize,
+    client: &Client<T>,
+    args: &RunArgs,
+    model: Model,
+    size: ImageSize,
 ) -> TaskResult<String> {
     match args.preset {
-        Preset::Subscription => Ok(render::subscription_summary(&client.get_subscription().await?)),
+        Preset::Subscription => Ok(render::subscription_summary(
+            &client.get_subscription().await?,
+        )),
         Preset::Stream => {
-            let stream = client.generate_stream(GenerateImageStreamRequest {
-                base: generation_request(args, model, size)?,
-                stream: StreamMode::default(),
-            }).await?;
+            let stream = client
+                .generate_stream(GenerateImageStreamRequest {
+                    base: generation_request(args, model, size)?,
+                    stream: StreamMode::default(),
+                })
+                .await?;
             let resolved_seed = stream.resolved_seed;
             let mut chunks = 0_usize;
             let mut inner = stream.into_inner();
@@ -96,28 +121,45 @@ pub async fn execute<T: StreamingTransport + ?Sized>(
                 let chunk = item?;
                 chunks += 1;
                 if chunks <= 3 {
-                    println!("  chunk {chunks} type={} samp={} step={:?}", chunk.event_type, chunk.samp_ix, chunk.step_ix);
+                    println!(
+                        "  chunk {chunks} type={} samp={} step={:?}",
+                        chunk.event_type, chunk.samp_ix, chunk.step_ix
+                    );
                 }
             }
             Ok(format!("seed {resolved_seed}, {chunks} chunk(s)"))
-        }
+        },
         Preset::Vibe => {
-            let encoded = client.encode_vibe(encode_vibe_request(args, model, size)?).await?;
+            let encoded = client
+                .encode_vibe(encode_vibe_request(args, model, size)?)
+                .await?;
             let mut request = base_request(args, model, size);
             request.references = Some(ReferenceSet {
                 vibe_transfer: Some(VibeTransferConfig {
-                    references: vec![VibeReference { vibe_data_cache: encoded, strength: 0.6 }],
+                    references: vec![VibeReference {
+                        vibe_data_cache: encoded,
+                        strength: 0.6,
+                    }],
                     strength: 1.0,
                 }),
                 character_references: Vec::new(),
             });
             report::generation(&client.generate(request).await?, args)
-        }
-        _ => report::generation(&client.generate(generation_request(args, model, size)?).await?, args),
+        },
+        _ => report::generation(
+            &client
+                .generate(generation_request(args, model, size)?)
+                .await?,
+            args,
+        ),
     }
 }
 
-fn encode_vibe_request(args: &RunArgs, model: Model, size: ImageSize) -> TaskResult<EncodeVibeRequest> {
+fn encode_vibe_request(
+    args: &RunArgs,
+    model: Model,
+    size: ImageSize,
+) -> TaskResult<EncodeVibeRequest> {
     Ok(EncodeVibeRequest {
         image: inputs::source(args, size)?,
         information_extracted: 1.0,
@@ -126,7 +168,11 @@ fn encode_vibe_request(args: &RunArgs, model: Model, size: ImageSize) -> TaskRes
     })
 }
 
-fn generation_request(args: &RunArgs, model: Model, size: ImageSize) -> TaskResult<GenerateImageRequest> {
+fn generation_request(
+    args: &RunArgs,
+    model: Model,
+    size: ImageSize,
+) -> TaskResult<GenerateImageRequest> {
     let mut request = base_request(args, model, size);
     match args.preset {
         Preset::I2i | Preset::Infill => {
@@ -135,7 +181,7 @@ fn generation_request(args: &RunArgs, model: Model, size: ImageSize) -> TaskResu
                 input.mask = Some(inputs::mask(args, size)?);
             }
             request.img2img = Some(input);
-        }
+        },
         Preset::Charref => {
             request.references = Some(ReferenceSet {
                 vibe_transfer: None,
@@ -146,8 +192,8 @@ fn generation_request(args: &RunArgs, model: Model, size: ImageSize) -> TaskResu
                     strength: 0.6,
                 }],
             });
-        }
-        _ => {}
+        },
+        _ => {},
     }
     Ok(request)
 }

@@ -20,6 +20,7 @@ const MAX_PER_IMAGE_COST: u32 = 140;
 const COST_AREA_TERM: f64 = 2.951_823_174_884_865e-6;
 /// Area-times-steps term of the `NovelAI` NAI 3, 4, 4.5, 5 cost function.
 const COST_AREA_STEP_TERM: f64 = 5.753_298_233_447_344e-7;
+
 /// Estimates the Anlas cost of a NAI 3, 4, 4.5, 5 generation request.
 ///
 /// The formula mirrors the cost function used by the `NovelAI` web client at the pricing-document
@@ -29,10 +30,16 @@ const COST_AREA_STEP_TERM: f64 = 5.753_298_233_447_344e-7;
 #[must_use]
 pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     let pixels = input.size.pixels();
-    #[allow(clippy::cast_precision_loss, reason = "Pricing follows the provider floating point area formula")]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Pricing follows the provider floating point area formula"
+    )]
     let pixels_f = pixels as f64;
     // Keep the web client's operation order; an FMA can cross an integer ceil boundary.
-    #[allow(clippy::suboptimal_flops, reason = "Changing operation order can cross an integer price rounding boundary")]
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "Changing operation order can cross an integer price rounding boundary"
+    )]
     let base = (COST_AREA_TERM * pixels_f
         + COST_AREA_STEP_TERM * pixels_f * f64::from(input.steps))
     .ceil();
@@ -67,10 +74,17 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     } else {
         0
     };
-    let vibe_reference_overage = if descriptor.resolve_references(
-        input.mode.generation_mode(),
-        crate::ReferenceIntent { vibe: input.vibe_reference_count > 0, character: character_reference_count > 0 },
-    ).vibe.is_available() {
+    let vibe_reference_overage = if descriptor
+        .resolve_references(
+            input.mode.generation_mode(),
+            crate::ReferenceIntent {
+                vibe: input.vibe_reference_count > 0,
+                character: character_reference_count > 0,
+            },
+        )
+        .vibe
+        .is_available()
+    {
         input
             .vibe_reference_count
             .saturating_sub(FREE_VIBE_REFERENCE_COUNT)
@@ -156,7 +170,11 @@ const fn pricing_sample_limit(pixels: u64) -> u32 {
     }
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "Explicit bounds checks saturate the value before conversion")]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Explicit bounds checks saturate the value before conversion"
+)]
 fn saturating_u32(value: f64) -> u32 {
     if value <= 0.0 {
         0

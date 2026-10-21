@@ -1,28 +1,38 @@
 #![cfg(all(feature = "tokenizer", feature = "client"))]
 
-mod support;
+use std::sync::{Arc, LazyLock};
 
 use novelai_bridge::{
-    BridgeError, Character, CharacterSet, Client, ClientConfig, FramingPolicy, GenerateImageRequest,
-    GenerateImageStreamRequest, ImageTokenizerKind, InvalidRequest, Model, QualityPreset,
-    TokenCount, TokenEncoder, TokenId, TokenizerError, Tokenizers, UcPreset,
+    BridgeError, Character, CharacterSet, Client, ClientConfig, FramingPolicy,
+    GenerateImageRequest, GenerateImageStreamRequest, ImageTokenizerKind, InvalidRequest, Model,
+    QualityPreset, TokenCount, TokenEncoder, TokenId, TokenizerError, Tokenizers, UcPreset,
 };
-use std::sync::{Arc, LazyLock};
-use support::MockTransport;
 
-struct CharacterEncoder { framing: usize }
+use crate::support::MockTransport;
+
+struct CharacterEncoder {
+    framing: usize,
+}
+
 impl TokenEncoder for CharacterEncoder {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
         let mut tokens: Vec<TokenId> = text.chars().map(u32::from).collect();
-        if framing.includes_framing() { tokens.extend(std::iter::repeat_n(0, self.framing)); }
+        if framing.includes_framing() {
+            tokens.extend(std::iter::repeat_n(0, self.framing));
+        }
         Ok(tokens)
     }
+
     fn vocabulary_size(&self) -> usize { 128 }
 }
 
 static TOKENIZERS: LazyLock<Arc<Tokenizers>> = LazyLock::new(|| {
     let mut tokenizers = Tokenizers::new();
-    for (kind, framing) in [(ImageTokenizerKind::Clip, 2), (ImageTokenizerKind::T5, 1), (ImageTokenizerKind::Qwen, 0)] {
+    for (kind, framing) in [
+        (ImageTokenizerKind::Clip, 2),
+        (ImageTokenizerKind::T5, 1),
+        (ImageTokenizerKind::Qwen, 0),
+    ] {
         let _ = tokenizers.register(kind, Arc::new(CharacterEncoder { framing }));
     }
     Arc::new(tokenizers)
@@ -73,8 +83,8 @@ fn all_counting_entry_points_include_presets_and_use_the_same_framing() {
         ..Default::default()
     };
     assert_eq!(stream.count_tokens(&TOKENIZERS).unwrap(), usage);
-    let client =
-        Client::new(Arc::new(MockTransport::default()), ClientConfig::default()).with_tokenizers(TOKENIZERS.clone());
+    let client = Client::new(Arc::new(MockTransport::default()), ClientConfig::default())
+        .with_tokenizers(TOKENIZERS.clone());
     assert_eq!(client.count_tokens(&params).unwrap(), usage);
     assert_eq!(
         stream
@@ -112,8 +122,8 @@ async fn strict_limits_reject_each_field_before_transport() {
     ] {
         for negative in [false, true] {
             let transport = MockTransport::default();
-            let client =
-                Client::new(Arc::new(transport.clone()), ClientConfig::default()).with_tokenizers(TOKENIZERS.clone());
+            let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+                .with_tokenizers(TOKENIZERS.clone());
             let mut params = request(model);
             params.strict_mode = true;
             if negative {
@@ -140,7 +150,8 @@ async fn strict_limits_reject_each_field_before_transport() {
 #[tokio::test]
 async fn streaming_shares_the_same_limit_check_and_non_strict_keeps_text() {
     let transport = MockTransport::default();
-    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default()).with_tokenizers(TOKENIZERS.clone());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+        .with_tokenizers(TOKENIZERS.clone());
     let mut params = request(Model::NaiDiffusion5Curated);
     params.core.prompt = "hello ".repeat(1000);
     params.strict_mode = true;
@@ -200,7 +211,8 @@ async fn enabled_characters_preserve_original_indices_and_positions() {
     assert_eq!(usage.characters.len(), 1);
     assert_eq!(usage.characters[0].index, 1);
     let transport = MockTransport::default();
-    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default()).with_tokenizers(TOKENIZERS.clone());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+        .with_tokenizers(TOKENIZERS.clone());
     client.generate(params.clone()).await.unwrap();
     let body = transport.last_body().unwrap();
     assert_eq!(
@@ -223,7 +235,8 @@ async fn enabled_characters_preserve_original_indices_and_positions() {
             character.prompt = "hello ".repeat(1000);
         }
         let transport = MockTransport::default();
-        let client = Client::new(Arc::new(transport.clone()), ClientConfig::default()).with_tokenizers(TOKENIZERS.clone());
+        let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+            .with_tokenizers(TOKENIZERS.clone());
         let expected = if negative {
             "characters[1].negative_prompt"
         } else {
@@ -253,8 +266,8 @@ async fn no_tokenizers_preserves_generation_but_explicit_missing_registry_errors
     client.generate(params.clone()).await.unwrap();
     assert!(transport.last_body().is_some());
     let transport = MockTransport::default();
-    let client =
-        Client::new(Arc::new(transport.clone()), ClientConfig::default()).with_tokenizers(Arc::new(Tokenizers::new()));
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+        .with_tokenizers(Arc::new(Tokenizers::new()));
     assert!(matches!(
         client.generate(params).await,
         Err(BridgeError::Tokenizer(

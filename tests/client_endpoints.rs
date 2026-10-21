@@ -1,7 +1,5 @@
 #![cfg(feature = "client")]
 
-mod support;
-
 use std::sync::Arc;
 #[cfg(feature = "credit-observer")]
 use std::sync::Mutex;
@@ -9,9 +7,8 @@ use std::sync::Mutex;
 #[cfg(feature = "credit-observer")]
 use async_trait::async_trait;
 use novelai_bridge::{
-    ClientConfig, BridgeError, Client,
-    DirectorCommand, EncodeVibeRequest, EncodedImage, InvalidRequest, Model,
-    RunDirectorToolRequest,
+    BridgeError, Client, ClientConfig, DirectorCommand, EncodeVibeRequest, EncodedImage,
+    InvalidRequest, Model, RunDirectorToolRequest,
 };
 #[cfg(feature = "credit-observer")]
 use novelai_bridge::{CreditEvent, CreditObserver, RequestCostEstimate};
@@ -26,24 +23,28 @@ struct RecordingObserver {
 #[async_trait]
 impl CreditObserver for RecordingObserver {
     async fn observe(&self, event: CreditEvent) {
-        self.events.lock().unwrap().push(event);
+        self.events
+            .lock()
+            .expect("test event mutex is not poisoned")
+            .push(event);
     }
 }
+
 use serde_json::json;
 
-use support::{
+use crate::support::{
     MockTransport, create_png_base64, create_zip_with_single_png, create_zip_with_two_images,
 };
 
 fn image(width: u32, height: u32) -> EncodedImage {
-    EncodedImage::from_base64(&create_png_base64(width, height)).unwrap()
+    EncodedImage::from_base64(&create_png_base64(width, height)).expect("fixture image is valid")
 }
 
 #[tokio::test]
 async fn encode_vibe_returns_base64() {
     let transport = MockTransport::default();
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let encoded = client
         .encode_vibe(EncodeVibeRequest {
@@ -70,7 +71,8 @@ async fn encode_vibe_observation_reports_a_fixed_cost() {
     let transport = MockTransport::default();
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
     let observer = Arc::new(RecordingObserver::default());
-    let client = Client::new(Arc::new(transport), Default::default()).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport), ClientConfig::default())
+        .with_credit_observer(Arc::<RecordingObserver>::clone(&observer));
 
     client
         .encode_vibe(EncodeVibeRequest {
@@ -102,7 +104,7 @@ fn encoded_image_rejects_invalid_base64_at_construction() {
 #[tokio::test]
 async fn encode_vibe_rejects_models_without_vibe_support() {
     let transport = MockTransport::default();
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let error = client
         .encode_vibe(EncodeVibeRequest {
@@ -126,7 +128,7 @@ async fn encode_vibe_rejects_models_without_vibe_support() {
 async fn encode_vibe_clamps_information_extracted_when_not_strict() {
     let transport = MockTransport::default();
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let _ = client
         .encode_vibe(EncodeVibeRequest {
@@ -145,7 +147,7 @@ async fn encode_vibe_clamps_information_extracted_when_not_strict() {
 #[tokio::test]
 async fn encode_vibe_rejects_information_extracted_when_strict() {
     let transport = MockTransport::default();
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let error = client
         .encode_vibe(EncodeVibeRequest {
@@ -168,7 +170,7 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
 #[tokio::test]
 async fn director_tool_request_includes_req_type_dimensions_and_image() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let image_base64 = create_png_base64(320, 240);
 
     let _ = client
@@ -194,7 +196,7 @@ async fn director_tool_request_includes_req_type_dimensions_and_image() {
 #[tokio::test]
 async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
     let transport_zip = MockTransport::with_bytes_response(create_zip_with_two_images());
-    let client_zip = Client::new(Arc::new(transport_zip), Default::default());
+    let client_zip = Client::new(Arc::new(transport_zip), ClientConfig::default());
     let generated = client_zip
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
@@ -203,11 +205,11 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
         })
         .await
         .unwrap();
-    assert_eq!(generated.bytes, support::create_png_bytes(2, 2));
+    assert_eq!(generated.bytes, crate::support::create_png_bytes(2, 2));
 
-    let raw_png = support::create_png_bytes(2, 2);
+    let raw_png = crate::support::create_png_bytes(2, 2);
     let transport_raw = MockTransport::with_bytes_response(raw_png.clone());
-    let client_raw = Client::new(Arc::new(transport_raw), Default::default());
+    let client_raw = Client::new(Arc::new(transport_raw), ClientConfig::default());
     let fallback = client_raw
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
@@ -223,7 +225,7 @@ async fn director_extracts_first_image_from_zip_and_fallbacks_to_raw_bytes() {
 #[tokio::test]
 async fn director_tool_clamps_defry_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let _ = client
         .run_director_tool(RunDirectorToolRequest {
@@ -244,7 +246,7 @@ async fn director_tool_clamps_defry_when_not_strict() {
 #[tokio::test]
 async fn director_emotion_requires_nonempty_prompt_and_preserves_valid_parameters() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let error = client
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
@@ -283,7 +285,7 @@ async fn director_emotion_requires_nonempty_prompt_and_preserves_valid_parameter
 #[tokio::test]
 async fn director_rejects_out_of_range_defry_in_strict_mode() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::new(Arc::new(transport.clone()), Default::default());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
     let error = client
         .run_director_tool(RunDirectorToolRequest {
             image: image(48, 48),
@@ -310,7 +312,7 @@ async fn get_subscription_records_last_subscription() {
         "tier": 3,
         "trainingStepsLeft": { "purchasedTrainingSteps": 55 }
     }));
-    let client = Client::new(Arc::new(transport), Default::default());
+    let client = Client::new(Arc::new(transport), ClientConfig::default());
     assert!(client.last_subscription().is_none());
 
     let _ = client.get_subscription().await.unwrap();
@@ -323,7 +325,9 @@ async fn get_subscription_records_last_subscription() {
 async fn custom_base_urls_route_image_service_endpoints() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     transport.set_encode_vibe_response(vec![1]);
-    transport.set_json_response(json!({ "tier": 1, "trainingStepsLeft": { "fixedTrainingStepsLeft": 0 } }));
+    transport.set_json_response(
+        json!({ "tier": 1, "trainingStepsLeft": { "fixedTrainingStepsLeft": 0 } }),
+    );
     let client = Client::new(
         Arc::new(transport.clone()),
         ClientConfig {

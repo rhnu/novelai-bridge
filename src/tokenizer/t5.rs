@@ -10,11 +10,11 @@
 
 use std::collections::HashMap;
 
-mod normalizer;
 mod asset;
-mod wire;
+mod normalizer;
 #[cfg(test)]
 mod tests;
+mod wire;
 use normalizer::Normalizer;
 
 use super::{
@@ -81,9 +81,7 @@ impl T5Tokenizer {
 
     /// Returns the number of pieces in the model.
     #[must_use]
-    pub const fn vocabulary_size(&self) -> usize {
-        self.pieces.len()
-    }
+    pub const fn vocabulary_size(&self) -> usize { self.pieces.len() }
 
     /// Encodes text into T5 token IDs.
     ///
@@ -110,10 +108,11 @@ impl T5Tokenizer {
     /// platforms regardless of hash iteration order or floating-point comparison edge cases.
     // Upstream scores are f32, and exact score ties (not approximate equality) break on IDs.
     // Separate multiply/add preserves upstream rounding instead of introducing FMA rounding.
-    #[allow(
+    #[expect(
         clippy::cast_precision_loss,
         clippy::float_cmp,
-        clippy::suboptimal_flops
+        clippy::suboptimal_flops,
+        reason = "SentencePiece segmentation requires upstream f32 arithmetic and exact score ties"
     )]
     fn viterbi(&self, text: &str) -> Vec<TokenId> {
         let bytes = text.len();
@@ -122,7 +121,7 @@ impl T5Tokenizer {
         best[0] = Some((0.0, 0, 0));
 
         for start in 0..bytes {
-            let Some((base_score, _, _)) = best[start] else {
+            let Some((base_score, ..)) = best[start] else {
                 continue;
             };
             if !text.is_char_boundary(start) {
@@ -150,7 +149,7 @@ impl T5Tokenizer {
                 let candidate = (score, start, id);
                 match best[end] {
                     Some((existing, _, existing_id))
-                        if existing > score || (existing == score && existing_id <= id) => {}
+                        if existing > score || (existing == score && existing_id <= id) => {},
                     _ => best[end] = Some(candidate),
                 }
             }
@@ -159,7 +158,7 @@ impl T5Tokenizer {
             // segmentation always reaches the end instead of failing.
             if !has_single {
                 let score = base_score + self.unknown_score;
-                if best[next].is_none_or(|(existing, _, _)| existing < score) {
+                if best[next].is_none_or(|(existing, ..)| existing < score) {
                     best[next] = Some((score, start, self.unk_id));
                 }
             }
@@ -192,9 +191,8 @@ fn next_char_boundary(text: &str, from: usize) -> usize {
 
 impl super::TokenEncoder for T5Tokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
-        Ok(T5Tokenizer::encode(self, text, framing))
+        Ok(Self::encode(self, text, framing))
     }
-    fn vocabulary_size(&self) -> usize {
-        T5Tokenizer::vocabulary_size(self)
-    }
+
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }

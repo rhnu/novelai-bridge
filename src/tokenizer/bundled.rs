@@ -1,4 +1,4 @@
-use super::{Tokenizers, TokenizerError};
+use super::{TokenizerError, Tokenizers};
 
 impl Tokenizers {
     /// Loads pinned assets from `novelai-bridge-tokenizer-assets`.
@@ -33,10 +33,8 @@ impl Tokenizers {
             .with_clip_merges(CLIP_MERGES_GZ)?
             .with_t5_sentencepiece(&t5)?
             .with_qwen_json(&qwen, Some(&config))?;
-        let _ = CACHE.set(registry.clone());
-        Ok(registry)
+        Ok(CACHE.get_or_init(|| registry).clone())
     }
-
 }
 
 fn expand(bytes: &[u8], asset: super::TokenizerAsset) -> Result<Vec<u8>, TokenizerError> {

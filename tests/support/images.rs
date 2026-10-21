@@ -9,9 +9,15 @@ pub fn create_zip_with_single_png() -> Vec<u8> {
     let mut cursor = Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut cursor);
     let options = zip::write::SimpleFileOptions::default();
-    writer.start_file("image.png", options).unwrap();
-    writer.write_all(&create_png_bytes(2, 2)).unwrap();
-    writer.finish().unwrap();
+    writer
+        .start_file("image.png", options)
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .write_all(&create_png_bytes(2, 2))
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .finish()
+        .expect("in-memory test ZIP operation succeeds");
     cursor.into_inner()
 }
 
@@ -21,11 +27,21 @@ pub fn create_zip_with_two_images() -> Vec<u8> {
     let mut cursor = Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut cursor);
     let options = zip::write::SimpleFileOptions::default();
-    writer.start_file("first.png", options).unwrap();
-    writer.write_all(&create_png_bytes(2, 2)).unwrap();
-    writer.start_file("second.png", options).unwrap();
-    writer.write_all(&create_png_bytes(3, 2)).unwrap();
-    writer.finish().unwrap();
+    writer
+        .start_file("first.png", options)
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .write_all(&create_png_bytes(2, 2))
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .start_file("second.png", options)
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .write_all(&create_png_bytes(3, 2))
+        .expect("in-memory test ZIP operation succeeds");
+    writer
+        .finish()
+        .expect("in-memory test ZIP operation succeeds");
     cursor.into_inner()
 }
 

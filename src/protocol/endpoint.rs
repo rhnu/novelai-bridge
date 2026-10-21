@@ -1,5 +1,5 @@
 #[derive(Copy, Clone)]
-pub(crate) enum Endpoint {
+pub enum Endpoint {
     GenerateImage,
     #[cfg(feature = "streaming")]
     GenerateImageStream,
@@ -9,7 +9,7 @@ pub(crate) enum Endpoint {
 }
 
 impl Endpoint {
-    pub(crate) const fn path(self) -> &'static str {
+    pub const fn path(self) -> &'static str {
         match self {
             Self::GenerateImage => "/ai/generate-image",
             #[cfg(feature = "streaming")]

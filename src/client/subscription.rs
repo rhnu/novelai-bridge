@@ -1,8 +1,7 @@
 use std::time::SystemTime;
 
-use crate::{BridgeError, SubscriptionInfo, Transport, subscription::SubscriptionResponse};
-
 use super::Client;
+use crate::{BridgeError, SubscriptionInfo, Transport, subscription::SubscriptionResponse};
 
 impl<T: Transport + ?Sized> Client<T> {
     /// Fetches the current subscription summary for the configured account.
@@ -14,9 +13,16 @@ impl<T: Transport + ?Sized> Client<T> {
     /// Returns [`BridgeError`] when the transport request fails or the response cannot be decoded.
     pub async fn get_subscription(&self) -> Result<SubscriptionInfo, BridgeError> {
         let endpoint = self.image_endpoint(crate::protocol::Endpoint::Subscription);
-        let raw = crate::protocol::get_json::<_, SubscriptionResponse>(&*self.transport, endpoint.as_str()).await?;
+        let raw = crate::protocol::get_json::<_, SubscriptionResponse>(
+            &*self.transport,
+            endpoint.as_str(),
+        )
+        .await?;
         let info = raw.into_info(SystemTime::now())?;
-        *self.account.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(info.clone());
+        *self
+            .account
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(info.clone());
         #[cfg(feature = "credit-observer")]
         if let Some(observation) = &self.observation {
             observation.observe_subscription(&info).await;

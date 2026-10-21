@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 mod wire;
 
-pub(crate) use wire::SubscriptionResponse;
+pub use wire::SubscriptionResponse;
 
 /// Free V5 generation allowance reported by `/user/subscription`.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,9 +33,7 @@ pub struct SubscriptionInfo {
 impl SubscriptionInfo {
     /// Whether this account belongs to the Opus tier.
     #[must_use]
-    pub const fn is_opus(&self) -> bool {
-        self.tier >= 3
-    }
+    pub const fn is_opus(&self) -> bool { self.tier >= 3 }
 
     /// Stable name of the subscription tier, when known.
     #[must_use]

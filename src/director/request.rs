@@ -30,7 +30,7 @@ pub enum DirectorCommand {
     },
 }
 
-/// Request used by [`crate::Client::run_director_tool`].
+/// Editable input for a director operation.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunDirectorToolRequest {
     /// Validated source image.

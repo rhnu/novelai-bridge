@@ -1,6 +1,8 @@
-use crate::{BridgeError, EncodeError, EncodeTarget, InvalidRequest, Model};
-use crate::generation::bounds::normalize_float;
 use super::{EncodeVibeRequest, wire::VibeRequestBody};
+use crate::{
+    BridgeError, EncodeError, EncodeTarget, InvalidRequest, Model,
+    parameters::bounds::normalize_float,
+};
 
 /// A validated encode-vibe operation with its encoded source image.
 #[derive(Debug)]
@@ -20,15 +22,25 @@ impl EncodeVibeRequest {
             return Err(InvalidRequest::UnsupportedModelFeature {
                 feature: "encode_vibe".to_owned(),
                 required_model: "a model implementing encoded vibe input".to_owned(),
-            }.into());
+            }
+            .into());
         }
         let information_extracted = normalize_float(
-            "information_extracted", self.information_extracted, 0.01, 1.0, self.strict_mode,
+            "information_extracted",
+            self.information_extracted,
+            0.01,
+            1.0,
+            self.strict_mode,
         )?;
         let body = VibeRequestBody {
-            image: self.image.to_base64(), information_extracted, model: self.model.as_str(),
+            image: self.image.to_base64(),
+            information_extracted,
+            model: self.model.as_str(),
         };
-        Ok(PreparedVibe { model: self.model, body })
+        Ok(PreparedVibe {
+            model: self.model,
+            body,
+        })
     }
 }
 

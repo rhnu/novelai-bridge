@@ -11,32 +11,64 @@ pub enum NormalizationPolicy {
 
 /// A coordinate or text within a character entry.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum CharacterField { Entry, Prompt, X, Y }
+pub enum CharacterField {
+    Entry,
+    Prompt,
+    X,
+    Y,
+}
 
 /// Numeric properties of a character reference.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum CharacterReferenceField { Fidelity, Strength }
+pub enum CharacterReferenceField {
+    Fidelity,
+    Strength,
+}
 
 /// Model-gated sampling guidance.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum GuidanceField { VarietyBoost, Decrisp, Smea }
+pub enum GuidanceField {
+    VarietyBoost,
+    Decrisp,
+    Smea,
+}
 
 /// Image-to-image input properties.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageInputField { Mask, Strength, Noise }
+pub enum ImageInputField {
+    Mask,
+    Strength,
+    Noise,
+}
 
 /// A typed location in the editable generation request.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GenerationField {
-    Prompt, Size, Width, Height, Samples, Quality, TransparentBackground, FurryMode,
-    Steps, Scale, CfgRescale, NoiseSchedule,
+    Prompt,
+    Size,
+    Width,
+    Height,
+    Samples,
+    Quality,
+    TransparentBackground,
+    FurryMode,
+    Steps,
+    Scale,
+    CfgRescale,
+    NoiseSchedule,
     Characters,
-    Character { index: usize, field: CharacterField },
+    Character {
+        index: usize,
+        field: CharacterField,
+    },
     Guidance(GuidanceField),
     ImageInput(ImageInputField),
     CharacterReferences,
-    CharacterReference { index: usize, field: CharacterReferenceField },
+    CharacterReference {
+        index: usize,
+        field: CharacterReferenceField,
+    },
     VibeTransfer,
     VibeStrength,
     VibeReferences,
@@ -70,16 +102,30 @@ impl fmt::Display for GenerationField {
             Self::VibeStrength => "references.vibe_transfer.strength",
             Self::VibeReferences => "references.vibe_transfer.references",
             Self::Character { index, field } => {
-                let suffix = match field { CharacterField::Entry => "", CharacterField::Prompt => ".prompt", CharacterField::X => ".position.x", CharacterField::Y => ".position.y" };
+                let suffix = match field {
+                    CharacterField::Entry => "",
+                    CharacterField::Prompt => ".prompt",
+                    CharacterField::X => ".position.x",
+                    CharacterField::Y => ".position.y",
+                };
                 return write!(formatter, "characters.characters[{index}]{suffix}");
-            }
+            },
             Self::CharacterReference { index, field } => {
-                let suffix = match field { CharacterReferenceField::Fidelity => "fidelity", CharacterReferenceField::Strength => "strength" };
-                return write!(formatter, "references.character_references[{index}].{suffix}");
-            }
+                let suffix = match field {
+                    CharacterReferenceField::Fidelity => "fidelity",
+                    CharacterReferenceField::Strength => "strength",
+                };
+                return write!(
+                    formatter,
+                    "references.character_references[{index}].{suffix}"
+                );
+            },
             Self::VibeReferenceStrength(index) => {
-                return write!(formatter, "references.vibe_transfer.references[{index}].strength");
-            }
+                return write!(
+                    formatter,
+                    "references.vibe_transfer.references[{index}].strength"
+                );
+            },
         };
         formatter.write_str(path)
     }

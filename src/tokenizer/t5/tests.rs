@@ -1,3 +1,5 @@
+use std::error::Error as _;
+
 use super::*;
 
 fn field(number: u8, data: &[u8]) -> Vec<u8> {
@@ -75,4 +77,18 @@ fn t5_rejects_corrupt_maps_empty_pieces_nonfinite_scores_and_wrong_models() {
     }
     assert!(T5Tokenizer::from_sentencepiece_model(&[0]).is_err());
     assert!(T5Tokenizer::from_sentencepiece_model(&[255; 12]).is_err());
+}
+
+#[test]
+fn invalid_piece_text_retains_the_utf8_failure() {
+    let bytes = field(1, &field(1, &[0xFF]));
+    let error = T5Tokenizer::from_sentencepiece_model(&bytes).unwrap_err();
+    assert!(matches!(
+        error,
+        TokenizerError::InvalidAssetData {
+            context: "piece text",
+            ..
+        }
+    ));
+    assert!(error.source().unwrap().is::<std::str::Utf8Error>());
 }

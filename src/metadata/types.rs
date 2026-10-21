@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -99,9 +100,7 @@ pub struct PngMetadata {
 impl PngMetadata {
     /// Returns whether the PNG contained no decoded text chunks or text diagnostics.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.text_chunks.is_empty() && self.warnings.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.text_chunks.is_empty() && self.warnings.is_empty() }
 
     /// Returns whether at least one recognized generation setting was recovered.
     #[must_use]
@@ -153,7 +152,5 @@ impl GeneratedImageMetadata {
 
     /// Returns the per-image seed recovered from embedded metadata.
     #[must_use]
-    pub fn seed(&self) -> Option<i64> {
-        self.parsed().and_then(|metadata| metadata.seed)
-    }
+    pub fn seed(&self) -> Option<i64> { self.parsed().and_then(|metadata| metadata.seed) }
 }

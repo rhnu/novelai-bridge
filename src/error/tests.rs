@@ -1,7 +1,8 @@
 use std::{error::Error, time::Duration};
 
 use crate::{
-    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DecodeError, DecodeTarget, EncodeError, EncodeTarget, InvalidRequest,
+    ApiError, ApiErrorKind, ApiErrorReason, BridgeError, DecodeError, DecodeTarget, EncodeError,
+    EncodeTarget, InvalidRequest,
 };
 
 #[test]
@@ -21,10 +22,21 @@ fn invalid_request_payload_is_matchable_and_self_describing() {
 
 #[test]
 fn request_encoding_failure_retains_the_original_error() {
-    let source = std::io::Error::new(std::io::ErrorKind::InvalidData, "synthetic encoding failure");
+    let source = std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "synthetic encoding failure",
+    );
     let error: BridgeError = EncodeError::new(EncodeTarget::JsonRequest, Box::new(source)).into();
-    assert!(matches!(&error, BridgeError::Encode(encode) if encode.target == EncodeTarget::JsonRequest));
-    assert!(error.source().unwrap().downcast_ref::<std::io::Error>().is_some());
+    assert!(
+        matches!(&error, BridgeError::Encode(encode) if encode.target == EncodeTarget::JsonRequest)
+    );
+    assert!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<std::io::Error>()
+            .is_some()
+    );
 }
 
 #[test]

@@ -36,7 +36,7 @@ cargo xtask shape stream --seed 123
 
 `shape` consumes the same prepared payload as the client and does not construct a transport or require credentials. Vibe shape inspection covers the encode-vibe request; generation with that encoding needs its response.
 
-`cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation; missing paths are errors.
+`cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation. Setting can add an object field; missing parent paths and removal targets are errors.
 
 `scripts/probe_user_api.py` remains an exploratory tool for raw user-service endpoints, including endpoints outside the typed client's API. It prints redacted response shapes and is not part of library execution or automated verification.
 

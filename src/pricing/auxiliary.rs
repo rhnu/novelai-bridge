@@ -1,5 +1,5 @@
-use crate::ImageSize;
 use super::AnlasPricingContext;
+use crate::ImageSize;
 
 /// Anlas cost per `/ai/encode-vibe` call.
 pub const VIBE_ENCODE_COST: u32 = 2;

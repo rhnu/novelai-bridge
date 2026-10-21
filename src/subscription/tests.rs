@@ -13,13 +13,17 @@ fn decode(value: Value, seconds: u64) -> Result<SubscriptionInfo, DecodeError> {
 
 #[test]
 fn subscription_preserves_balance_and_derives_the_single_account_context() {
-    let info = decode(json!({
-        "tier": 3,
-        "active": true,
-        "expiresAt": 200,
-        "trainingStepsLeft": { "fixedTrainingStepsLeft": 100, "purchasedTrainingSteps": 23 },
-        "usage": { "percent": 87.6, "isNegative": true, "timeUntilNextPercent": 142 }
-    }), 50).unwrap();
+    let info = decode(
+        json!({
+            "tier": 3,
+            "active": true,
+            "expiresAt": 200,
+            "trainingStepsLeft": { "fixedTrainingStepsLeft": 100, "purchasedTrainingSteps": 23 },
+            "usage": { "percent": 87.6, "isNegative": true, "timeUntilNextPercent": 142 }
+        }),
+        50,
+    )
+    .unwrap();
     assert_eq!(info.anlas_balance, 123);
     assert!(info.is_opus());
     assert_eq!(info.tier_name(), "opus");
@@ -35,11 +39,15 @@ fn subscription_preserves_balance_and_derives_the_single_account_context() {
 
 #[test]
 fn missing_recharge_rate_preserves_the_overdrawn_allowance() {
-    let info = decode(json!({
-        "tier": 3,
-        "trainingStepsLeft": { "fixedTrainingStepsLeft": 10 },
-        "usage": { "percent": 0, "isNegative": true }
-    }), 50).unwrap();
+    let info = decode(
+        json!({
+            "tier": 3,
+            "trainingStepsLeft": { "fixedTrainingStepsLeft": 10 },
+            "usage": { "percent": 0, "isNegative": true }
+        }),
+        50,
+    )
+    .unwrap();
     let usage = info.v5_usage.unwrap();
     assert!(usage.is_negative);
     assert_eq!(usage.seconds_until_next_percent, 0);
@@ -58,7 +66,9 @@ fn activity_uses_the_injected_time_and_honors_explicit_state() {
             "expiresAt": expires,
             "trainingStepsLeft": { "fixedTrainingStepsLeft": 0 }
         });
-        if let Some(active) = active { response["active"] = active.into(); }
+        if let Some(active) = active {
+            response["active"] = active.into();
+        }
         assert_eq!(decode(response, 100).unwrap().subscription_active, expected);
     }
 }

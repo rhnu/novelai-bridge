@@ -1,7 +1,9 @@
 use std::{fmt, sync::Arc};
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::DynamicImage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
+
 use crate::{BridgeError, ImageSize, InvalidRequest};
 
 /// Validated image input with raw bytes and decoded pixels cached together.
@@ -37,15 +39,11 @@ impl EncodedImage {
 
     /// Original validated bytes.
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
+    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
 
     /// Canonical base64 representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String {
-        STANDARD.encode(&self.bytes)
-    }
+    pub fn to_base64(&self) -> String { STANDARD.encode(&self.bytes) }
 
     /// Decoded dimensions.
     #[must_use]
@@ -58,9 +56,7 @@ impl EncodedImage {
 
     /// Cached decoded pixels, borrowed without re-decoding or allowing mutation.
     #[must_use]
-    pub fn pixels(&self) -> &DynamicImage {
-        &self.decoded
-    }
+    pub fn pixels(&self) -> &DynamicImage { &self.decoded }
 }
 
 impl fmt::Debug for EncodedImage {
@@ -71,24 +67,25 @@ impl fmt::Debug for EncodedImage {
             .finish_non_exhaustive()
     }
 }
+
 impl PartialEq for EncodedImage {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes
-    }
+    fn eq(&self, other: &Self) -> bool { self.bytes == other.bytes }
 }
+
 impl Eq for EncodedImage {}
+
 impl Serialize for EncodedImage {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.to_base64())
     }
 }
+
 impl<'de> Deserialize<'de> for EncodedImage {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::from_base64(&value).map_err(D::Error::custom)
     }
 }
-
 
 fn decode_input_image(field: &str, bytes: &[u8]) -> Result<DynamicImage, BridgeError> {
     image::load_from_memory(bytes).map_err(|source| {

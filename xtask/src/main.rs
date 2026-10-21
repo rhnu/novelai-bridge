@@ -10,11 +10,10 @@ mod tokenizer_assets;
 
 use std::sync::Arc;
 
-use clap::Parser;
-use novelai_bridge::{Client, ClientConfig, ImageSize, Model, ReqwestTransport};
-
 use capture::{CaptureTransport, RequestEdits};
+use clap::Parser;
 use cli::{Cli, Command, Preset, RunArgs};
+use novelai_bridge::{Client, ClientConfig, ImageSize, Model, ReqwestTransport};
 
 type TaskResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -26,23 +25,22 @@ async fn main() -> TaskResult<()> {
         Command::Capabilities => {
             presets::print_capabilities();
             Ok(())
-        }
-        Command::Shape(args) => run(args, false).await,
-        Command::Probe(args) => run(args, true).await,
+        },
+        Command::Shape(args) => run(&args, false).await,
+        Command::Probe(args) => run(&args, true).await,
     }
 }
 
-async fn run(args: RunArgs, live: bool) -> TaskResult<()> {
-    let model: Model = serde_json::from_value(args.model.clone().into())
-        .map_err(|_| format!("unknown model `{}`", args.model))?;
+async fn run(args: &RunArgs, live: bool) -> TaskResult<()> {
+    let model: Model = serde_json::from_value(args.model.clone().into())?;
     let size = parse_size(&args.size)?;
     let edits = RequestEdits::new(&args.overrides, args.removals.clone())?;
     if !live {
-        return presets::shape(&args, model, size, &edits);
+        return presets::shape(args, model, size, &edits);
     }
     let transport = CaptureTransport::new(ReqwestTransport::new(credentials::options()?)?, edits);
     let client = Client::new(Arc::new(transport), ClientConfig::default());
-    println!("{}", presets::execute(&client, &args, model, size).await?);
+    println!("{}", presets::execute(&client, args, model, size).await?);
     Ok(())
 }
 

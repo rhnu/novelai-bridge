@@ -22,8 +22,7 @@
 //! use novelai_bridge::{FramingPolicy, Model, Tokenizers};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let tokenizers = Tokenizers::new()
-//!     .with_t5_sentencepiece(&std::fs::read("spiece.model")?)?;
+//! let tokenizers = Tokenizers::new().with_t5_sentencepiece(&std::fs::read("spiece.model")?)?;
 //!
 //! let encoder = tokenizers.require_for_model(Model::NaiDiffusion45Full)?;
 //! let used = encoder.count("1girl, blue hair", FramingPolicy::ModelInput);
@@ -32,24 +31,24 @@
 //! # }
 //! ```
 
-mod registry;
-mod encoder;
+mod bpe;
 #[cfg(feature = "bundled-assets")]
 mod bundled;
-mod bpe;
 mod clip;
+mod encoder;
 mod error;
 mod profile;
 mod qwen;
+mod registry;
 mod t5;
 
 #[cfg(test)]
 mod tests;
 
-pub use registry::Tokenizers;
-pub use encoder::TokenEncoder;
 pub use clip::ClipTokenizer;
+pub use encoder::TokenEncoder;
 pub use error::{TokenizerAsset, TokenizerError};
 pub use profile::{FramingPolicy, TokenCount, TokenId};
 pub use qwen::QwenTokenizer;
+pub use registry::Tokenizers;
 pub use t5::T5Tokenizer;

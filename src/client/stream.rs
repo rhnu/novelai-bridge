@@ -1,11 +1,17 @@
-use std::{pin::Pin, task::{Context, Poll}};
 #[cfg(feature = "credit-observer")]
-use std::{collections::BTreeSet, sync::{Arc, Mutex}};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures_core::Stream;
 
-use crate::{BridgeError, ImageStreamChunk};
 use super::observe::PendingObservation;
+use crate::{BridgeError, ImageStreamChunk};
 
 pub type ImageStreamItem = Result<ImageStreamChunk, BridgeError>;
 pub type ImageStreamResult = Pin<Box<dyn Stream<Item = ImageStreamItem> + Send>>;
@@ -19,35 +25,49 @@ pub struct GenerateImageStream {
 }
 
 impl GenerateImageStream {
-    pub(super) fn new(resolved_seed: i64, stream: ImageStreamResult, observation: PendingObservation) -> Self {
+    pub(super) fn new(
+        resolved_seed: i64,
+        stream: ImageStreamResult,
+        observation: PendingObservation,
+    ) -> Self {
         #[cfg(feature = "credit-observer")]
         {
             let observation = Arc::new(Mutex::new(Some(observation)));
-            let stream = observed_stream(stream, observation.clone());
-            Self { resolved_seed, stream, observation }
+            let stream = observed_stream(stream, Arc::clone(&observation));
+            Self {
+                resolved_seed,
+                stream,
+                observation,
+            }
         }
         #[cfg(not(feature = "credit-observer"))]
         {
             let _ = observation;
-            Self { resolved_seed, stream }
+            Self {
+                resolved_seed,
+                stream,
+            }
         }
     }
 
     /// Returns the parsed stream, retaining its lifecycle observation.
-    #[must_use]
-    pub fn into_inner(self) -> ImageStreamResult {
-        self.stream
-    }
+    pub fn into_inner(self) -> ImageStreamResult { self.stream }
 
     /// Stops consumption before awaiting the explicit cancellation notification.
     ///
     /// Dropping a stream emits no asynchronous terminal notification.
     pub async fn cancel(self) {
         #[cfg(feature = "credit-observer")]
-        let pending = self.observation.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        let pending = self
+            .observation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         drop(self.stream);
         #[cfg(feature = "credit-observer")]
-        if let Some(pending) = pending { pending.cancel().await; }
+        if let Some(pending) = pending {
+            pending.cancel().await;
+        }
     }
 }
 

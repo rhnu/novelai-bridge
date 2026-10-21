@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{AnlasEstimate, AnlasPricingContext, BridgeError, GenerateImageRequest, SubscriptionInfo};
+use crate::{
+    AnlasEstimate, AnlasPricingContext, BridgeError, GenerateImageRequest, SubscriptionInfo,
+};
 
 mod director;
 mod execute;
@@ -25,7 +27,9 @@ pub struct ClientConfig {
 
 impl Default for ClientConfig {
     fn default() -> Self {
-        Self { image_base_url: DEFAULT_IMAGE_BASE.to_owned() }
+        Self {
+            image_base_url: DEFAULT_IMAGE_BASE.to_owned(),
+        }
     }
 }
 
@@ -43,9 +47,9 @@ pub struct Client<T: ?Sized> {
 impl<T: ?Sized> Clone for Client<T> {
     fn clone(&self) -> Self {
         Self {
-            transport: self.transport.clone(),
+            transport: Arc::clone(&self.transport),
             config: self.config.clone(),
-            account: self.account.clone(),
+            account: Arc::clone(&self.account),
             #[cfg(feature = "tokenizer")]
             tokenizers: self.tokenizers.clone(),
             #[cfg(feature = "credit-observer")]
@@ -93,18 +97,22 @@ impl<T: ?Sized> Client<T> {
         &self,
         request: &GenerateImageRequest,
     ) -> Result<crate::PromptTokenUsage, BridgeError> {
-        let tokenizers = self.tokenizers.as_ref().ok_or_else(|| {
-            crate::TokenizerError::TokenizerNotLoaded {
-                kind: request.descriptor().prompt().tokenizer,
-            }
-        })?;
+        let tokenizers =
+            self.tokenizers
+                .as_ref()
+                .ok_or_else(|| crate::TokenizerError::TokenizerNotLoaded {
+                    kind: request.descriptor().prompt().tokenizer,
+                })?;
         request.count_tokens(tokenizers)
     }
 
     /// Returns the most recently sampled subscription, shared by client clones.
     #[must_use]
     pub fn last_subscription(&self) -> Option<SubscriptionInfo> {
-        self.account.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+        self.account
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Estimates generation using the most recently sampled account context.
@@ -119,11 +127,17 @@ impl<T: ?Sized> Client<T> {
     }
 
     fn last_pricing_context(&self) -> AnlasPricingContext {
-        self.last_subscription().as_ref().map_or_else(AnlasPricingContext::default, AnlasPricingContext::from)
+        self.last_subscription()
+            .as_ref()
+            .map_or_else(AnlasPricingContext::default, AnlasPricingContext::from)
     }
 
     fn image_endpoint(&self, endpoint: crate::protocol::Endpoint) -> String {
-        format!("{}{}", self.config.image_base_url.trim_end_matches('/'), endpoint.path())
+        format!(
+            "{}{}",
+            self.config.image_base_url.trim_end_matches('/'),
+            endpoint.path()
+        )
     }
 }
 

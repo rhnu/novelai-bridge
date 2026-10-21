@@ -1,17 +1,16 @@
 #![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
 
 //! Contracts shared by generation preparation and client execution.
-mod support;
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use novelai_bridge::{
-    Character, CharacterPosition, Client, CreditEvent, CreditObserver,
+    Character, CharacterPosition, Client, ClientConfig, CreditEvent, CreditObserver,
     GenerateImageRequest, ImageSize, Model,
 };
 
-use support::MockTransport;
+use crate::support::MockTransport;
 
 #[derive(Default)]
 struct Observer(Mutex<Vec<CreditEvent>>);
@@ -19,7 +18,10 @@ struct Observer(Mutex<Vec<CreditEvent>>);
 #[async_trait]
 impl CreditObserver for Observer {
     async fn observe(&self, event: CreditEvent) {
-        self.0.lock().unwrap().push(event);
+        self.0
+            .lock()
+            .expect("test event mutex is not poisoned")
+            .push(event);
     }
 }
 
@@ -27,7 +29,8 @@ impl CreditObserver for Observer {
 async fn public_estimate_matches_planned_estimate_after_size_normalization() {
     let transport = MockTransport::default();
     let observer = Arc::new(Observer::default());
-    let client = Client::new(Arc::new(transport.clone()), Default::default()).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+        .with_credit_observer(Arc::<Observer>::clone(&observer));
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full)
         .size(ImageSize {
             width: 2048,
@@ -61,7 +64,7 @@ async fn disabled_empty_characters_do_not_participate_in_validation() {
         }])
         .build();
     let transport = MockTransport::default();
-    Client::new(Arc::new(transport.clone()), Default::default())
+    Client::new(Arc::new(transport.clone()), ClientConfig::default())
         .generate(request)
         .await
         .unwrap();
@@ -86,7 +89,7 @@ async fn normalized_characters_respect_the_model_limit() {
         )
         .build();
     let transport = MockTransport::default();
-    Client::new(Arc::new(transport.clone()), Default::default())
+    Client::new(Arc::new(transport.clone()), ClientConfig::default())
         .generate(request)
         .await
         .unwrap();
@@ -101,8 +104,10 @@ async fn normalized_characters_respect_the_model_limit() {
 
 #[tokio::test]
 async fn non_image_response_is_rejected() {
-    let client =
-        Client::new(Arc::new(MockTransport::with_bytes_response(b"not an image".to_vec())), Default::default());
+    let client = Client::new(
+        Arc::new(MockTransport::with_bytes_response(b"not an image".to_vec())),
+        ClientConfig::default(),
+    );
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build();
     assert!(client.generate(request).await.is_err());
 }
@@ -112,8 +117,8 @@ async fn ordinary_and_stream_observation_share_effective_cost_fields() {
     for streaming in [false, true] {
         let transport = MockTransport::default();
         let observer = Arc::new(Observer::default());
-        let client =
-            Client::new(Arc::new(transport.clone()), Default::default()).with_credit_observer(observer.clone());
+        let client = Client::new(Arc::new(transport.clone()), ClientConfig::default())
+            .with_credit_observer(Arc::<Observer>::clone(&observer));
         let mut request =
             GenerateImageRequest::builder("private prompt", Model::NaiDiffusion45Full)
                 .size(ImageSize {
@@ -164,7 +169,11 @@ async fn ordinary_and_stream_observation_share_effective_cost_fields() {
                 _ => None,
             })
             .unwrap();
-        let (novelai_bridge::ObservedOperation::GenerateImage(summary) | novelai_bridge::ObservedOperation::GenerateImageStream(summary)) = &fingerprint.operation else { panic!("expected generation summary"); };
+        let (novelai_bridge::ObservedOperation::GenerateImage(summary)
+        | novelai_bridge::ObservedOperation::GenerateImageStream(summary)) = &fingerprint.operation
+        else {
+            panic!("expected generation summary");
+        };
         assert_eq!(summary.pricing.size, cost.size);
         assert_eq!(summary.pricing.steps, cost.steps);
         assert_eq!(summary.pricing.n_samples, cost.n_samples);

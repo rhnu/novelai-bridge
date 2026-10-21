@@ -1,5 +1,8 @@
-use crate::{AnlasEstimate, AnlasEstimateInput, AnlasPricingContext, BridgeError, PricingMode, estimate_anlas_cost};
 use super::{GenerateImageRequest, GenerateImageStreamRequest, NormalizedGeneration};
+use crate::{
+    AnlasEstimate, AnlasEstimateInput, AnlasPricingContext, BridgeError, PricingMode,
+    estimate_anlas_cost,
+};
 
 impl AnlasEstimateInput {
     /// Normalizes a request and projects its effective pricing fields without decoding images.
@@ -23,8 +26,12 @@ impl NormalizedGeneration {
         let references = request.references.as_ref();
         let mode = match request.img2img.as_ref() {
             None => PricingMode::TextToImage,
-            Some(input) if input.is_infill() => PricingMode::Inpainting { strength: input.strength },
-            Some(input) => PricingMode::ImageToImage { strength: input.strength },
+            Some(input) if input.is_infill() => PricingMode::Inpainting {
+                strength: input.strength,
+            },
+            Some(input) => PricingMode::ImageToImage {
+                strength: input.strength,
+            },
         };
         AnlasEstimateInput {
             model: request.core.model,

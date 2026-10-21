@@ -22,12 +22,24 @@ pub fn check() -> TaskResult<()> {
     ] {
         let mut command = Command::new("cargo");
         command.current_dir(root).args([
-            "check", "--package", "novelai-bridge", "--no-default-features", "--locked",
+            "check",
+            "--all-targets",
+            "--package",
+            "novelai-bridge",
+            "--no-default-features",
+            "--locked",
         ]);
         if !features.is_empty() {
             command.args(["--features", features]);
         }
-        println!("Checking features: {}", if features.is_empty() { "(core)" } else { features });
+        println!(
+            "Checking features: {}",
+            if features.is_empty() {
+                "(core)"
+            } else {
+                features
+            }
+        );
         if !command.status()?.success() {
             return Err(format!("feature check failed: {features}").into());
         }

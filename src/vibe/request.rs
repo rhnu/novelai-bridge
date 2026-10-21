@@ -5,7 +5,7 @@ use crate::{EncodedImage, Model, VibeEncoding};
 /// One vibe transfer reference.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VibeReference {
-    /// Precomputed payload returned by [`crate::Client::encode_vibe`].
+    /// Precomputed payload produced by the vibe-encoding operation.
     pub vibe_data_cache: VibeEncoding,
     /// Per-image reference strength.
     pub strength: f32,
@@ -20,7 +20,7 @@ pub struct VibeTransferConfig {
     pub strength: f32,
 }
 
-/// Request used by [`crate::Client::encode_vibe`].
+/// Editable input for a vibe-encoding operation.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct EncodeVibeRequest {
     /// Validated source image.

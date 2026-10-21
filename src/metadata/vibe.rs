@@ -1,8 +1,17 @@
 use std::collections::BTreeMap;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
+
+use super::{
+    PngMetadata, VibeMetadataEntry, VibeMetadataSource,
+    png::{chunk_values_ci, extract_png_text_chunks},
+    value::{
+        extract_non_empty_string, has_non_empty_value, parse_json_payload, value_to_f32,
+        value_to_f32_array,
+    },
+};
 use crate::BridgeError;
-use super::{PngMetadata, VibeMetadataEntry, VibeMetadataSource, png::{chunk_values_ci, extract_png_text_chunks}, value::*};
 const KEY_VIBE_ENCODING: &str = "NovelAI_Vibe_Encoding_Base64";
 const KEY_NAIDATA: &str = "naidata";
 const KEY_LEGACY_VIBE: &str = "naiv4vibe";
@@ -11,7 +20,9 @@ const OFFICIAL_VIBE_BUNDLE_IDENTIFIER: &str = "novelai-vibe-transfer-bundle";
 
 pub(super) fn parse_vibe_chunks(parsed: &mut PngMetadata) {
     for raw in chunk_values_ci(&parsed.text_chunks, KEY_VIBE_ENCODING) {
-        let Some(compact) = validated_encoding(raw) else { continue; };
+        let Some(compact) = validated_encoding(raw) else {
+            continue;
+        };
         parsed.vibe_entries.push(VibeMetadataEntry {
             source: VibeMetadataSource::NovelAiVibeEncodingChunk,
             display_name: None,
@@ -74,7 +85,10 @@ fn push_vibe_entries(
     }
 }
 
-pub(super) fn push_reference_vibe_entries(payload: &Map<String, Value>, output: &mut Vec<VibeMetadataEntry>) {
+pub(super) fn push_reference_vibe_entries(
+    payload: &Map<String, Value>,
+    output: &mut Vec<VibeMetadataEntry>,
+) {
     if let Some(items) = payload
         .get("reference_image_multiple")
         .and_then(Value::as_array)
@@ -120,7 +134,7 @@ fn parse_vibe_entry(value: &Value, source: VibeMetadataSource) -> Option<VibeMet
                 information_extracted: None,
                 has_image: false,
             })
-        }
+        },
         Value::Object(object) => parse_vibe_map(object, source),
         _ => None,
     }
@@ -191,9 +205,10 @@ fn parse_vibe_map(
     })
 }
 
-
 fn validated_encoding(raw: &str) -> Option<String> {
-    crate::payload::decode_base64("metadata.vibe", raw).ok().map(|bytes| STANDARD.encode(bytes))
+    crate::payload::decode_base64("metadata.vibe", raw)
+        .ok()
+        .map(|bytes| STANDARD.encode(bytes))
 }
 
 /// Extracts the serialized embedded vibe document from raw PNG bytes when present.
@@ -201,9 +216,7 @@ fn validated_encoding(raw: &str) -> Option<String> {
 /// # Errors
 ///
 /// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
-pub(super) fn extract_document(
-    bytes: &[u8],
-) -> Result<Option<String>, BridgeError> {
+pub(super) fn extract_document(bytes: &[u8]) -> Result<Option<String>, BridgeError> {
     let extracted = extract_png_text_chunks(bytes)?;
     for raw in chunk_values_ci(&extracted.text_chunks, KEY_NAIDATA) {
         let Some(payload) = parse_json_or_base64_json(raw) else {

@@ -63,10 +63,10 @@ pub use metadata::{
 pub use model::{
     CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
     GenerationMode, ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor,
-    ModelIdentity, ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
-    PromptProfile, PromptStructure, QualitySupport, ReferenceAvailability, ReferenceIntent,
-    ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile, VarietyBoostProfile,
-    VibeInputPath, VibeProfile, WireProfile,
+    ModelIdentity, ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange,
+    PricingProfile, PromptProfile, PromptStructure, QualitySupport, ReferenceAvailability,
+    ReferenceIntent, ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile,
+    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
 };
 #[cfg(feature = "credit-observer")]
 pub use observation::{
@@ -74,12 +74,15 @@ pub use observation::{
     RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome,
 };
 pub use parameters::{
-    ImageFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, StreamMode, UcPreset,
+    ImageFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, StreamMode,
+    UcPreset,
 };
 pub use pricing::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode,
     estimate_anlas_cost, estimate_director_tool_cost,
 };
+#[cfg(feature = "reqwest-transport")]
+pub use secrecy::SecretString;
 #[cfg(feature = "client")]
 pub use subscription::{SubscriptionInfo, V5UsageStatus};
 #[cfg(feature = "tokenizer")]
@@ -88,16 +91,14 @@ pub use tokenizer::{
     TokenizerAsset, TokenizerError, Tokenizers,
 };
 #[cfg(feature = "reqwest-transport")]
-pub use secrecy::SecretString;
-#[cfg(feature = "reqwest-transport")]
 pub use transport::{ApiKeySource, DEFAULT_TIMEOUT_MS, ReqwestOptions, ReqwestTransport};
-#[cfg(feature = "client")]
-pub use transport::{
-    Transport, TransportHeader, TransportMethod, TransportRequest, TransportResponse,
-};
 #[cfg(feature = "streaming")]
 pub use transport::{
     StreamingTransport, TransportSseEvent, TransportSseResponse, TransportSseStream,
+};
+#[cfg(feature = "client")]
+pub use transport::{
+    Transport, TransportHeader, TransportMethod, TransportRequest, TransportResponse,
 };
 #[cfg(feature = "png-metadata")]
 pub use vibe::VibeEncoding;

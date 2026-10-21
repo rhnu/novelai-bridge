@@ -1,6 +1,8 @@
-use crate::{BridgeError, EncodeError, EncodeTarget, ImageSize, InvalidRequest};
-use crate::generation::bounds::normalize_integer;
 use super::{DirectorCommand, RunDirectorToolRequest, wire::DirectorRequestBody};
+use crate::{
+    BridgeError, EncodeError, EncodeTarget, ImageSize, InvalidRequest,
+    parameters::bounds::normalize_integer,
+};
 
 /// A validated director operation with its encoded source image.
 #[derive(Debug)]
@@ -22,13 +24,20 @@ impl RunDirectorToolRequest {
                 let prompt = prompt.trim().to_owned();
                 if prompt.is_empty() {
                     return Err(InvalidRequest::RequiredFieldForContext {
-                        context: "emotion".to_owned(), field: "command.prompt".to_owned(),
-                    }.into());
+                        context: "emotion".to_owned(),
+                        field: "command.prompt".to_owned(),
+                    }
+                    .into());
                 }
-                DirectorCommand::Emotion { prompt, defry: resolve_defry(defry, self.strict_mode)? }
-            }
+                DirectorCommand::Emotion {
+                    prompt,
+                    defry: resolve_defry(defry, self.strict_mode)?,
+                }
+            },
             DirectorCommand::Colorize { prompt, defry } => DirectorCommand::Colorize {
-                prompt: prompt.map(|text| text.trim().to_owned()).filter(|text| !text.is_empty()),
+                prompt: prompt
+                    .map(|text| text.trim().to_owned())
+                    .filter(|text| !text.is_empty()),
                 defry: resolve_defry(defry, self.strict_mode)?,
             },
             command => command,
@@ -47,7 +56,11 @@ impl RunDirectorToolRequest {
             prompt,
             defry,
         };
-        Ok(PreparedDirector { command, image_size, body })
+        Ok(PreparedDirector {
+            command,
+            image_size,
+            body,
+        })
     }
 }
 

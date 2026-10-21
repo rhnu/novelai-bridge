@@ -301,7 +301,7 @@ credit observation.
   model-dependent coefficient (19 for V4, 58 for V4.5) instead of a hardcoded integer `58`. V5
   does not support variety boost and never receives the field.
 - Correct the Furry V3 model identifier from `nai-diffusion-3-furry` to `nai-diffusion-furry-3`.
-- Merge the UC preset text _before_ the caller's negative prompt and include the leading `nsfw`
+- Merge the UC preset text *before* the caller's negative prompt and include the leading `nsfw`
   tag, matching the NovelAI web client. Previously the preset was appended after.
 - Omit parameters a model family does not accept instead of sending them as `null`. The
   `skip_serializing_none` attribute was placed after `derive(Serialize)`, where it had no effect.

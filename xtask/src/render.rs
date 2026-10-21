@@ -61,7 +61,7 @@ pub fn set_path(root: &mut Value, path: &str, replacement: Value) -> bool {
                     return false;
                 };
                 cursor = next;
-            }
+            },
             Value::Array(items) => {
                 let Ok(index) = segment.parse::<usize>() else {
                     return false;
@@ -74,7 +74,7 @@ pub fn set_path(root: &mut Value, path: &str, replacement: Value) -> bool {
                     return true;
                 }
                 cursor = next;
-            }
+            },
             _ => return false,
         }
     }
@@ -103,7 +103,7 @@ pub fn remove_path(root: &mut Value, path: &str) -> bool {
                     Some(next) => next,
                     None => return false,
                 }
-            }
+            },
             _ => return false,
         };
     }

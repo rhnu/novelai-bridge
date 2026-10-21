@@ -1,5 +1,8 @@
+use super::{
+    GenerateImageRequest, NormalizationDiagnostic, NormalizationPolicy, PreparedGeneration,
+    ResolvedPrompts, normalize, prepare,
+};
 use crate::{BridgeError, ImagePreprocessor};
-use super::{GenerateImageRequest, NormalizationDiagnostic, NormalizationPolicy, PreparedGeneration, ResolvedPrompts, normalize, prepare};
 
 /// Validated effective input with conditioning text assembled exactly once.
 ///
@@ -70,21 +73,15 @@ impl GenerateImageRequest {
 impl NormalizedGeneration {
     /// Immutable effective input. Disabled characters retain their original, unvalidated data.
     #[must_use]
-    pub const fn request(&self) -> &GenerateImageRequest {
-        &self.request
-    }
+    pub const fn request(&self) -> &GenerateImageRequest { &self.request }
 
     /// Cached effective text shared by token counting, wire construction and observation.
     #[must_use]
-    pub const fn resolved_prompts(&self) -> &ResolvedPrompts {
-        &self.prompts
-    }
+    pub const fn resolved_prompts(&self) -> &ResolvedPrompts { &self.prompts }
 
     /// Decisions made while constructing this plan, in normalization order.
     #[must_use]
-    pub fn diagnostics(&self) -> &[NormalizationDiagnostic] {
-        &self.diagnostics
-    }
+    pub fn diagnostics(&self) -> &[NormalizationDiagnostic] { &self.diagnostics }
 
     /// Policy used to construct this plan.
     #[must_use]
@@ -98,18 +95,14 @@ impl NormalizedGeneration {
 
     /// Returns editable effective input, discarding the cached prompts and diagnostics.
     #[must_use]
-    pub fn into_request(self) -> GenerateImageRequest {
-        self.request
-    }
+    pub fn into_request(self) -> GenerateImageRequest { self.request }
 
     /// Resolves the seed and prepares image payloads without sending a request.
     ///
     /// # Errors
     ///
     /// Returns image preparation errors.
-    pub fn prepare(self) -> Result<PreparedGeneration, BridgeError> {
-        prepare::prepare(self)
-    }
+    pub fn prepare(self) -> Result<PreparedGeneration, BridgeError> { prepare::prepare(self) }
 
     /// Resolves the seed and prepares image payloads with a caller-provided pixel transformer.
     ///

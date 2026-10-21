@@ -26,12 +26,11 @@ pub enum ReferenceAvailability {
     /// Character references take precedence over vibe references.
     ConflictWithCharacterReference,
 }
+
 impl ReferenceAvailability {
     /// Whether the group can be retained in this request.
     #[must_use]
-    pub const fn is_available(self) -> bool {
-        matches!(self, Self::Available)
-    }
+    pub const fn is_available(self) -> bool { matches!(self, Self::Available) }
 }
 
 /// Pure reference-combination decision, shared by UI queries and normalization.
@@ -55,7 +54,7 @@ impl ModelDescriptor {
             },
             GenerationMode::TextToImage | GenerationMode::ImageToImage => {
                 Some(self.identity.api_id)
-            }
+            },
         }
     }
 

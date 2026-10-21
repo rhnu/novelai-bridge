@@ -6,9 +6,12 @@ mod value;
 mod vibe;
 mod webui;
 
-pub use types::{GeneratedImageMetadata, PngMetadata, PngMetadataWarning, VibeMetadataEntry, VibeMetadataSource};
-use crate::BridgeError;
 use png::{extract_png_text_chunks, first_chunk_value_ci};
+pub use types::{
+    GeneratedImageMetadata, PngMetadata, PngMetadataWarning, VibeMetadataEntry, VibeMetadataSource,
+};
+
+use crate::BridgeError;
 const KEY_SOURCE: &str = "Source";
 const KEY_SOFTWARE: &str = "Software";
 
@@ -88,7 +91,9 @@ pub fn inspect_generated_image_metadata(
 ///
 /// # Errors
 /// Returns a metadata error when the PNG cannot be completely decoded.
-pub fn extract_embedded_vibe_document_from_png_bytes(bytes: &[u8]) -> Result<Option<String>, BridgeError> {
+pub fn extract_embedded_vibe_document_from_png_bytes(
+    bytes: &[u8],
+) -> Result<Option<String>, BridgeError> {
     vibe::extract_document(bytes)
 }
 

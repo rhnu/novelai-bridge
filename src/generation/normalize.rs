@@ -3,8 +3,8 @@ mod references;
 mod values;
 
 use super::{
-    NormalizationChange, NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
-    GenerationField as Field, GuidanceField, ImageInputField,
+    GenerationField as Field, GuidanceField, ImageInputField, NormalizationChange,
+    NormalizationDiagnostic, NormalizationPolicy, NormalizedGeneration,
 };
 use crate::{
     BridgeError, GenerateImageRequest, GenerationConstraints, GuidanceParams, Img2ImgRequest,
@@ -26,7 +26,7 @@ pub(super) fn normalize(
     normalizer.normalize_base_fields(&mut request)?;
     normalizer.apply_capability_gates(&mut request, descriptor)?;
     if let Some(characters) = request.characters.as_mut() {
-        normalizer.validate_character_inputs(&characters.characters)?;
+        Normalizer::validate_character_inputs(&characters.characters)?;
         if let Some(profile) = descriptor.prompt().characters {
             normalizer.normalize_character_positions(characters, profile.positioning)?;
         }
@@ -40,10 +40,7 @@ pub(super) fn normalize(
         .sampling()
         .resolve_noise_schedule(request.sampling.noise_schedule);
     if schedule != request.sampling.noise_schedule {
-        normalizer.record(
-            Field::NoiseSchedule,
-            NormalizationChange::Fallback,
-        );
+        normalizer.record(Field::NoiseSchedule, NormalizationChange::Fallback);
         request.sampling.noise_schedule = schedule;
     }
     let prompts = request.assemble_prompts();
@@ -66,7 +63,10 @@ impl Normalizer {
             .push(NormalizationDiagnostic { field, change });
     }
 
-    #[allow(clippy::float_cmp, reason = "Diagnostics report exact value changes rather than approximate equivalence")]
+    #[expect(
+        clippy::float_cmp,
+        reason = "Diagnostics report exact value changes rather than approximate equivalence"
+    )]
     fn adjusted(&mut self, field: Field, from: f64, to: f64) {
         if from != to {
             self.record(field, NormalizationChange::Adjusted { from, to });
@@ -166,12 +166,8 @@ impl Normalizer {
         Ok(())
     }
 
-
-
     // The descriptor owns support and precedence; this boundary only maps decisions to errors
     // or diagnostics, preserving the caller's Reject/Normalize policy.
-
-
 
     fn gate_guidance(
         &mut self,
@@ -236,18 +232,6 @@ impl Normalizer {
         self.record(feature, change);
         Ok(false)
     }
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 fn validate_prompt(params: &GenerateImageRequest) -> Result<(), BridgeError> {

@@ -1,6 +1,9 @@
 use serde_json::{Map, Value};
 
-pub(super) fn extract_non_empty_string(object: &Map<String, Value>, keys: &[&str]) -> Option<String> {
+pub(super) fn extract_non_empty_string(
+    object: &Map<String, Value>,
+    keys: &[&str],
+) -> Option<String> {
     keys.iter().find_map(|key| {
         object
             .get(*key)
@@ -106,10 +109,11 @@ pub(super) fn value_to_f32(value: &Value) -> Option<f32> {
         .and_then(|raw| raw.trim().parse::<f32>().ok())
 }
 
-#[allow(clippy::cast_possible_truncation)]
-pub(super) const fn f64_to_f32(raw: f64) -> f32 {
-    raw as f32
-}
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Metadata exposes f32 values while JSON numbers are decoded as f64"
+)]
+pub(super) const fn f64_to_f32(raw: f64) -> f32 { raw as f32 }
 
 pub(super) fn has_non_empty_value(value: Option<&Value>) -> bool {
     value

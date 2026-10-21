@@ -11,12 +11,14 @@
 //! and mojibake repairs are omitted. Inputs that need those repairs can differ from upstream.
 
 use std::sync::LazyLock;
+
 use fancy_regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 mod asset;
 mod html;
 use html::unescape_html;
-use super::{bpe::ByteBpe, FramingPolicy, TokenId, TokenizerAsset, TokenizerError};
+
+use super::{FramingPolicy, TokenId, TokenizerAsset, TokenizerError, bpe::ByteBpe};
 
 /// The CLIP pre-tokenization pattern, verbatim from `simple_tokenizer.py`.
 ///
@@ -46,13 +48,16 @@ impl ClipTokenizer {
     /// Returns an asset error when the merge table cannot be decoded or validated.
     pub fn from_merges_asset(bytes: &[u8]) -> Result<Self, TokenizerError> {
         let parsed = asset::parse(bytes)?;
-        Ok(Self { bpe: parsed.bpe, start_of_text: parsed.start_of_text, end_of_text: parsed.end_of_text })
+        Ok(Self {
+            bpe: parsed.bpe,
+            start_of_text: parsed.start_of_text,
+            end_of_text: parsed.end_of_text,
+        })
     }
+
     /// Returns the number of vocabulary entries.
     #[must_use]
-    pub fn vocabulary_size(&self) -> usize {
-        self.bpe.vocabulary_size()
-    }
+    pub fn vocabulary_size(&self) -> usize { self.bpe.vocabulary_size() }
 
     /// Encodes text into CLIP token IDs.
     ///
@@ -116,12 +121,10 @@ fn clean_text(text: &str) -> String {
     cleaned.to_lowercase()
 }
 
-
 impl super::TokenEncoder for ClipTokenizer {
     fn encode(&self, text: &str, framing: FramingPolicy) -> Result<Vec<TokenId>, TokenizerError> {
-        ClipTokenizer::encode(self, text, framing)
+        Self::encode(self, text, framing)
     }
-    fn vocabulary_size(&self) -> usize {
-        ClipTokenizer::vocabulary_size(self)
-    }
+
+    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
 }

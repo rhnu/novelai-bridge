@@ -1,6 +1,9 @@
-use super::{Normalizer, Field};
-use crate::{BridgeError, ImageSize, Img2ImgRequest, InvalidRequest};
-use crate::generation::{ImageInputField, bounds::{normalize_float, normalize_integer}};
+use super::{Field, Normalizer};
+use crate::{
+    BridgeError, ImageSize, Img2ImgRequest, InvalidRequest,
+    generation::ImageInputField,
+    parameters::bounds::{normalize_float, normalize_integer},
+};
 
 impl Normalizer {
     pub(super) fn normalize_img2img(
@@ -32,13 +35,25 @@ impl Normalizer {
         Ok(())
     }
 
-    pub(super) fn normalize_u32_range(&mut self, field: Field, value: u32, min: u32, max: u32) -> Result<u32, BridgeError> {
+    pub(super) fn normalize_u32_range(
+        &mut self,
+        field: Field,
+        value: u32,
+        min: u32,
+        max: u32,
+    ) -> Result<u32, BridgeError> {
         let effective = normalize_integer(&field.to_string(), value, min, max, self.reject)?;
         self.adjusted(field, f64::from(value), f64::from(effective));
         Ok(effective)
     }
 
-    pub(super) fn normalize_f32_range(&mut self, field: Field, value: f32, min: f32, max: f32) -> Result<f32, BridgeError> {
+    pub(super) fn normalize_f32_range(
+        &mut self,
+        field: Field,
+        value: f32,
+        min: f32,
+        max: f32,
+    ) -> Result<f32, BridgeError> {
         let effective = normalize_float(&field.to_string(), value, min, max, self.reject)?;
         self.adjusted(field, f64::from(value), f64::from(effective));
         Ok(effective)
@@ -71,7 +86,10 @@ impl Normalizer {
         Ok(effective)
     }
 
-    pub(super) fn normalize_canvas_area(&mut self, size: ImageSize) -> Result<ImageSize, BridgeError> {
+    pub(super) fn normalize_canvas_area(
+        &mut self,
+        size: ImageSize,
+    ) -> Result<ImageSize, BridgeError> {
         let limits = self.constraints.canvas;
         if size.pixels() <= limits.max_pixels {
             return Ok(size);

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+
 use crate::VibeTransferConfig;
 
 /// Character reference behavior used by director references.
@@ -30,7 +31,16 @@ impl CharacterReferenceType {
     }
 }
 
-crate::parameters::serde_string_enum!(CharacterReferenceType, [Self::Character, Self::Style, Self::CharacterAndStyle, Self::Costume, Self::Delta]);
+crate::parameters::serde_string_enum!(
+    CharacterReferenceType,
+    [
+        Self::Character,
+        Self::Style,
+        Self::CharacterAndStyle,
+        Self::Costume,
+        Self::Delta
+    ]
+);
 
 /// Character reference input used by director references.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

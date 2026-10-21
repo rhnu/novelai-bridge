@@ -2,11 +2,19 @@ use std::time::{Duration, SystemTime};
 
 use crate::{ApiError, ApiErrorKind, ApiErrorReason, TransportHeader, TransportResponse};
 
-pub(super) fn checked_body(response: TransportResponse, endpoint: &str) -> Result<Vec<u8>, ApiError> {
+pub(super) fn checked_body(
+    response: TransportResponse,
+    endpoint: &str,
+) -> Result<Vec<u8>, ApiError> {
     if (200..300).contains(&response.status) {
         Ok(response.body)
     } else {
-        Err(map_status_error(response.status, &response.headers, &response.body, endpoint))
+        Err(map_status_error(
+            response.status,
+            &response.headers,
+            &response.body,
+            endpoint,
+        ))
     }
 }
 
@@ -38,7 +46,6 @@ pub fn map_status_error(
         server_reason,
         raw_body: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
     }
-
 }
 
 fn header<'a>(headers: &'a [TransportHeader], name: &str) -> Option<&'a str> {

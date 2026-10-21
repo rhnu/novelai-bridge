@@ -15,9 +15,8 @@ macro_rules! serde_string_enum {
     };
 }
 
-pub(crate) use serde_string_enum;
-
 use serde::{Deserialize, Serialize};
+pub(crate) use serde_string_enum;
 
 const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
 const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
@@ -30,26 +29,26 @@ const UC_PRESET_HUMAN_FOCUS: &str = "nsfw, lowres, artistic error, film grain, s
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Sampler {
     /// `k_euler`
-        KEuler,
+    KEuler,
     /// `k_euler_ancestral`
-        #[default]
+    #[default]
     KEulerAncestral,
     /// `k_dpm_2`
-        KDpm2,
+    KDpm2,
     /// `k_dpm_2_ancestral`
-        KDpm2Ancestral,
+    KDpm2Ancestral,
     /// `k_dpmpp_2m`
-        KDpmpp2m,
+    KDpmpp2m,
     /// `k_dpmpp_2m_sde`
-        KDpmpp2mSde,
+    KDpmpp2mSde,
     /// `k_dpmpp_2s_ancestral`
-        KDpmpp2sAncestral,
+    KDpmpp2sAncestral,
     /// `k_dpmpp_sde`
-        KDpmppSde,
+    KDpmppSde,
     /// `ddim`
-        Ddim,
+    Ddim,
     /// `ddim_v3`
-        DdimV3,
+    DdimV3,
 }
 
 impl Sampler {
@@ -75,14 +74,14 @@ impl Sampler {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum NoiseSchedule {
     /// `native`
-        Native,
+    Native,
     /// `karras`
-        #[default]
+    #[default]
     Karras,
     /// `exponential`
-        Exponential,
+    Exponential,
     /// `polyexponential`
-        Polyexponential,
+    Polyexponential,
 }
 
 impl NoiseSchedule {
@@ -172,9 +171,7 @@ impl QualityPreset {
 
     /// Returns the `qualityToggle` value that accompanies the merged prompt.
     #[must_use]
-    pub const fn is_enabled(&self) -> bool {
-        !matches!(self, Self::None)
-    }
+    pub const fn is_enabled(&self) -> bool { !matches!(self, Self::None) }
 }
 
 /// Supported image stream modes.
@@ -199,9 +196,9 @@ impl StreamMode {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ImageFormat {
     /// PNG output.
-        Png,
+    Png,
     /// WebP output.
-        Webp,
+    Webp,
 }
 
 impl ImageFormat {
@@ -272,15 +269,11 @@ impl ImageSize {
 
     /// Returns the canvas area in pixels.
     #[must_use]
-    pub const fn pixels(&self) -> u64 {
-        (self.width as u64) * (self.height as u64)
-    }
+    pub const fn pixels(&self) -> u64 { (self.width as u64) * (self.height as u64) }
 }
 
 impl Default for ImageSize {
-    fn default() -> Self {
-        Self::portrait()
-    }
+    fn default() -> Self { Self::portrait() }
 }
 
 /// Sampling parameters.
@@ -298,10 +291,34 @@ pub struct SamplingParams {
     pub cfg_rescale: f32,
 }
 
-serde_string_enum!(Sampler, [Self::KEuler, Self::KEulerAncestral, Self::KDpm2, Self::KDpm2Ancestral, Self::KDpmpp2m, Self::KDpmpp2mSde, Self::KDpmpp2sAncestral, Self::KDpmppSde, Self::Ddim, Self::DdimV3]);
+serde_string_enum!(
+    Sampler,
+    [
+        Self::KEuler,
+        Self::KEulerAncestral,
+        Self::KDpm2,
+        Self::KDpm2Ancestral,
+        Self::KDpmpp2m,
+        Self::KDpmpp2mSde,
+        Self::KDpmpp2sAncestral,
+        Self::KDpmppSde,
+        Self::Ddim,
+        Self::DdimV3
+    ]
+);
 
-serde_string_enum!(NoiseSchedule, [Self::Native, Self::Karras, Self::Exponential, Self::Polyexponential]);
+serde_string_enum!(
+    NoiseSchedule,
+    [
+        Self::Native,
+        Self::Karras,
+        Self::Exponential,
+        Self::Polyexponential
+    ]
+);
 
 serde_string_enum!(StreamMode, [Self::Sse]);
 
 serde_string_enum!(ImageFormat, [Self::Png, Self::Webp]);
+#[cfg(feature = "generation")]
+pub mod bounds;

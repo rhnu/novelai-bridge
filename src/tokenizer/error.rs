@@ -71,6 +71,14 @@ pub enum TokenizerError {
         asset: TokenizerAsset,
         reason: String,
     },
+    /// Serialized asset data could not be converted to its required representation.
+    #[error("{asset} has invalid {context}")]
+    InvalidAssetData {
+        asset: TokenizerAsset,
+        context: &'static str,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     /// Two vocabulary entries claimed the same token ID.
     #[error("{asset} assigns id {id} to both {first} and {second}")]
     DuplicateTokenId {

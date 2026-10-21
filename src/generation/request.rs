@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
-use crate::{GenerationMode, ImageFormat, ImageSize, Model, ModelDescriptor, QualityPreset, SamplingParams, StreamMode, UcPreset};
+
 use super::{CharacterSet, GenerateImageRequestBuilder, Img2ImgRequest, ReferenceSet};
+use crate::{
+    GenerationMode, ImageFormat, ImageSize, Model, ModelDescriptor, QualityPreset, SamplingParams,
+    StreamMode, UcPreset,
+};
 
 /// Prompt, model and canvas fields shared by every generation request.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,17 +56,17 @@ impl GenerationCore {
             uc_preset: defaults.uc_preset,
         }
     }
-
 }
 
 impl Default for GenerationCore {
-    fn default() -> Self {
-        Self::new(String::new(), Model::default())
-    }
+    fn default() -> Self { Self::new(String::new(), Model::default()) }
 }
 
 /// Guidance toggles gated by model capabilities.
-#[allow(clippy::struct_excessive_bools, reason = "Provider guidance options are independent capability switches")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Provider guidance options are independent capability switches"
+)]
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GuidanceParams {
     /// Enables `NovelAI`'s variety boost (`skip_cfg_above_sigma`).
@@ -98,7 +102,7 @@ pub struct OutputParams {
     pub image_format: Option<ImageFormat>,
 }
 
-/// Request used by [`crate::Client::generate`].
+/// Editable input normalized into an effective generation plan.
 ///
 /// Fields are grouped by capability: an optional group is only accepted when
 /// [`Model::descriptor`] reports support for it.
@@ -131,9 +135,7 @@ impl GenerateImageRequest {
 
     /// Returns the read-only descriptor of the selected model.
     #[must_use]
-    pub const fn descriptor(&self) -> &'static ModelDescriptor {
-        self.core.model.descriptor()
-    }
+    pub const fn descriptor(&self) -> &'static ModelDescriptor { self.core.model.descriptor() }
 
     /// Returns the generation mode represented by the raw request shape.
     #[must_use]
@@ -146,7 +148,7 @@ impl GenerateImageRequest {
     }
 }
 
-/// Request used by [`crate::Client::generate_stream`].
+/// Generation input and delivery options for incremental image output.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct GenerateImageStreamRequest {
     /// Base image-generation request.
@@ -158,16 +160,13 @@ pub struct GenerateImageStreamRequest {
 impl GenerateImageStreamRequest {
     /// Returns the underlying ordinary generation request.
     #[must_use]
-    pub const fn base(&self) -> &GenerateImageRequest {
-        &self.base
-    }
+    pub const fn base(&self) -> &GenerateImageRequest { &self.base }
 }
 
 impl AsRef<GenerateImageRequest> for GenerateImageStreamRequest {
-    fn as_ref(&self) -> &GenerateImageRequest {
-        self.base()
-    }
+    fn as_ref(&self) -> &GenerateImageRequest { self.base() }
 }
+
 impl Default for GenerateImageRequest {
     fn default() -> Self {
         let model = Model::default();
@@ -183,4 +182,3 @@ impl Default for GenerateImageRequest {
         }
     }
 }
-

@@ -9,9 +9,7 @@ pub struct CharacterPosition {
 }
 
 impl Default for CharacterPosition {
-    fn default() -> Self {
-        Self { x: 0.5, y: 0.5 }
-    }
+    fn default() -> Self { Self { x: 0.5, y: 0.5 } }
 }
 
 /// Character prompt input used by V4 and later models.
@@ -55,12 +53,7 @@ impl CharacterSet {
 
     /// Returns the number of enabled characters.
     #[must_use]
-    pub fn enabled_count(&self) -> usize {
-        self.enabled().count()
-    }
+    pub fn enabled_count(&self) -> usize { self.enabled().count() }
 }
 
-pub(super) fn is_center_position(value: f32) -> bool {
-    (value - 0.5).abs() <= 0.0001
-}
-
+pub(super) fn is_center_position(value: f32) -> bool { (value - 0.5).abs() <= 0.0001 }

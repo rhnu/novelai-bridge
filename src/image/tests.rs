@@ -1,10 +1,8 @@
 use std::{io::Write, sync::Mutex};
 
 use crate::{
-    BridgeError, DefaultImagePreprocessor,
-    EncodedImage, GeneratedImageMetadata, ImagePreparation,
-    ImagePreprocessor, ImageSize, PreparedImage,
-    decode_generated_images,
+    BridgeError, DefaultImagePreprocessor, EncodedImage, GeneratedImageMetadata, ImagePreparation,
+    ImagePreprocessor, ImageSize, PreparedImage, decode_generated_images,
 };
 
 fn image(width: u32, height: u32) -> EncodedImage {
@@ -29,7 +27,6 @@ fn encoded_image_validates_once_and_serializes_as_canonical_base64() {
     assert_eq!(roundtrip, encoded);
     assert!(EncodedImage::from_bytes(b"not an image".to_vec()).is_err());
 }
-
 
 #[test]
 fn prepared_image_constructor_keeps_custom_implementations_validated() {
@@ -108,7 +105,9 @@ impl ImagePreprocessor for CountingPreprocessor {
 #[cfg(feature = "generation")]
 #[test]
 fn custom_preprocessor_observes_each_semantic_input_once() {
-    use crate::{CharacterReference, CharacterReferenceType, GenerateImageRequest, Img2ImgRequest, Model};
+    use crate::{
+        CharacterReference, CharacterReferenceType, GenerateImageRequest, Img2ImgRequest, Model,
+    };
     let mut img2img = Img2ImgRequest::new(image(4, 3), 0.5, 0.0);
     img2img.mask = Some(image(4, 3));
     let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
@@ -141,18 +140,22 @@ fn custom_preprocessor_observes_each_semantic_input_once() {
                 width: 64,
                 height: 64,
             }),
-            ImagePreparation::character_reference(ImageSize { width: 3, height: 4 }),
+            ImagePreparation::character_reference(ImageSize {
+                width: 3,
+                height: 4
+            }),
         ]
     );
 }
-
 
 fn create_png_bytes(width: u32, height: u32) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = png::Encoder::new(&mut bytes, width, height);
     encoder.set_color(png::ColorType::Rgba);
     let mut writer = encoder.write_header().unwrap();
-    writer.write_image_data(&vec![255; (width * height * 4) as usize]).unwrap();
+    writer
+        .write_image_data(&vec![255; (width * height * 4) as usize])
+        .unwrap();
     writer.finish().unwrap();
     bytes
 }
@@ -161,7 +164,9 @@ fn create_png_with_comment_text(comment: &str) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = png::Encoder::new(&mut bytes, 2, 2);
     encoder.set_color(png::ColorType::Rgba);
-    encoder.add_text_chunk("Comment".to_owned(), comment.to_owned()).unwrap();
+    encoder
+        .add_text_chunk("Comment".to_owned(), comment.to_owned())
+        .unwrap();
     let mut writer = encoder.write_header().unwrap();
     writer.write_image_data(&[255; 16]).unwrap();
     writer.finish().unwrap();
@@ -169,10 +174,19 @@ fn create_png_with_comment_text(comment: &str) -> Vec<u8> {
 }
 
 struct PixelCopyPreprocessor;
+
 impl ImagePreprocessor for PixelCopyPreprocessor {
-    fn prepare(&self, _field: &str, image: &EncodedImage, _operation: ImagePreparation) -> Result<PreparedImage, BridgeError> {
+    fn prepare(
+        &self,
+        _field: &str,
+        image: &EncodedImage,
+        _operation: ImagePreparation,
+    ) -> Result<PreparedImage, BridgeError> {
         let mut output = std::io::Cursor::new(Vec::new());
-        image.pixels().write_to(&mut output, image::ImageFormat::Png).unwrap();
+        image
+            .pixels()
+            .write_to(&mut output, image::ImageFormat::Png)
+            .unwrap();
         PreparedImage::from_png(output.into_inner())
     }
 }
@@ -180,26 +194,78 @@ impl ImagePreprocessor for PixelCopyPreprocessor {
 #[test]
 fn custom_preprocessor_reuses_pixels_and_must_match_the_resolved_canvas() {
     let image = image(3, 2);
-    let prepared = super::prepare_image(&PixelCopyPreprocessor, "source", &image, ImagePreparation::Source(image.size())).unwrap();
+    let prepared = super::prepare_image(
+        &PixelCopyPreprocessor,
+        "source",
+        &image,
+        ImagePreparation::Source(image.size()),
+    )
+    .unwrap();
     assert_eq!(prepared.size(), image.size());
-    let expected = ImageSize { width: 8, height: 8 };
-    assert!(matches!(super::prepare_image(&PixelCopyPreprocessor, "source", &image, ImagePreparation::Mask(expected)), Err(BridgeError::InvalidRequest(crate::InvalidRequest::PreparedImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size()));
+    let expected = ImageSize {
+        width: 8,
+        height: 8,
+    };
+    assert!(
+        matches!(super::prepare_image(&PixelCopyPreprocessor, "source", &image, ImagePreparation::Mask(expected)), Err(BridgeError::InvalidRequest(crate::InvalidRequest::PreparedImageSizeMismatch { expected: actual_target, actual, .. })) if actual_target == expected && actual == image.size())
+    );
 }
 
 #[test]
 fn preprocessing_rejects_zero_canvas_before_calling_the_adapter() {
     let preprocessor = CountingPreprocessor::default();
-    assert!(super::prepare_image(&preprocessor, "source", &image(2, 2), ImagePreparation::Source(ImageSize { width: 0, height: 2 })).is_err());
+    assert!(
+        super::prepare_image(
+            &preprocessor,
+            "source",
+            &image(2, 2),
+            ImagePreparation::Source(ImageSize {
+                width: 0,
+                height: 2
+            })
+        )
+        .is_err()
+    );
     assert!(preprocessor.operations.lock().unwrap().is_empty());
 }
 
 #[test]
 fn reference_canvas_preserves_the_supported_orientation_choices() {
     for (source, expected) in [
-        (ImageSize { width: 2, height: 3 }, ImageSize { width: 1024, height: 1536 }),
-        (ImageSize { width: 3, height: 2 }, ImageSize { width: 1536, height: 1024 }),
-        (ImageSize { width: 1, height: 1 }, ImageSize { width: 1472, height: 1472 }),
+        (
+            ImageSize {
+                width: 2,
+                height: 3,
+            },
+            ImageSize {
+                width: 1024,
+                height: 1536,
+            },
+        ),
+        (
+            ImageSize {
+                width: 3,
+                height: 2,
+            },
+            ImageSize {
+                width: 1536,
+                height: 1024,
+            },
+        ),
+        (
+            ImageSize {
+                width: 1,
+                height: 1,
+            },
+            ImageSize {
+                width: 1472,
+                height: 1472,
+            },
+        ),
     ] {
-        assert_eq!(ImagePreparation::character_reference(source).target_size(), expected);
+        assert_eq!(
+            ImagePreparation::character_reference(source).target_size(),
+            expected
+        );
     }
 }

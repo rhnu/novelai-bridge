@@ -1,4 +1,5 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
+
 use crate::{
     GeneratedImageMetadata, PngMetadataWarning, VibeMetadataSource,
     extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
@@ -245,7 +246,6 @@ fn extract_embedded_vibe_document_reads_naidata() {
             .contains("\"identifier\":\"novelai-vibe-transfer\"")
     );
 }
-
 
 #[test]
 fn vibe_metadata_keeps_model_encodings_separate() {

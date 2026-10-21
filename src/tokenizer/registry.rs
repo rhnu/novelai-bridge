@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
-use crate::{ImageTokenizerKind, Model};
+
 use super::{ClipTokenizer, QwenTokenizer, T5Tokenizer, TokenEncoder, TokenizerError};
+use crate::{ImageTokenizerKind, Model};
 
 #[cfg(test)]
 mod tests;
@@ -21,9 +22,7 @@ pub struct Tokenizers {
 impl Tokenizers {
     /// Creates an empty registry.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Loads the CLIP encoder from `bpe_simple_vocab_16e6.txt.gz`, compressed or expanded.
     ///
@@ -32,10 +31,8 @@ impl Tokenizers {
     /// Returns [`TokenizerError`] when the asset is inconsistent or cannot be read.
     pub fn with_clip_merges(mut self, bytes: &[u8]) -> Result<Self, TokenizerError> {
         let tokenizer = ClipTokenizer::from_merges_asset(bytes)?;
-        self.encoders.insert(
-            ImageTokenizerKind::Clip,
-            Arc::new(tokenizer),
-        );
+        self.encoders
+            .insert(ImageTokenizerKind::Clip, Arc::new(tokenizer));
         Ok(self)
     }
 
@@ -46,10 +43,8 @@ impl Tokenizers {
     /// Returns [`TokenizerError`] when the asset is inconsistent or cannot be read.
     pub fn with_t5_sentencepiece(mut self, bytes: &[u8]) -> Result<Self, TokenizerError> {
         let tokenizer = T5Tokenizer::from_sentencepiece_model(bytes)?;
-        self.encoders.insert(
-            ImageTokenizerKind::T5,
-            Arc::new(tokenizer),
-        );
+        self.encoders
+            .insert(ImageTokenizerKind::T5, Arc::new(tokenizer));
         Ok(self)
     }
 
@@ -64,15 +59,17 @@ impl Tokenizers {
         tokenizer_config_json: Option<&[u8]>,
     ) -> Result<Self, TokenizerError> {
         let tokenizer = QwenTokenizer::from_assets(tokenizer_json, tokenizer_config_json)?;
-        self.encoders.insert(
-            ImageTokenizerKind::Qwen,
-            Arc::new(tokenizer),
-        );
+        self.encoders
+            .insert(ImageTokenizerKind::Qwen, Arc::new(tokenizer));
         Ok(self)
     }
 
     /// Registers a loaded encoder, replacing any previous encoder of this kind.
-    pub fn register(&mut self, kind: ImageTokenizerKind, encoder: Arc<dyn TokenEncoder>) -> Option<Arc<dyn TokenEncoder>> {
+    pub fn register(
+        &mut self,
+        kind: ImageTokenizerKind,
+        encoder: Arc<dyn TokenEncoder>,
+    ) -> Option<Arc<dyn TokenEncoder>> {
         self.encoders.insert(kind, encoder)
     }
 
@@ -101,14 +98,14 @@ impl Tokenizers {
 
     /// Returns `true` when no encoder is loaded.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.encoders.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.encoders.is_empty() }
 }
-
 
 impl std::fmt::Debug for Tokenizers {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_struct("Tokenizers").field("kinds", &self.encoders.keys()).finish()
+        formatter
+            .debug_struct("Tokenizers")
+            .field("kinds", &self.encoders.keys())
+            .finish()
     }
 }

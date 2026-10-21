@@ -86,9 +86,9 @@ fn parse_webui_parameters(input: &str) -> ParameterFallback {
                     fallback.width = Some(width);
                     fallback.height = Some(height);
                 }
-            }
+            },
             "model" => fallback.model = non_empty_string(value),
-            _ => {}
+            _ => {},
         }
     }
 

@@ -1,5 +1,11 @@
-use crate::{Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset, VibeTransferConfig};
-use super::{CharacterSet, GenerateImageRequest, GenerationCore, GuidanceParams, Img2ImgRequest, ReferenceSet};
+use super::{
+    CharacterSet, GenerateImageRequest, GenerationCore, GuidanceParams, Img2ImgRequest,
+    ReferenceSet,
+};
+use crate::{
+    Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule, QualityPreset,
+    Sampler, SamplingParams, UcPreset, VibeTransferConfig,
+};
 
 /// Builder for [`GenerateImageRequest`].
 #[derive(Clone, Debug)]
@@ -185,7 +191,5 @@ impl GenerateImageRequestBuilder {
 
     /// Returns the assembled request.
     #[must_use]
-    pub fn build(self) -> GenerateImageRequest {
-        self.request
-    }
+    pub fn build(self) -> GenerateImageRequest { self.request }
 }

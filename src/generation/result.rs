@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+
 use crate::GeneratedImage;
 
 /// Result of a non-streaming image-generation request.

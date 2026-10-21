@@ -3,11 +3,14 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 #[cfg(feature = "streaming")]
 use futures_util::stream;
-use novelai_bridge::{
-    Transport, TransportError, TransportMethod, TransportOperation, TransportRequest, TransportResponse,
-};
 #[cfg(feature = "streaming")]
-use novelai_bridge::{BridgeError, ImageStreamChunk, StreamingTransport, TransportSseEvent, TransportSseResponse};
+use novelai_bridge::{
+    ImageStreamChunk, StreamingTransport, TransportSseEvent, TransportSseResponse,
+};
+use novelai_bridge::{
+    Transport, TransportError, TransportMethod, TransportOperation, TransportRequest,
+    TransportResponse,
+};
 use serde_json::Value;
 
 use super::create_png_bytes;
@@ -27,10 +30,7 @@ struct MockTransportState {
     encode_vibe_response: Vec<u8>,
     #[cfg(feature = "streaming")]
     sse_chunks: Vec<ImageStreamChunk>,
-    #[cfg(feature = "streaming")]
-    sse_error: Option<BridgeError>,
     json_response: Value,
-    json_error: Option<TransportError>,
     bytes_error: Option<TransportError>,
 }
 
@@ -53,52 +53,71 @@ impl MockTransport {
     }
 
     pub fn set_bytes_response(&self, bytes_response: Vec<u8>) {
-        self.state.lock().unwrap().bytes_response = bytes_response;
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .bytes_response = bytes_response;
     }
 
     pub fn set_encode_vibe_response(&self, encode_vibe_response: Vec<u8>) {
-        self.state.lock().unwrap().encode_vibe_response = encode_vibe_response;
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .encode_vibe_response = encode_vibe_response;
     }
 
     #[cfg(feature = "streaming")]
     pub fn set_sse_chunks(&self, sse_chunks: Vec<ImageStreamChunk>) {
-        self.state.lock().unwrap().sse_chunks = sse_chunks;
-    }
-
-    #[cfg(feature = "streaming")]
-    pub fn set_sse_error(&self, error: BridgeError) {
-        self.state.lock().unwrap().sse_error = Some(error);
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .sse_chunks = sse_chunks;
     }
 
     pub fn set_json_response(&self, json_response: Value) {
-        self.state.lock().unwrap().json_response = json_response;
-    }
-
-    pub fn set_json_error(&self, json_error: TransportError) {
-        self.state.lock().unwrap().json_error = Some(json_error);
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .json_response = json_response;
     }
 
     /// Makes the next `post_bytes` call fail with `bytes_error`.
+    #[cfg(feature = "credit-observer")]
     pub fn set_bytes_error(&self, bytes_error: TransportError) {
-        self.state.lock().unwrap().bytes_error = Some(bytes_error);
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .bytes_error = Some(bytes_error);
     }
 
     pub fn last_body(&self) -> Option<Value> {
-        self.state.lock().unwrap().last_body.clone()
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .last_body
+            .clone()
     }
 
     pub fn last_path(&self) -> Option<String> {
-        self.state.lock().unwrap().last_path.clone()
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .last_path
+            .clone()
     }
 
     pub fn byte_paths(&self) -> Vec<String> {
-        self.state.lock().unwrap().byte_paths.clone()
+        self.state
+            .lock()
+            .expect("mock state mutex is not poisoned")
+            .byte_paths
+            .clone()
     }
 
     pub fn bodies_for_path(&self, path: &str) -> Vec<Value> {
         self.state
             .lock()
-            .unwrap()
+            .expect("mock state mutex is not poisoned")
             .post_history
             .iter()
             .filter(|(recorded_path, _)| recorded_path == path)
@@ -125,16 +144,14 @@ impl Transport for MockTransport {
                     Box::new(source),
                 )
             })?;
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock state mutex is not poisoned");
         state.last_path = Some(request.endpoint.clone());
         if request.method == TransportMethod::Get {
-            if let Some(error) = state.json_error.take() {
-                return Err(error);
-            }
             return Ok(TransportResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: serde_json::to_vec(&state.json_response).unwrap(),
+                body: serde_json::to_vec(&state.json_response)
+                    .expect("mock JSON response is serializable"),
             });
         }
         if let Some(body) = body {
@@ -173,27 +190,19 @@ impl StreamingTransport for MockTransport {
                     Box::new(source),
                 )
             })?;
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock state mutex is not poisoned");
         state.last_path = Some(request.endpoint.clone());
         state.last_body = Some(body.clone());
         state.post_history.push((request.endpoint, body));
-        let mut items: Vec<Result<TransportSseEvent, TransportError>> = state
+        let items: Vec<Result<TransportSseEvent, TransportError>> = state
             .sse_chunks
             .iter()
             .map(|chunk| {
                 Ok(TransportSseEvent {
-                    data: serde_json::to_string(chunk).unwrap(),
+                    data: serde_json::to_string(chunk).expect("mock stream chunk is serializable"),
                 })
             })
             .collect();
-        if let Some(error) = state.sse_error.take() {
-            match error {
-                BridgeError::Transport(error) => items.push(Err(error)),
-                _ => items.push(Ok(TransportSseEvent {
-                    data: "not json".to_owned(),
-                })),
-            }
-        }
         drop(state);
         Ok(TransportSseResponse::Events(Box::pin(stream::iter(items))))
     }

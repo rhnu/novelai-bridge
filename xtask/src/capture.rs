@@ -59,21 +59,25 @@ pub struct CaptureTransport<T> {
 }
 
 impl<T> CaptureTransport<T> {
-    pub const fn new(inner: T, edits: RequestEdits) -> Self {
-        Self { inner, edits }
-    }
+    pub const fn new(inner: T, edits: RequestEdits) -> Self { Self { inner, edits } }
 }
 
 #[async_trait]
 impl<T: Transport> Transport for CaptureTransport<T> {
-    async fn execute(&self, request: TransportRequest) -> Result<TransportResponse, TransportError> {
+    async fn execute(
+        &self,
+        request: TransportRequest,
+    ) -> Result<TransportResponse, TransportError> {
         self.inner.execute(self.edits.apply(request)?).await
     }
 }
 
 #[async_trait]
 impl<T: StreamingTransport> StreamingTransport for CaptureTransport<T> {
-    async fn execute_sse(&self, request: TransportRequest) -> Result<TransportSseResponse, TransportError> {
+    async fn execute_sse(
+        &self,
+        request: TransportRequest,
+    ) -> Result<TransportSseResponse, TransportError> {
         self.inner.execute_sse(self.edits.apply(request)?).await
     }
 }

@@ -1,7 +1,9 @@
 use std::io::{Cursor, Read};
+
 use image::ImageFormat;
-use crate::{BridgeError, DecodeError, DecodeTarget, GeneratedImageMetadata};
+
 use super::GeneratedImage;
+use crate::{BridgeError, DecodeError, DecodeTarget, GeneratedImageMetadata};
 const MAX_ARCHIVE_ENTRIES: usize = 64;
 const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
@@ -110,8 +112,10 @@ fn validated_generated_image(
             Ok(parsed) => GeneratedImageMetadata::Parsed(Box::new(parsed)),
             Err(error) => {
                 image::load_from_memory_with_format(&bytes, format).map_err(response_error)?;
-                GeneratedImageMetadata::Invalid { message: error.to_string() }
-            }
+                GeneratedImageMetadata::Invalid {
+                    message: error.to_string(),
+                }
+            },
         }
     } else {
         image::load_from_memory_with_format(&bytes, format).map_err(response_error)?;
@@ -127,6 +131,7 @@ fn validated_generated_image(
 fn response_error(source: impl std::error::Error + Send + Sync + 'static) -> BridgeError {
     DecodeError::new(DecodeTarget::ImageResponse, Box::new(source)).into()
 }
+
 fn response_message(message: &str) -> BridgeError {
     response_error(std::io::Error::new(
         std::io::ErrorKind::InvalidData,

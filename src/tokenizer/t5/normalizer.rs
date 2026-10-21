@@ -1,9 +1,16 @@
 //! `SentencePiece`'s serialized Darts charsmap and whitespace rules (no ICU dependency).
-use super::{wire::Reader, TokenizerError, asset::malformed};
+use super::{
+    TokenizerError,
+    asset::{invalid_data, malformed},
+    wire::Reader,
+};
 
 #[derive(Debug)]
 // Independent flags are specified by the upstream NormalizerSpec/TrainerSpec wire format.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "SentencePiece stores independent normalization flags in its serialized model"
+)]
 pub(super) struct Normalizer {
     units: Vec<u32>,
     replacements: String,
@@ -26,12 +33,9 @@ impl Default for Normalizer {
     }
 }
 
-const fn offset(unit: u32) -> usize {
-    ((unit >> 10) << ((unit & 512) >> 6)) as usize
-}
-const fn label(unit: u32) -> u32 {
-    unit & 0x8000_00ff
-}
+const fn offset(unit: u32) -> usize { ((unit >> 10) << ((unit & 512) >> 6)) as usize }
+
+const fn label(unit: u32) -> u32 { unit & 0x8000_00FF }
 
 impl Normalizer {
     pub(super) fn parse(bytes: &[u8]) -> Result<Self, TokenizerError> {
@@ -66,7 +70,7 @@ impl Normalizer {
             .map(|word| u32::from_le_bytes(*word))
             .collect();
         std::str::from_utf8(reader.take(bytes.len() - size - 4)?)
-            .map_err(|_| malformed("charsmap replacements are not UTF-8"))?
+            .map_err(|source| invalid_data("charsmap replacement text", source))?
             .clone_into(&mut self.replacements);
         if !self.replacements.ends_with('\0') {
             return Err(malformed("unterminated charsmap replacements"));
@@ -85,7 +89,7 @@ impl Normalizer {
                 return Err(malformed("charsmap transition out of bounds"));
             }
             if unit & 256 != 0 {
-                let value = (self.units[base] & 0x7fff_ffff) as usize;
+                let value = (self.units[base] & 0x7FFF_FFFF) as usize;
                 if value >= self.replacements.len() || !self.replacements.is_char_boundary(value) {
                     return Err(malformed("charsmap replacement out of bounds"));
                 }
@@ -106,7 +110,7 @@ impl Normalizer {
                 }
                 node ^= offset(unit);
                 if unit & 256 != 0 && text.is_char_boundary(index + 1) {
-                    matched = Some((index + 1, (self.units[node] & 0x7fff_ffff) as usize));
+                    matched = Some((index + 1, (self.units[node] & 0x7FFF_FFFF) as usize));
                 }
             }
         }

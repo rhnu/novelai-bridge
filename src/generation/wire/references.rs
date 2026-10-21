@@ -1,7 +1,7 @@
-use crate::{BridgeError, CharacterReference, ImagePreparation, ImagePreprocessor};
 use super::{ReferenceCaption, ReferenceConditionInput};
+use crate::{BridgeError, CharacterReference, ImagePreparation, ImagePreprocessor};
 
-pub(crate) struct CharacterReferenceWireParts {
+pub(super) struct CharacterReferenceWireParts {
     pub images: Vec<String>,
     pub descriptions: Vec<ReferenceConditionInput>,
     pub information_extracted: Vec<f32>,
@@ -9,7 +9,7 @@ pub(crate) struct CharacterReferenceWireParts {
     pub strength_values: Vec<f32>,
 }
 
-pub(crate) fn convert_character_references(
+pub(super) fn convert_character_references(
     refs: &[CharacterReference],
     preprocessor: &dyn ImagePreprocessor,
 ) -> Result<CharacterReferenceWireParts, BridgeError> {
@@ -22,12 +22,12 @@ pub(crate) fn convert_character_references(
     for (idx, item) in refs.iter().enumerate() {
         images.push(
             crate::image::prepare_image(
-                    preprocessor,
-                    &format!("references.character_references[{idx}].image"),
-                    &item.image,
-                    ImagePreparation::character_reference(item.image.size()),
-                )?
-                .to_base64(),
+                preprocessor,
+                &format!("references.character_references[{idx}].image"),
+                &item.image,
+                ImagePreparation::character_reference(item.image.size()),
+            )?
+            .to_base64(),
         );
         descriptions.push(ReferenceConditionInput {
             caption: Some(ReferenceCaption {

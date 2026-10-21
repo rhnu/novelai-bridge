@@ -29,9 +29,7 @@ pub enum FramingPolicy {
 impl FramingPolicy {
     /// Returns `true` when model-input framing tokens should be added.
     #[must_use]
-    pub const fn includes_framing(self) -> bool {
-        matches!(self, Self::ModelInput)
-    }
+    pub const fn includes_framing(self) -> bool { matches!(self, Self::ModelInput) }
 }
 
 /// Token usage for one prompt field against its model's limit.
@@ -47,19 +45,13 @@ pub struct TokenCount {
 impl TokenCount {
     /// Creates a count.
     #[must_use]
-    pub const fn new(used: u32, limit: u32) -> Self {
-        Self { used, limit }
-    }
+    pub const fn new(used: u32, limit: u32) -> Self { Self { used, limit } }
 
     /// Returns `true` when the text exceeds the model's prompt limit.
     #[must_use]
-    pub const fn is_over_limit(&self) -> bool {
-        self.used > self.limit
-    }
+    pub const fn is_over_limit(&self) -> bool { self.used > self.limit }
 
     /// Returns how many tokens remain, saturating at zero when over the limit.
     #[must_use]
-    pub const fn remaining(&self) -> u32 {
-        self.limit.saturating_sub(self.used)
-    }
+    pub const fn remaining(&self) -> u32 { self.limit.saturating_sub(self.used) }
 }

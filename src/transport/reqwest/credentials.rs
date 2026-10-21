@@ -9,19 +9,35 @@ pub enum ApiKeySource {
     Inline { value: SecretString },
 }
 
-pub(super) fn resolve(source: &ApiKeySource) -> Result<SecretString, TransportError> {
-    let value = match source {
-        ApiKeySource::Inline { value } => value.expose_secret().to_owned(),
-        ApiKeySource::Environment => std::env::var("NOVELAI_API_KEY").map_err(|source| {
-            TransportError::new(TransportOperation::ResolveCredentials, None, Box::new(source))
-        })?,
+pub(super) fn resolve(source: ApiKeySource) -> Result<SecretString, TransportError> {
+    let secret = match source {
+        ApiKeySource::Inline { value } => value,
+        ApiKeySource::Environment => std::env::var("NOVELAI_API_KEY")
+            .map_err(|source| {
+                TransportError::new(
+                    TransportOperation::ResolveCredentials,
+                    None,
+                    Box::new(source),
+                )
+            })?
+            .into(),
     };
-    let value = value.trim();
+    let value = secret.expose_secret().trim();
     if value.is_empty() {
-        return Err(TransportError::new(TransportOperation::ResolveCredentials, None,
-            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "API key cannot be blank"))));
+        return Err(TransportError::new(
+            TransportOperation::ResolveCredentials,
+            None,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "API key cannot be blank",
+            )),
+        ));
     }
-    Ok(value.to_owned().into())
+    if value.len() == secret.expose_secret().len() {
+        Ok(secret)
+    } else {
+        Ok(value.to_owned().into())
+    }
 }
 
 #[cfg(test)]

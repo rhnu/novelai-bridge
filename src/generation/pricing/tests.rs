@@ -1,6 +1,7 @@
-use crate::{AnlasPricingContext, Model, PricingMode};
-use crate::generation::{GenerateImageRequest, Img2ImgRequest};
-use crate::generation::test_support::image;
+use crate::{
+    AnlasPricingContext, Model, PricingMode,
+    generation::{GenerateImageRequest, Img2ImgRequest, test_support::image},
+};
 
 #[test]
 fn normalized_quote_basis_contains_one_effective_operation() {
@@ -10,5 +11,8 @@ fn normalized_quote_basis_contains_one_effective_operation() {
     let basis = normalized.anlas_estimate_input(AnlasPricingContext::default());
     assert_eq!(basis.mode, PricingMode::ImageToImage { strength: 0.99 });
     assert_eq!(basis.pending_vibe_encodes, 0);
-    assert_eq!(normalized.estimate_anlas_cost(AnlasPricingContext::default()), crate::estimate_anlas_cost(basis));
+    assert_eq!(
+        normalized.estimate_anlas_cost(AnlasPricingContext::default()),
+        crate::estimate_anlas_cost(basis)
+    );
 }

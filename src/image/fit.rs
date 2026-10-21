@@ -1,5 +1,10 @@
 use std::io::Cursor;
-use image::{DynamicImage, ImageFormat, Rgba, RgbaImage, imageops::{self, FilterType}};
+
+use image::{
+    DynamicImage, ImageFormat, Rgba, RgbaImage,
+    imageops::{self, FilterType},
+};
+
 use crate::{BridgeError, ImageSize, InvalidRequest};
 const REFERENCE_TARGETS: [(u32, u32); 3] = [(1024, 1536), (1536, 1024), (1472, 1472)];
 
@@ -29,6 +34,7 @@ pub(super) fn fit_decoded(
         })?;
     Ok(output.into_inner())
 }
+
 fn fit_within(sw: u32, sh: u32, tw: u32, th: u32) -> (u32, u32) {
     if u64::from(tw) * u64::from(sh) <= u64::from(th) * u64::from(sw) {
         (
@@ -52,6 +58,7 @@ fn fit_within(sw: u32, sh: u32, tw: u32, th: u32) -> (u32, u32) {
         )
     }
 }
+
 pub(super) fn pick_reference_size(source: ImageSize) -> ImageSize {
     REFERENCE_TARGETS
         .into_iter()

@@ -1,4 +1,7 @@
-use super::{asset::malformed, TokenizerError};
+use super::{
+    TokenizerError,
+    asset::{invalid_data, malformed},
+};
 
 pub(super) struct Reader<'a> {
     bytes: &'a [u8],
@@ -6,13 +9,9 @@ pub(super) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    pub(super) const fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, position: 0 }
-    }
+    pub(super) const fn new(bytes: &'a [u8]) -> Self { Self { bytes, position: 0 } }
 
-    pub(super) const fn is_done(&self) -> bool {
-        self.position >= self.bytes.len()
-    }
+    pub(super) const fn is_done(&self) -> bool { self.position >= self.bytes.len() }
 
     pub(super) fn varint(&mut self) -> Result<u64, TokenizerError> {
         let mut value = 0u64;
@@ -26,7 +25,7 @@ impl<'a> Reader<'a> {
             if shift == 63 && byte > 1 {
                 return Err(malformed("varint exceeds 64 bits"));
             }
-            value |= u64::from(byte & 0x7f) << shift;
+            value |= u64::from(byte & 0x7F) << shift;
             if byte & 0x80 == 0 {
                 return Ok(value);
             }
@@ -50,7 +49,7 @@ impl<'a> Reader<'a> {
 
     pub(super) fn length_delimited(&mut self) -> Result<&'a [u8], TokenizerError> {
         let length = usize::try_from(self.varint()?)
-            .map_err(|_| malformed("length-delimited field is longer than usize"))?;
+            .map_err(|source| invalid_data("length-delimited field length", source))?;
         self.take(length)
     }
 
@@ -69,16 +68,16 @@ impl<'a> Reader<'a> {
         match wire_type {
             0 => {
                 self.varint()?;
-            }
+            },
             1 => {
                 self.take(8)?;
-            }
+            },
             2 => {
                 self.length_delimited()?;
-            }
+            },
             5 => {
                 self.take(4)?;
-            }
+            },
             other => return Err(malformed(&format!("unsupported wire type {other}"))),
         }
         Ok(())

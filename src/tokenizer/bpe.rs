@@ -70,9 +70,7 @@ pub struct Symbol {
 impl Symbol {
     /// Returns the symbol text.
     #[must_use]
-    pub fn text(&self) -> &str {
-        &self.text
-    }
+    pub fn text(&self) -> &str { &self.text }
 }
 
 /// Ranked merge table with interned symbols.
@@ -167,7 +165,6 @@ impl MergeTable {
     }
 }
 
-
 /// Shared byte-level encoding, vocabulary lookup and bounded piece memoization.
 #[derive(Debug)]
 pub(super) struct ByteBpe {
@@ -179,13 +176,25 @@ pub(super) struct ByteBpe {
 }
 
 impl ByteBpe {
-    pub(super) fn new(vocab: HashMap<String, super::TokenId>, pairs: Vec<(String, String)>, word_suffix: Option<&'static str>) -> Self {
-        Self { vocab, merges: MergeTable::from_ranked_pairs(pairs), byte_table: byte_to_unicode(), word_suffix, cache: std::sync::Mutex::new(HashMap::new()) }
+    pub(super) fn new(
+        vocab: HashMap<String, super::TokenId>,
+        pairs: Vec<(String, String)>,
+        word_suffix: Option<&'static str>,
+    ) -> Self {
+        Self {
+            vocab,
+            merges: MergeTable::from_ranked_pairs(pairs),
+            byte_table: byte_to_unicode(),
+            word_suffix,
+            cache: std::sync::Mutex::new(HashMap::new()),
+        }
     }
 
     pub(super) fn vocabulary_size(&self) -> usize { self.vocab.len() }
 
-    pub(super) fn token_id(&self, token: &str) -> Option<super::TokenId> { self.vocab.get(token).copied() }
+    pub(super) fn token_id(&self, token: &str) -> Option<super::TokenId> {
+        self.vocab.get(token).copied()
+    }
 
     pub(super) fn encode_piece(&self, piece: &str, output: &mut Vec<super::TokenId>) {
         if let Ok(cache) = self.cache.lock()
@@ -194,16 +203,29 @@ impl ByteBpe {
             output.extend_from_slice(cached);
             return;
         }
-        let mut symbols: Vec<Symbol> = piece.bytes().map(|byte| self.merges.symbol(self.byte_table[byte as usize].to_string())).collect();
+        let mut symbols: Vec<Symbol> = piece
+            .bytes()
+            .map(|byte| {
+                self.merges
+                    .symbol(self.byte_table[byte as usize].to_string())
+            })
+            .collect();
         if let Some(suffix) = self.word_suffix
             && let Some(last) = symbols.pop()
         {
             symbols.push(self.merges.symbol(format!("{}{suffix}", last.text())));
         }
-        let ids: Vec<super::TokenId> = self.merges.merge(symbols).into_iter().map(|symbol| self.vocab[symbol.text()]).collect();
+        let ids: Vec<super::TokenId> = self
+            .merges
+            .merge(symbols)
+            .into_iter()
+            .map(|symbol| self.vocab[symbol.text()])
+            .collect();
         output.extend_from_slice(&ids);
         if let Ok(mut cache) = self.cache.lock() {
-            if cache.len() >= 4096 { cache.clear(); }
+            if cache.len() >= 4096 {
+                cache.clear();
+            }
             cache.insert(piece.to_owned(), ids);
         }
     }

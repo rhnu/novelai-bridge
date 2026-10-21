@@ -49,15 +49,11 @@ impl Model {
 
     /// Returns the immutable descriptor from the built-in registry.
     #[must_use]
-    pub const fn descriptor(&self) -> &'static ModelDescriptor {
-        registry::descriptor(*self)
-    }
+    pub const fn descriptor(&self) -> &'static ModelDescriptor { registry::descriptor(*self) }
 
     /// Returns the API model identifier from the registry.
     #[must_use]
-    pub const fn as_str(&self) -> &'static str {
-        self.descriptor().identity.api_id
-    }
+    pub const fn as_str(&self) -> &'static str { self.descriptor().identity.api_id }
 
     /// Returns the registered inpainting sibling, or `None` when unavailable.
     #[must_use]
@@ -88,7 +84,10 @@ impl Model {
 /// assert_eq!(descriptor.prompt().token_limit, 512);
 /// let result = descriptor.resolve_references(
 ///     GenerationMode::ImageToImage,
-///     ReferenceIntent { vibe: true, character: true },
+///     ReferenceIntent {
+///         vibe: true,
+///         character: true,
+///     },
 /// );
 /// assert!(result.character.is_available());
 /// assert!(!result.vibe.is_available());
@@ -118,63 +117,57 @@ pub struct ModelDescriptor {
 impl ModelDescriptor {
     /// API identity of this model.
     #[must_use]
-    pub const fn identity(&self) -> &ModelIdentity {
-        &self.identity
-    }
+    pub const fn identity(&self) -> &ModelIdentity { &self.identity }
 
     /// Operation and reference profiles supported by this model.
     #[must_use]
-    pub const fn support(&self) -> &ModelSupport {
-        &self.support
-    }
+    pub const fn support(&self) -> &ModelSupport { &self.support }
 
     /// Local generation limits used by normalization.
     #[must_use]
-    pub const fn constraints(&self) -> &GenerationConstraints {
-        &self.constraints
-    }
+    pub const fn constraints(&self) -> &GenerationConstraints { &self.constraints }
 
     /// Factory request defaults used by builders.
     #[must_use]
-    pub const fn defaults(&self) -> &ModelDefaults {
-        &self.defaults
-    }
+    pub const fn defaults(&self) -> &ModelDefaults { &self.defaults }
 
     /// Tokenizer, context limit and conditioning options.
     #[must_use]
-    pub const fn prompt(&self) -> &PromptProfile {
-        &self.prompt
-    }
+    pub const fn prompt(&self) -> &PromptProfile { &self.prompt }
 
     /// Sampling support and noise-schedule fallback rules.
     #[must_use]
-    pub const fn sampling(&self) -> &SamplingProfile {
-        &self.sampling
-    }
+    pub const fn sampling(&self) -> &SamplingProfile { &self.sampling }
 
     /// Protocol shape, version and extensions.
     #[must_use]
-    pub const fn wire(&self) -> &WireProfile {
-        &self.wire
-    }
+    pub const fn wire(&self) -> &WireProfile { &self.wire }
 
     /// Model-specific pricing policy.
     #[must_use]
-    pub const fn pricing(&self) -> &PricingProfile {
-        &self.pricing
-    }
+    pub const fn pricing(&self) -> &PricingProfile { &self.pricing }
 }
+
 impl Serialize for Model {
-    fn serialize<Serializer: serde::Serializer>(&self, serializer: Serializer) -> Result<Serializer::Ok, Serializer::Error> {
+    fn serialize<Serializer: serde::Serializer>(
+        &self,
+        serializer: Serializer,
+    ) -> Result<Serializer::Ok, Serializer::Error> {
         serializer.serialize_str(self.as_str())
     }
 }
 
 impl<'input> Deserialize<'input> for Model {
-    fn deserialize<Deserializer: serde::Deserializer<'input>>(deserializer: Deserializer) -> Result<Self, Deserializer::Error> {
+    fn deserialize<Deserializer: serde::Deserializer<'input>>(
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error> {
         let identifier = String::deserialize(deserializer)?;
-        Self::ALL.into_iter().find(|model| model.as_str() == identifier)
-            .ok_or_else(|| serde::de::Error::custom(format!("unknown model identifier: {identifier}")))
+        Self::ALL
+            .into_iter()
+            .find(|model| model.as_str() == identifier)
+            .ok_or_else(|| {
+                serde::de::Error::custom(format!("unknown model identifier: {identifier}"))
+            })
     }
 }
 

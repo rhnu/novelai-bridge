@@ -8,8 +8,7 @@ fn accepts_data_url() {
 
 #[test]
 fn rejects_non_image_data_url() {
-    let error =
-        decode_image("test.image", "data:text/plain;base64,QUJDRA==").unwrap_err();
+    let error = decode_image("test.image", "data:text/plain;base64,QUJDRA==").unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::InvalidDataUrl {

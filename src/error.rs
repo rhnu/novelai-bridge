@@ -25,7 +25,7 @@ pub enum BridgeError {
     /// The request failed local validation.
     #[error(transparent)]
     InvalidRequest(#[from] InvalidRequest),
-    /// The NovelAI API returned a non-success status.
+    /// The `NovelAI` API returned a non-success status.
     #[error(transparent)]
     Api(#[from] ApiError),
     /// A transport-level operation failed.

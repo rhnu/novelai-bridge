@@ -1,6 +1,7 @@
+use serde_json::{Value, json};
+
 use super::*;
 use crate::tokenizer::bpe;
-use serde_json::{Value, json};
 
 pub(super) fn qwen_asset() -> Value {
     let vocab: serde_json::Map<String, Value> = bpe::byte_to_unicode()
@@ -107,24 +108,29 @@ fn qwen_rejects_disagreeing_companion_config() {
 fn asset_failures_keep_merge_and_vocabulary_categories() {
     let mut dangling = qwen_asset();
     dangling["model"]["merges"] = json!([["a", "b"]]);
-    assert!(matches!(load_qwen(&dangling), Err(TokenizerError::MissingMergeSymbol { .. })));
+    assert!(matches!(
+        load_qwen(&dangling),
+        Err(TokenizerError::MissingMergeSymbol { .. })
+    ));
     let mut duplicate = qwen_asset();
     duplicate["model"]["vocab"]["a"] = json!(0);
-    assert!(matches!(load_qwen(&duplicate), Err(TokenizerError::DuplicateTokenId { id: 0, .. })));
+    assert!(matches!(
+        load_qwen(&duplicate),
+        Err(TokenizerError::DuplicateTokenId { id: 0, .. })
+    ));
 }
 
-
-    #[test]
-    fn regex_failure_is_not_a_partial_success() {
-        let asset = qwen_asset();
-        let mut tokenizer = QwenTokenizer::from_assets(asset.to_string().as_bytes(), None).unwrap();
-        tokenizer.pattern = fancy_regex::RegexBuilder::new("(a+a+)+(?>b)")
-            .backtrack_limit(1)
-            .seek(false)
-            .build()
-            .unwrap();
-        assert!(matches!(
-            tokenizer.encode("aaaaaaaaaab", FramingPolicy::ContentOnly),
-            Err(TokenizerError::EncodingFailed { .. })
-        ));
-    }
+#[test]
+fn regex_failure_is_not_a_partial_success() {
+    let asset = qwen_asset();
+    let mut tokenizer = QwenTokenizer::from_assets(asset.to_string().as_bytes(), None).unwrap();
+    tokenizer.pattern = fancy_regex::RegexBuilder::new("(a+a+)+(?>b)")
+        .backtrack_limit(1)
+        .seek(false)
+        .build()
+        .unwrap();
+    assert!(matches!(
+        tokenizer.encode("aaaaaaaaaab", FramingPolicy::ContentOnly),
+        Err(TokenizerError::EncodingFailed { .. })
+    ));
+}
