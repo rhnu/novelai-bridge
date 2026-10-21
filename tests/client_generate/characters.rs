@@ -94,14 +94,15 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
     params.policy = ValidationPolicy::Reject;
     params.references = Some(ReferenceSet {
         vibe_transfer: Some(VibeTransferConfig {
-            strength: 1.0,
-            references: vec![VibeReference {
-                strength: 1.0,
-                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
-            }],
+            normalize_strength: true,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("AQID").unwrap(),
+                1.0,
+            )],
         }),
         character_references: vec![CharacterReference {
             image: png_data_url(64, 64),
+            information_extracted: 1.0,
             reference_type: CharacterReferenceType::Character,
             fidelity: 0.5,
             strength: 0.6,

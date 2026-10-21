@@ -153,6 +153,7 @@ pub(super) struct CapabilityParameters {
     sm_dyn: Option<bool>,
     dynamic_thresholding: Option<bool>,
     tag_hint_transparent_background: Option<bool>,
+    straight_alpha: Option<bool>,
 }
 
 #[derive(Serialize)]

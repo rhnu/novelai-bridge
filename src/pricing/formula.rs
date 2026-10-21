@@ -71,16 +71,17 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     } else {
         0
     };
-    let vibe_reference_overage = if descriptor
-        .resolve_references(
-            input.mode.generation_mode(),
-            crate::ReferenceIntent {
-                vibe: input.vibe_reference_count > 0,
-                character: character_reference_count > 0,
-            },
-        )
-        .vibe
-        .is_available()
+    let vibe_reference_overage = if descriptor.can_encode_vibe()
+        && descriptor
+            .resolve_references(
+                input.mode.generation_mode(),
+                crate::ReferenceIntent {
+                    vibe: input.vibe_reference_count > 0,
+                    character: character_reference_count > 0,
+                },
+            )
+            .vibe
+            .is_available()
     {
         input
             .vibe_reference_count

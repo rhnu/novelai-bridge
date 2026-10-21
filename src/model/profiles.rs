@@ -79,8 +79,8 @@ impl ReferenceModes {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum VibeInputPath {
-    /// Legacy provider capability; the bridge does not implement this input path.
-    ProviderOnlyLegacy,
+    /// Raw images fitted to a 448×448 canvas.
+    RawImage,
     /// Pre-encoded caches from the bridge's encode-vibe operation.
     Encoded,
 }

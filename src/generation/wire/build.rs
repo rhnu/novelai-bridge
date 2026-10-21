@@ -64,6 +64,12 @@ pub(in crate::generation) fn build_generate_request(
             .prompt()
             .transparent_background
             .then_some(params.core.transparent_background),
+        straight_alpha: (descriptor.prompt().transparent_background
+            && params.core.transparent_background)
+            .then_some(matches!(
+                params.output.alpha_mode,
+                crate::AlphaMode::Straight
+            )),
     };
     Ok(ImageGenerationRequestBody {
         action: match params.mode() {

@@ -9,6 +9,7 @@
 - Add `DirectorCommand::DeclutterKeepBubbles`.
 - Add V5 Full Medium and its inpainting sibling with fixed sampling, Heavy UC, custom-negative restrictions and the Medium pricing step factor.
 - Add V5 Max Enhance with explicit input, expected-output and pricing geometry. Apply the model's canvas grid before source preparation and serialization.
+- Add encode-vibe masks, cropping and explicit focus/information seeds, V3 raw image vibe input, configurable encoded-strength normalization, character-reference information extraction and transparent-output alpha representation.
 
 ### Changed
 
@@ -38,6 +39,9 @@
 - Inspect preset text through `model.descriptor().prompt().quality_preset(...)` or `uc_preset(...)`. Remove calls to global `QualityPreset::tags` / `UcPreset::preset_text` and replace `QualitySupport` inspection with the model's supported definition lists.
 - Pass the Director command to `estimate_director_tool_cost`, or call `PreparedDirector::estimate_anlas_cost` to use its effective dimensions. `source_size()` retains the original size; `image_size()` reports the processed canvas.
 - Handle `RequestCostEstimate::Unavailable`. Its `total()` now returns `Option<u32>`; known generation and fixed prices return `Some`.
+- Replace `VibeReference::vibe_data_cache` with `VibeReference::encoded(...)` or `VibeReference::image(...)`. Replace the unrelated group `strength` with `VibeTransferConfig::normalize_strength` (or use `new`). Vibe references no longer send `controlnet_strength`. Construct encoding requests with `EncodeVibeRequest::new` and set optional mask/crop/seed fields as needed.
+- Add `information_extracted` to character-reference literals, or use `CharacterReference::new` for defaults. Finite signed reference strengths and fidelity values are preserved instead of being clamped to 0-1. Use `GenerationField::VibeReference { index, field }` for row diagnostics.
+- Add `OutputParams::alpha_mode` to output literals, or use defaults. Transparent output defaults to straight alpha.
 
 ## 0.6.0 - 2026-10-21
 

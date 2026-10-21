@@ -187,6 +187,17 @@ impl ImageFormat {
     }
 }
 
+/// Alpha representation used for transparent output.
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AlphaMode {
+    /// Preserve color channels independently of alpha.
+    #[default]
+    Straight,
+    /// Multiply color channels by alpha.
+    Premultiplied,
+}
+
 /// Image dimensions in pixels.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

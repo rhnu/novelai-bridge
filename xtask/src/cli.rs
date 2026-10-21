@@ -54,6 +54,8 @@ pub enum Preset {
     Infill,
     /// Encode a vibe, then generate with it.
     Vibe,
+    /// Encode a vibe without generating an image.
+    EncodeVibe,
     /// Generate with a director character reference.
     Charref,
     /// Streaming text-to-image.
@@ -64,6 +66,21 @@ pub enum Preset {
     Upscale,
     /// Read tag suggestions without generating images.
     Tags,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Alpha {
+    Straight,
+    Premultiplied,
+}
+
+impl From<Alpha> for novelai_bridge::AlphaMode {
+    fn from(value: Alpha) -> Self {
+        match value {
+            Alpha::Straight => Self::Straight,
+            Alpha::Premultiplied => Self::Premultiplied,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -119,6 +136,10 @@ pub struct RunArgs {
     #[arg(long)]
     pub transparent: bool,
 
+    /// Alpha representation for transparent output.
+    #[arg(long, value_enum, default_value = "straight")]
+    pub alpha: Alpha,
+
     /// Reject unsupported or out-of-range values instead of normalizing them.
     #[arg(long)]
     pub strict: bool,
@@ -130,6 +151,19 @@ pub struct RunArgs {
     /// Inpaint mask for `infill`. A centered rectangle is synthesized if absent.
     #[arg(long)]
     pub mask: Option<PathBuf>,
+
+    #[arg(long, default_value_t = 1.0)]
+    pub information_extracted: f32,
+
+    /// Crop vibe encoding to the mask bounds.
+    #[arg(long)]
+    pub crop_to_mask: bool,
+
+    #[arg(long, allow_hyphen_values = true)]
+    pub focus_seed: Option<i64>,
+
+    #[arg(long, allow_hyphen_values = true)]
+    pub info_extract_seed: Option<i64>,
 
     #[arg(long, default_value_t = 0.7)]
     pub strength: f32,

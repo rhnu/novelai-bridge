@@ -1,23 +1,40 @@
 use super::{EncodeVibeRequest, wire::VibeRequestBody};
 use crate::{
-    BridgeError, EncodeError, EncodeTarget, InvalidRequest, Model, RequestField,
-    ValidationAdjustment, parameters::bounds::normalize_float,
+    BridgeError, EncodeError, EncodeTarget, ImagePreparation, ImagePreprocessor, ImageSize,
+    InvalidRequest, Model, RequestField, ValidationAdjustment, parameters::bounds::normalize_float,
 };
 
 /// A validated encode-vibe operation with its encoded source image.
 pub struct PreparedVibe {
     model: Model,
+    image_size: ImageSize,
     body: VibeRequestBody,
     adjustments: Vec<ValidationAdjustment>,
 }
 
 impl EncodeVibeRequest {
-    /// Validates the model and normalizes extraction strength without network I/O.
+    /// Validates extraction options and prepares an optional source mask without network I/O.
     ///
     /// # Errors
     ///
-    /// Returns unsupported-model or invalid numeric parameter errors.
-    pub fn prepare(self) -> Result<PreparedVibe, BridgeError> {
+    /// Returns model, extraction, crop-context or image-preparation failures.
+    pub fn prepare(self) -> Result<PreparedVibe, BridgeError> { self.prepare_inner(None) }
+
+    /// Prepares an optional mask with a caller-provided pixel transformer.
+    ///
+    /// # Errors
+    /// Returns model, extraction, crop-context or image-preparation failures.
+    pub fn prepare_with(
+        self,
+        preprocessor: &dyn ImagePreprocessor,
+    ) -> Result<PreparedVibe, BridgeError> {
+        self.prepare_inner(Some(preprocessor))
+    }
+
+    fn prepare_inner(
+        self,
+        preprocessor: Option<&dyn ImagePreprocessor>,
+    ) -> Result<PreparedVibe, BridgeError> {
         self.image.validate_policy(
             RequestField::Image,
             crate::media_policy::ImageDecodePolicy::default(),
@@ -32,17 +49,43 @@ impl EncodeVibeRequest {
         let information_extracted = normalize_float(
             RequestField::VibeInformationExtracted,
             self.information_extracted,
-            0.01,
+            0.0,
             1.0,
             self.policy,
         )?;
+        if self.crop_to_mask == Some(true) && self.mask.is_none() {
+            return Err(InvalidRequest::RequiredFieldForContext {
+                context: "crop_to_mask".to_owned(),
+                field: RequestField::VibeMask,
+            }
+            .into());
+        }
+        let image_size = self.image.size();
+        let mask = self
+            .mask
+            .as_ref()
+            .map(|mask| {
+                crate::image::prepare_image(
+                    preprocessor,
+                    RequestField::VibeMask,
+                    mask,
+                    ImagePreparation::Mask(image_size),
+                )
+                .map(|prepared| prepared.to_base64())
+            })
+            .transpose()?;
         let body = VibeRequestBody {
             image: self.image.to_base64(),
             information_extracted,
             model: self.model.as_str(),
+            mask,
+            crop_to_mask: self.crop_to_mask,
+            focus_seed: self.focus_seed,
+            info_extract_seed: self.info_extract_seed,
         };
         Ok(PreparedVibe {
             model: self.model,
+            image_size,
             body,
             adjustments: if information_extracted.to_bits() == self.information_extracted.to_bits()
             {
@@ -71,6 +114,10 @@ impl PreparedVibe {
     #[must_use]
     pub const fn model(&self) -> Model { self.model }
 
+    /// Source dimensions shared by the original image and its prepared mask.
+    #[must_use]
+    pub const fn image_size(&self) -> ImageSize { self.image_size }
+
     /// Encodes the prepared operation without repeating validation.
     ///
     /// # Errors
@@ -86,6 +133,8 @@ impl std::fmt::Debug for PreparedVibe {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PreparedVibe")
             .field("model", &self.model)
+            .field("image_size", &self.image_size)
+            .field("has_mask", &self.body.mask.is_some())
             .field("information_extracted", &self.information_extracted())
             .field("adjustments", &self.adjustments)
             .finish_non_exhaustive()

@@ -39,7 +39,6 @@ pub(super) fn normalize(
     }
     if let Some(references) = request.references.as_mut() {
         normalizer.normalize_character_references(references)?;
-        normalizer.normalize_vibe_transfer(references.vibe_transfer.as_mut())?;
     }
     normalizer.normalize_operation(&mut request.operation, descriptor)?;
     normalizer.normalize_sampling(&mut request, descriptor)?;

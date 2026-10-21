@@ -50,11 +50,30 @@ pub struct CharacterReference {
     pub image: crate::EncodedImage,
     /// How the reference should be interpreted.
     pub reference_type: CharacterReferenceType,
-    /// Fidelity value used to derive secondary strength.
+    /// Amount of information extracted, normalized to 0–1; defaults to one.
+    #[serde(default = "default_information_extracted")]
+    pub information_extracted: f32,
+    /// Finite, signed fidelity used to derive `1 - fidelity` secondary strength.
     pub fidelity: f32,
-    /// Overall reference strength.
+    /// Finite, signed reference strength.
     pub strength: f32,
 }
+
+impl CharacterReference {
+    /// Creates a reference with information extraction, fidelity and strength set to one.
+    #[must_use]
+    pub const fn new(image: crate::EncodedImage, reference_type: CharacterReferenceType) -> Self {
+        Self {
+            image,
+            reference_type,
+            information_extracted: 1.0,
+            fidelity: 1.0,
+            strength: 1.0,
+        }
+    }
+}
+
+const fn default_information_extracted() -> f32 { 1.0 }
 
 /// Reference images attached to a generation request.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]

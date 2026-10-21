@@ -423,8 +423,8 @@ const V3: ModelDescriptor = ModelDescriptor {
         max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v3",
-            input: VibeInputPath::ProviderOnlyLegacy,
-            modes: ReferenceModes::Unmasked,
+            input: VibeInputPath::RawImage,
+            modes: ReferenceModes::All,
         }),
         character_reference: None,
     },
@@ -464,8 +464,8 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
         max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v3furry",
-            input: VibeInputPath::ProviderOnlyLegacy,
-            modes: ReferenceModes::Unmasked,
+            input: VibeInputPath::RawImage,
+            modes: ReferenceModes::All,
         }),
         character_reference: None,
     },

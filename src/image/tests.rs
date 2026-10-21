@@ -176,6 +176,7 @@ fn custom_preprocessor_observes_each_semantic_input_once() {
         .character_references(vec![CharacterReference {
             image: image(3, 4),
             reference_type: CharacterReferenceType::Character,
+            information_extracted: 1.0,
             fidelity: 0.5,
             strength: 0.5,
         }])
@@ -202,6 +203,60 @@ fn custom_preprocessor_observes_each_semantic_input_once() {
                 height: 4
             }),
         ]
+    );
+}
+
+#[test]
+fn raw_vibe_uses_a_black_contain_canvas_and_rounds_the_center_offset() {
+    let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        3,
+        1,
+        image::Rgba([255, 0, 0, 255]),
+    ));
+    let bytes = PreparedImage::from_pixels(&source)
+        .unwrap()
+        .as_bytes()
+        .to_vec();
+    let source = EncodedImage::from_bytes(bytes).unwrap();
+    let prepared = DefaultImagePreprocessor
+        .prepare(
+            crate::RequestField::Image,
+            &source,
+            ImagePreparation::RawVibe,
+        )
+        .unwrap();
+    let pixels = image::load_from_memory(prepared.as_bytes())
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(pixels.dimensions(), (448, 448));
+    // 448/3 rounds to 149; the remaining 299 pixels put 150 above and 149 below.
+    assert_eq!(pixels.get_pixel(224, 149).0, [0, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(224, 150).0, [255, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(224, 298).0, [255, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(224, 299).0, [0, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(0, 224).0, [255, 0, 0, 255]);
+    assert_eq!(pixels.get_pixel(447, 224).0, [255, 0, 0, 255]);
+}
+
+#[test]
+fn custom_preprocessor_observes_the_raw_vibe_role_once() {
+    use crate::{GenerateImageRequest, Model, VibeReference, VibeTransferConfig};
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion3)
+        .vibe_transfer(VibeTransferConfig::new(vec![VibeReference::image(
+            image(4, 3),
+            0.5,
+            -2.0,
+        )]))
+        .build();
+    let preprocessor = CountingPreprocessor::default();
+    request
+        .normalize()
+        .unwrap()
+        .prepare_with(&preprocessor)
+        .unwrap();
+    assert_eq!(
+        *preprocessor.operations.lock().unwrap(),
+        [ImagePreparation::RawVibe]
     );
 }
 

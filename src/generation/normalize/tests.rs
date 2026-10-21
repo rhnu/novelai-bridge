@@ -155,13 +155,14 @@ fn empty_vibe_is_always_absent_independent_of_other_reference_groups() {
             let mut input = request();
             input.references = Some(ReferenceSet {
                 vibe_transfer: Some(VibeTransferConfig {
-                    strength: f32::NAN,
+                    normalize_strength: true,
                     references: Vec::new(),
                 }),
                 character_references: if character_present {
                     vec![CharacterReference {
                         image: image(),
                         reference_type: CharacterReferenceType::Character,
+                        information_extracted: 1.0,
                         fidelity: 1.0,
                         strength: 1.0,
                     }]
@@ -203,14 +204,17 @@ fn request_with_references() -> GenerateImageRequest {
         character_references: vec![CharacterReference {
             image: image(),
             reference_type: CharacterReferenceType::Character,
+            information_extracted: 1.0,
             fidelity: 1.0,
             strength: 1.0,
         }],
         vibe_transfer: Some(VibeTransferConfig {
-            strength: 1.0,
+            normalize_strength: true,
             references: vec![VibeReference {
                 strength: 1.0,
-                vibe_data_cache: VibeEncoding::from_bytes(b"private".to_vec()).unwrap(),
+                input: crate::VibeReferenceInput::Encoded {
+                    encoding: VibeEncoding::from_bytes(b"private".to_vec()).unwrap(),
+                },
             }],
         }),
     });

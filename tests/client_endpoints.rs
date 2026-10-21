@@ -43,6 +43,10 @@ async fn encode_vibe_returns_base64() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
@@ -70,6 +74,10 @@ async fn encode_vibe_observation_reports_a_fixed_cost() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
@@ -102,6 +110,10 @@ async fn encode_vibe_rejects_models_without_vibe_support() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion5Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
@@ -126,6 +138,10 @@ async fn encode_vibe_clamps_information_extracted_when_not_strict() {
             image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await
@@ -145,6 +161,10 @@ async fn encode_vibe_rejects_information_extracted_when_strict() {
             image: image(2, 2),
             information_extracted: 2.0,
             model: Model::NaiDiffusion45Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Reject,
         })
         .await
@@ -344,6 +364,10 @@ async fn custom_base_urls_route_image_service_endpoints() {
             image: image(2, 2),
             information_extracted: 0.7,
             model: Model::NaiDiffusion45Full,
+            mask: None,
+            crop_to_mask: None,
+            focus_seed: None,
+            info_extract_seed: None,
             policy: novelai_bridge::ValidationPolicy::Normalize,
         })
         .await

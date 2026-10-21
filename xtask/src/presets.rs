@@ -4,7 +4,7 @@ use novelai_bridge::{
     EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
     GenerationInput, ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model,
     ReferenceSet, StreamMode, SuggestTagsRequest, TagLanguage, Transport, UpscaleImageRequest,
-    VibeReference, VibeTransferConfig,
+    VibeInputPath, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -69,7 +69,15 @@ pub fn shape(
             ApiEndpoint::UpscaleImage,
             Some(upscale_request(args, size)?.prepare()?.encode()?),
         ),
-        Preset::Vibe => (
+        Preset::EncodeVibe => (
+            ApiEndpoint::EncodeVibe,
+            Some(
+                encode_vibe_request(args, model, size)?
+                    .prepare()?
+                    .encode()?,
+            ),
+        ),
+        Preset::Vibe if model.descriptor().can_encode_vibe() => (
             ApiEndpoint::EncodeVibe,
             Some(
                 encode_vibe_request(args, model, size)?
@@ -144,21 +152,41 @@ pub async fn execute<T: Transport + ?Sized>(
             Ok(format!("seed {resolved_seed}, {chunks} chunk(s)"))
         },
         Preset::Vibe => {
-            let encoded = client
-                .encode_vibe(encode_vibe_request(args, model, size)?)
-                .await?;
+            let reference = if is_raw_vibe(model) {
+                VibeReference::image(
+                    inputs::source(args, size)?,
+                    args.information_extracted,
+                    args.strength,
+                )
+            } else if model.descriptor().can_encode_vibe() {
+                VibeReference::encoded(
+                    client
+                        .encode_vibe(encode_vibe_request(args, model, size)?)
+                        .await?,
+                    args.strength,
+                )
+            } else {
+                anyhow::bail!("the selected model does not support vibe input");
+            };
             let mut request = base_request(args, model, size);
             request.references = Some(ReferenceSet {
-                vibe_transfer: Some(VibeTransferConfig {
-                    references: vec![VibeReference {
-                        vibe_data_cache: encoded,
-                        strength: 0.6,
-                    }],
-                    strength: 1.0,
-                }),
+                vibe_transfer: Some(VibeTransferConfig::new(vec![reference])),
                 character_references: Vec::new(),
             });
             report::generation(&client.generate(request).await?, args)
+        },
+        Preset::EncodeVibe => {
+            let encoded = client
+                .encode_vibe(encode_vibe_request(args, model, size)?)
+                .await?;
+            if let Some(out) = &args.out {
+                std::fs::create_dir_all(out)?;
+                std::fs::write(out.join("vibe.bin"), encoded.as_bytes())?;
+            }
+            Ok(format!(
+                "{} vibe encoding byte(s)",
+                encoded.as_bytes().len()
+            ))
         },
         _ => report::generation(
             &client
@@ -167,6 +195,14 @@ pub async fn execute<T: Transport + ?Sized>(
             args,
         ),
     }
+}
+
+fn is_raw_vibe(model: Model) -> bool {
+    model
+        .descriptor()
+        .support()
+        .vibe
+        .is_some_and(|profile| profile.input == VibeInputPath::RawImage)
 }
 
 fn tag_query(args: &RunArgs, model: Model) -> SuggestTagsRequest {
@@ -192,12 +228,18 @@ fn encode_vibe_request(
     model: Model,
     size: ImageSize,
 ) -> TaskResult<EncodeVibeRequest> {
-    Ok(EncodeVibeRequest {
-        image: inputs::source(args, size)?,
-        information_extracted: 1.0,
-        model,
-        policy: args.policy(),
-    })
+    let mut request = EncodeVibeRequest::new(inputs::source(args, size)?, model);
+    request.information_extracted = args.information_extracted;
+    request.mask = if args.mask.is_some() || args.crop_to_mask {
+        Some(inputs::mask(args, request.image.size())?)
+    } else {
+        None
+    };
+    request.crop_to_mask = args.crop_to_mask.then_some(true);
+    request.focus_seed = args.focus_seed;
+    request.info_extract_seed = args.info_extract_seed;
+    request.policy = args.policy();
+    Ok(request)
 }
 
 fn generation_request(
@@ -229,7 +271,21 @@ fn generation_request(
                     reference_type: CharacterReferenceType::Character,
                     fidelity: 0.5,
                     strength: 0.6,
+                    information_extracted: args.information_extracted,
                 }],
+            });
+        },
+        Preset::Vibe => {
+            if !is_raw_vibe(model) {
+                anyhow::bail!("the selected model does not support raw vibe input");
+            }
+            request.references = Some(ReferenceSet {
+                vibe_transfer: Some(VibeTransferConfig::new(vec![VibeReference::image(
+                    inputs::source(args, size)?,
+                    args.information_extracted,
+                    args.strength,
+                )])),
+                character_references: Vec::new(),
             });
         },
         _ => {},
@@ -245,6 +301,7 @@ fn base_request(args: &RunArgs, model: Model, size: ImageSize) -> GenerateImageR
         .variety_boost(args.variety)
         .quality(args.quality.into())
         .transparent_background(args.transparent)
+        .alpha_mode(args.alpha.into())
         .policy(args.policy());
 
     if let Some(negative) = args.negative.as_ref() {

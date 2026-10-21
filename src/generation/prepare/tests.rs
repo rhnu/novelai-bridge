@@ -288,14 +288,16 @@ fn character_reference_projection_keeps_each_records_values_together() {
             CharacterReference {
                 image: image(),
                 reference_type: CharacterReferenceType::Style,
-                fidelity: 0.25,
-                strength: 0.5,
+                information_extracted: 0.25,
+                fidelity: -0.25,
+                strength: -0.5,
             },
             CharacterReference {
                 image: image(),
                 reference_type: CharacterReferenceType::Character,
-                fidelity: 1.0,
-                strength: 0.75,
+                information_extracted: 0.75,
+                fidelity: 2.0,
+                strength: 1.75,
             },
         ])
         .build();
@@ -310,7 +312,7 @@ fn character_reference_projection_keeps_each_records_values_together() {
         2
     );
     for (index, caption, secondary, strength) in
-        [(0, "style", 0.75, 0.5), (1, "character", 0.0, 0.75)]
+        [(0, "style", 1.25, -0.5), (1, "character", -1.0, 1.75)]
     {
         assert_eq!(
             parameters["director_reference_descriptions"][index]["caption"]["base_caption"],
@@ -326,7 +328,193 @@ fn character_reference_projection_keeps_each_records_values_together() {
         );
         assert_eq!(
             parameters["director_reference_information_extracted"][index],
-            1.0
+            if index == 0 { 0.25 } else { 0.75 }
+        );
+    }
+}
+
+#[test]
+fn encoded_vibe_preparation_projects_the_single_normalization_without_rescaling() {
+    use crate::{VibeEncoding, VibeReference, VibeTransferConfig};
+    let references = [-1.400_443_8, -0.591_067_5, 3.574_618_3]
+        .map(|strength| {
+            VibeReference::encoded(VibeEncoding::from_bytes(vec![1, 2, 3]).unwrap(), strength)
+        })
+        .to_vec();
+    let plan = GenerateImageRequest::builder("cat", Model::NaiDiffusion4Full)
+        .seed(42)
+        .vibe_transfer(VibeTransferConfig::new(references))
+        .build()
+        .normalize()
+        .unwrap();
+    let expected: Vec<_> = plan
+        .request()
+        .references
+        .as_ref()
+        .unwrap()
+        .vibe_transfer
+        .as_ref()
+        .unwrap()
+        .references
+        .iter()
+        .map(|reference| reference.strength)
+        .collect();
+    let prepared = plan.prepare().unwrap();
+    for delivery in [
+        GenerationDelivery::Images,
+        GenerationDelivery::Stream(StreamMode::Sse),
+    ] {
+        assert_eq!(
+            serde_json::from_value::<Vec<f32>>(
+                payload(&prepared, delivery)["parameters"]["reference_strength_multiple"].clone()
+            )
+            .unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn raw_and_encoded_vibes_project_distinct_parallel_arrays_without_controlnet() {
+    use crate::{VibeEncoding, VibeReference, VibeTransferConfig};
+    for raw in [false, true] {
+        let references = if raw {
+            vec![
+                VibeReference::image(image(), 0.25, -2.0),
+                VibeReference::image(image(), 0.75, 4.0),
+            ]
+        } else {
+            vec![
+                VibeReference::encoded(VibeEncoding::from_bytes(vec![1, 2, 3]).unwrap(), -2.0),
+                VibeReference::encoded(VibeEncoding::from_bytes(vec![4, 5, 6]).unwrap(), 4.0),
+            ]
+        };
+        let model = if raw {
+            Model::NaiDiffusion3
+        } else {
+            Model::NaiDiffusion4Full
+        };
+        let plan = GenerateImageRequest::builder("cat", model)
+            .seed(42)
+            .vibe_transfer(VibeTransferConfig::new(references))
+            .build()
+            .normalize()
+            .unwrap();
+        let parameters =
+            payload(&plan.prepare().unwrap(), GenerationDelivery::Images)["parameters"].clone();
+        assert!(parameters.get("controlnet_strength").is_none());
+        assert_eq!(
+            parameters["reference_image_multiple"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        if raw {
+            assert!(
+                parameters
+                    .get("normalize_reference_strength_multiple")
+                    .is_none()
+            );
+            assert_eq!(
+                parameters["reference_information_extracted_multiple"],
+                serde_json::json!([0.25, 0.75])
+            );
+            assert_eq!(
+                parameters["reference_strength_multiple"],
+                serde_json::json!([-2.0, 4.0])
+            );
+            for image in parameters["reference_image_multiple"].as_array().unwrap() {
+                let bytes = base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    image.as_str().unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    EncodedImage::from_bytes(bytes).unwrap().size(),
+                    ImageSize {
+                        width: 448,
+                        height: 448
+                    }
+                );
+            }
+        } else {
+            assert_eq!(parameters["normalize_reference_strength_multiple"], true);
+            assert!(
+                parameters
+                    .get("reference_information_extracted_multiple")
+                    .is_none()
+            );
+            assert_eq!(
+                parameters["reference_image_multiple"],
+                serde_json::json!(["AQID", "BAUG"])
+            );
+            let strengths = parameters["reference_strength_multiple"]
+                .as_array()
+                .unwrap();
+            assert!((strengths[0].as_f64().unwrap() + 1.0 / 3.0).abs() < 0.000_001);
+            assert!((strengths[1].as_f64().unwrap() - 2.0 / 3.0).abs() < 0.000_001);
+        }
+    }
+    let bare = GenerateImageRequest::builder("cat", Model::NaiDiffusion4Full)
+        .seed(42)
+        .build()
+        .normalize()
+        .unwrap()
+        .prepare()
+        .unwrap();
+    assert!(
+        payload(&bare, GenerationDelivery::Images)["parameters"]
+            .get("controlnet_strength")
+            .is_none()
+    );
+}
+
+#[test]
+fn transparent_output_preserves_both_alpha_representations_and_omits_opaque_options() {
+    use crate::AlphaMode;
+    for (model, transparent, mode, expected) in [
+        (
+            Model::NaiDiffusion5Full,
+            true,
+            AlphaMode::Straight,
+            Some(true),
+        ),
+        (
+            Model::NaiDiffusion5Full,
+            true,
+            AlphaMode::Premultiplied,
+            Some(false),
+        ),
+        (
+            Model::NaiDiffusion5FullMedium,
+            true,
+            AlphaMode::Straight,
+            Some(true),
+        ),
+        (Model::NaiDiffusion5Full, false, AlphaMode::Straight, None),
+        (
+            Model::NaiDiffusion45Full,
+            true,
+            AlphaMode::Premultiplied,
+            None,
+        ),
+    ] {
+        let prepared = GenerateImageRequest::builder("cat", model)
+            .transparent_background(transparent)
+            .alpha_mode(mode)
+            .seed(42)
+            .build()
+            .normalize()
+            .unwrap()
+            .prepare()
+            .unwrap();
+        let body = payload(&prepared, GenerationDelivery::Images);
+        assert_eq!(
+            body["parameters"]
+                .get("straight_alpha")
+                .and_then(serde_json::Value::as_bool),
+            expected
         );
     }
 }

@@ -74,7 +74,7 @@ fn implemented_character_reference_takes_precedence_over_vibe() {
 }
 
 #[test]
-fn provider_only_input_is_distinct_from_absent_capability() {
+fn raw_image_input_is_available_without_enabling_encode_vibe() {
     let legacy = Model::NaiDiffusion3.descriptor();
     let current = Model::NaiDiffusion5Full.descriptor();
     let intent = ReferenceIntent {
@@ -85,7 +85,7 @@ fn provider_only_input_is_distinct_from_absent_capability() {
         legacy
             .resolve_references(GenerationMode::TextToImage, intent)
             .vibe,
-        ReferenceAvailability::InputNotImplemented
+        ReferenceAvailability::Available
     );
     assert_eq!(
         current
@@ -94,6 +94,31 @@ fn provider_only_input_is_distinct_from_absent_capability() {
         ReferenceAvailability::Unsupported
     );
     assert!(!legacy.can_encode_vibe());
+}
+
+#[test]
+fn raw_vibe_is_available_for_all_v3_generation_modes() {
+    for model in [Model::NaiDiffusion3, Model::NaiDiffusion3Furry] {
+        for mode in [
+            GenerationMode::TextToImage,
+            GenerationMode::ImageToImage,
+            GenerationMode::Inpainting,
+        ] {
+            assert_eq!(
+                model
+                    .descriptor()
+                    .resolve_references(
+                        mode,
+                        ReferenceIntent {
+                            vibe: true,
+                            character: false
+                        }
+                    )
+                    .vibe,
+                ReferenceAvailability::Available
+            );
+        }
+    }
 }
 
 #[test]

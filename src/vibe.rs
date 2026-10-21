@@ -3,7 +3,9 @@ mod encoding;
 pub use encoding::VibeEncoding;
 
 mod prepare;
+mod reference;
 mod request;
 mod wire;
 pub use prepare::PreparedVibe;
-pub use request::{EncodeVibeRequest, VibeReference, VibeTransferConfig};
+pub use reference::{VibeReference, VibeReferenceInput, VibeTransferConfig};
+pub use request::EncodeVibeRequest;

@@ -114,6 +114,21 @@ For V5 Max Enhance, use `.max_enhance(ImageToImageInput::new(image, strength, no
 The source dimensions seed the request canvas, then normalization applies the model's grid.
 `NormalizedGeneration::geometry()` exposes the effective input, expected output and pricing target separately.
 
+Vibe inputs follow the selected model: use `VibeReference::image(image, information_extracted,
+strength)` for V3, or `VibeReference::encoded(encoding, strength)` for V4/V4.5. Wrap references
+with `VibeTransferConfig::new(references)`. Its `normalize_strength` switch defaults to true and
+normalizes multiple encoded-reference strengths when their absolute sum exceeds one. Signed
+strengths are preserved; V3 uses its own 448-pixel image preparation without this normalization.
+
+`EncodeVibeRequest::new(image, model)` accepts an optional mask, `crop_to_mask`, `focus_seed` and
+`info_extract_seed`. Omitted seeds retain the provider's content-based behavior; explicit zero
+and negative seeds are sent unchanged. Cropping requires a mask. Character references expose
+`information_extracted` independently of strength and fidelity.
+
+For transparent generation, `.alpha_mode(AlphaMode::Straight)` is the default. Select
+`AlphaMode::Premultiplied` to request premultiplied output. Alpha options are only sent when
+transparent output is enabled on a supported model.
+
 For inspection or reuse, call `request.normalize()` to get the effective plan and its diagnostics,
 then `plan.prepare()` to transform images and resolve an automatic seed. Send that preparation
 with `client.generate_prepared(...)`, or inspect its JSON with

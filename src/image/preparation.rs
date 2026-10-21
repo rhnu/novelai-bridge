@@ -18,6 +18,8 @@ pub enum ImagePreparation {
     CharacterReference(ImageSize),
     /// Resize a Director Tools source to its effective processing dimensions.
     Director(ImageSize),
+    /// Contain a V3 vibe image in an opaque black 448×448 PNG using Lanczos3.
+    RawVibe,
 }
 
 impl ImagePreparation {
@@ -53,6 +55,10 @@ impl ImagePreparation {
     #[must_use]
     pub const fn target_size(self) -> ImageSize {
         match self {
+            Self::RawVibe => ImageSize {
+                width: 448,
+                height: 448,
+            },
             Self::Source(size)
             | Self::Mask(size)
             | Self::CharacterReference(size)
@@ -251,12 +257,15 @@ fn prepare_builtin(
 ) -> Result<PreparedImage, BridgeError> {
     let size = operation.target_size();
     let filter = match operation {
+        ImagePreparation::RawVibe => FilterType::Lanczos3,
         ImagePreparation::Mask(_) => FilterType::Nearest,
         ImagePreparation::Source(_)
         | ImagePreparation::CharacterReference(_)
         | ImagePreparation::Director(_) => FilterType::CatmullRom,
     };
-    let bytes = if matches!(operation, ImagePreparation::Director(_)) {
+    let bytes = if matches!(operation, ImagePreparation::RawVibe) {
+        super::fit::fit_raw_vibe(field, image.pixels(), size)?
+    } else if matches!(operation, ImagePreparation::Director(_)) {
         // Independent dimension flooring slightly changes the aspect ratio. A second fit
         // would shrink a side again and add an unintended border.
         let policy = ImageDecodePolicy::default();

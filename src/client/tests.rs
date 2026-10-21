@@ -186,6 +186,10 @@ async fn vibe_prepared_and_raw_calls_share_transport_and_decode_behavior() {
         image: crate::EncodedImage::from_bytes(source_image()).unwrap(),
         information_extracted: 1.0,
         model: crate::Model::NaiDiffusion45Full,
+        mask: None,
+        crop_to_mask: None,
+        focus_seed: None,
+        info_extract_seed: None,
         policy: crate::ValidationPolicy::Reject,
     };
     let prepared = request.clone().prepare().unwrap();

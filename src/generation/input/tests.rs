@@ -18,14 +18,17 @@ fn request_with_nested_inputs() -> GenerateImageRequest {
     request.references = Some(ReferenceSet {
         vibe_transfer: Some(VibeTransferConfig {
             references: vec![VibeReference {
-                vibe_data_cache: VibeEncoding::from_bytes(vec![0, 1, 255]).unwrap(),
+                input: crate::VibeReferenceInput::Encoded {
+                    encoding: VibeEncoding::from_bytes(vec![0, 1, 255]).unwrap(),
+                },
                 strength: 0.5,
             }],
-            strength: 0.5,
+            normalize_strength: true,
         }),
         character_references: vec![CharacterReference {
             image: image(),
             reference_type: CharacterReferenceType::Character,
+            information_extracted: 1.0,
             fidelity: 0.5,
             strength: 0.5,
         }],
@@ -59,6 +62,7 @@ fn editable_requests_reject_unknown_fields_at_every_nested_input_group() {
             "/references/character_references/0",
             "/references/vibe_transfer",
             "/references/vibe_transfer/references/0",
+            "/references/vibe_transfer/references/0/input",
             "/output",
         ] {
             let mut value = serialized.clone();

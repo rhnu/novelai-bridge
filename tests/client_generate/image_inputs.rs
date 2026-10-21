@@ -125,6 +125,7 @@ async fn generate_normalizes_character_reference_image_payloads() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .character_references(vec![CharacterReference {
             image: png_data_url(800, 1200),
+            information_extracted: 1.0,
             reference_type: CharacterReferenceType::CharacterAndStyle,
             fidelity: 0.5,
             strength: 0.6,
@@ -148,12 +149,14 @@ async fn generate_serializes_character_reference_director_fields() {
         .character_references(vec![
             CharacterReference {
                 image: png_data_url(800, 1200),
+                information_extracted: 1.0,
                 reference_type: CharacterReferenceType::Character,
                 fidelity: 0.25,
                 strength: 0.8,
             },
             CharacterReference {
                 image: png_data_url(1200, 800),
+                information_extracted: 1.0,
                 reference_type: CharacterReferenceType::Style,
                 fidelity: 0.7,
                 strength: 0.3,
@@ -197,6 +200,7 @@ async fn generate_rejects_character_references_on_v4_under_reject_policy() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full)
         .character_references(vec![CharacterReference {
             image: png_data_url(64, 64),
+            information_extracted: 1.0,
             reference_type: CharacterReferenceType::Character,
             fidelity: 0.5,
             strength: 0.6,
@@ -221,6 +225,7 @@ async fn generate_drops_character_references_on_v4_under_normalize_policy() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full)
         .character_references(vec![CharacterReference {
             image: png_data_url(64, 64),
+            information_extracted: 1.0,
             reference_type: CharacterReferenceType::Character,
             fidelity: 0.5,
             strength: 0.6,
@@ -240,6 +245,7 @@ async fn generate_drops_references_on_v5_under_normalize_policy() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .character_references(vec![CharacterReference {
             image: png_data_url(64, 64),
+            information_extracted: 1.0,
             reference_type: CharacterReferenceType::Character,
             fidelity: 0.5,
             strength: 0.6,
@@ -258,11 +264,11 @@ async fn generate_rejects_vibe_transfer_on_v5_under_reject_policy() {
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .vibe_transfer(VibeTransferConfig {
-            references: vec![VibeReference {
-                vibe_data_cache: VibeEncoding::from_base64("QUJDRA==").unwrap(),
-                strength: 0.6,
-            }],
-            strength: 0.8,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("QUJDRA==").unwrap(),
+                0.6,
+            )],
+            normalize_strength: true,
         })
         .policy(ValidationPolicy::Reject)
         .build();
@@ -284,11 +290,11 @@ async fn generate_serializes_explicit_vibe_data_cache() {
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
-            strength: 1.0,
-            references: vec![VibeReference {
-                strength: 0.6,
-                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
-            }],
+            normalize_strength: true,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("AQID").unwrap(),
+                0.6,
+            )],
         })
         .build();
 
@@ -323,7 +329,7 @@ async fn generate_serializes_explicit_vibe_data_cache() {
     // A live A/B showed this field changes nothing and is accepted when absent, so it is no
     // longer sent: encode_vibe bakes the value into the cache.
     assert!(body["parameters"]["reference_information_extracted_multiple"].is_null());
-    assert!((body["parameters"]["controlnet_strength"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    assert!(body["parameters"].get("controlnet_strength").is_none());
 }
 
 #[tokio::test]
@@ -346,11 +352,11 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .inpainting(img2img)
         .vibe_transfer(VibeTransferConfig {
-            strength: 1.0,
-            references: vec![VibeReference {
-                strength: 1.0,
-                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
-            }],
+            normalize_strength: true,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("AQID").unwrap(),
+                1.0,
+            )],
         })
         .build();
 
@@ -361,41 +367,41 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
 }
 
 #[tokio::test]
-async fn generate_clamps_reference_numeric_values_under_normalize_policy() {
+async fn generate_preserves_signed_reference_strength_under_normalize_policy() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
-            strength: 2.0,
-            references: vec![VibeReference {
-                strength: -1.0,
-                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
-            }],
+            normalize_strength: true,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("AQID").unwrap(),
+                -1.0,
+            )],
         })
         .build();
 
     let _ = client.generate(params).await.unwrap();
     let body = transport.last_body().expect("generate body");
-    assert_eq!(body["parameters"]["controlnet_strength"], json!(1.0));
+    assert!(body["parameters"].get("controlnet_strength").is_none());
     assert_eq!(
         body["parameters"]["reference_strength_multiple"][0],
-        json!(0.0)
+        json!(-1.0)
     );
 }
 
 #[tokio::test]
-async fn generate_rejects_reference_numeric_values_under_reject_policy() {
+async fn generate_rejects_nonfinite_reference_strength_under_reject_policy() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
-            strength: 1.0,
-            references: vec![VibeReference {
-                strength: 5.0,
-                vibe_data_cache: VibeEncoding::from_base64("AQID").unwrap(),
-            }],
+            normalize_strength: true,
+            references: vec![VibeReference::encoded(
+                VibeEncoding::from_base64("AQID").unwrap(),
+                f32::NAN,
+            )],
         })
         .policy(ValidationPolicy::Reject)
         .build();
@@ -403,8 +409,8 @@ async fn generate_rejects_reference_numeric_values_under_reject_policy() {
     let error = client.generate(params).await.unwrap_err();
     assert!(matches!(
         error,
-        BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if *field == RequestField::Generation(GenerationField::VibeReferenceStrength(0))
+        BridgeError::InvalidRequest(InvalidRequest::NonFiniteNumber { ref field, .. })
+            if *field == RequestField::Generation(GenerationField::VibeReference { index: 0, field: novelai_bridge::VibeReferenceField::Strength })
     ));
     assert!(transport.last_path().is_none());
 }

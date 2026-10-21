@@ -36,7 +36,7 @@ cargo xtask shape upscale --size 256x256
 cargo xtask shape tags --prompt cat --lang en
 ```
 
-`shape` consumes the same prepared payload and `ApiEndpoint` request description as the client and does not construct a transport or require credentials. Vibe shape inspection covers the encode-vibe request; generation with that encoding needs its response.
+`shape` consumes the same prepared payload and `ApiEndpoint` request description as the client and does not construct a transport or require credentials. Vibe shape inspection covers the raw V3 generation request or the V4/V4.5 encode-vibe request; generation with an encoding needs its response. Use `shape encode-vibe` or `probe encode-vibe` to inspect or send only the encoding operation. Encoding accepts `--information-extracted`, `--mask`, `--crop-to-mask`, `--focus-seed` and `--info-extract-seed`. Transparent generation accepts `--alpha straight` or `--alpha premultiplied`.
 
 `cargo xtask probe` sends the selected scenario and can consume credits. It resolves `NOVELAI_API_KEY` from the environment or the repository-local `.env`. The `--set` and `--unset` options apply deliberate JSON edits after preparation. Setting can add an object field; missing parent paths, removal targets and body edits on a bodyless operation are errors. Synthetic image dimensions and pixel storage are checked before allocation.
 

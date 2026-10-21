@@ -120,6 +120,21 @@ fn applies_reference_and_vibe_surcharges() {
 }
 
 #[test]
+fn raw_vibe_references_never_charge_encoding_or_encoded_reference_overage() {
+    let mut raw = input(Model::NaiDiffusion3, ImageSize::square(), 28);
+    raw.vibe_reference_count = 9;
+    raw.pending_vibe_encodes = 9;
+    let result = estimate_anlas_cost(raw);
+    assert_eq!(result.vibe_encoding, 0);
+    assert_eq!(result.vibe_reference_overage, 0);
+    assert_eq!(result.total, result.generation);
+    raw.model = Model::NaiDiffusion4Full;
+    let encoded = estimate_anlas_cost(raw);
+    assert_eq!(encoded.vibe_encoding, 18);
+    assert_eq!(encoded.vibe_reference_overage, 10);
+}
+
+#[test]
 fn uses_inpaint_strength_and_reports_too_expensive_requests() {
     let mut inpaint = input(Model::NaiDiffusion45Curated, ImageSize::portrait(), 28);
     inpaint.mode = PricingMode::Inpainting { strength: 0.5 };

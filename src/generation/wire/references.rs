@@ -3,12 +3,13 @@ use serde::{Serialize, Serializer, ser::SerializeStruct};
 use super::{ReferenceCaption, ReferenceConditionInput};
 use crate::{
     BridgeError, CharacterReferenceField, GenerationField, ImagePreparation, ImagePreprocessor,
-    ReferenceSet,
+    ReferenceSet, VibeReferenceField, VibeReferenceInput,
 };
 
 pub(super) struct VibeRecord {
     image: String,
     strength: f32,
+    information_extracted: Option<f32>,
 }
 
 pub(super) struct CharacterReferenceRecord {
@@ -16,6 +17,7 @@ pub(super) struct CharacterReferenceRecord {
     description: ReferenceConditionInput,
     secondary_strength: f32,
     strength: f32,
+    information_extracted: f32,
 }
 
 /// References retain row identity until the final provider-specific parallel-array projection.
@@ -24,7 +26,7 @@ pub(super) enum ReferenceParameters {
     None,
     Vibe {
         references: Vec<VibeRecord>,
-        strength: f32,
+        normalize_strength: Option<bool>,
     },
     Character(Vec<CharacterReferenceRecord>),
 }
@@ -64,42 +66,68 @@ pub(super) fn prepare_references(
                     },
                     secondary_strength: 1.0 - item.fidelity,
                     strength: item.strength,
+                    information_extracted: item.information_extracted,
                 })
             })
             .collect::<Result<Vec<_>, BridgeError>>()?;
         return Ok(ReferenceParameters::Character(records));
     }
-    Ok(references
-        .vibe_transfer
-        .as_ref()
-        .map_or(ReferenceParameters::None, |vibe| {
-            ReferenceParameters::Vibe {
-                references: vibe
-                    .references
-                    .iter()
-                    .map(|reference| VibeRecord {
-                        image: reference.vibe_data_cache.to_base64(),
-                        strength: reference.strength,
-                    })
-                    .collect(),
-                strength: vibe.strength,
-            }
-        }))
+    let Some(vibe) = references.vibe_transfer.as_ref() else {
+        return Ok(ReferenceParameters::None);
+    };
+    let records = vibe
+        .references
+        .iter()
+        .enumerate()
+        .map(|(index, reference)| {
+            let (image, information_extracted) = match &reference.input {
+                VibeReferenceInput::Encoded { encoding } => (encoding.to_base64(), None),
+                VibeReferenceInput::Image {
+                    image,
+                    information_extracted,
+                } => (
+                    crate::image::prepare_image(
+                        preprocessor,
+                        GenerationField::VibeReference {
+                            index,
+                            field: VibeReferenceField::Image,
+                        }
+                        .into(),
+                        image,
+                        ImagePreparation::RawVibe,
+                    )?
+                    .to_base64(),
+                    Some(*information_extracted),
+                ),
+            };
+            Ok(VibeRecord {
+                image,
+                strength: reference.strength,
+                information_extracted,
+            })
+        })
+        .collect::<Result<Vec<_>, BridgeError>>()?;
+    let encoded = records
+        .first()
+        .is_some_and(|record| record.information_extracted.is_none());
+    Ok(ReferenceParameters::Vibe {
+        references: records,
+        normalize_strength: encoded.then_some(vibe.normalize_strength),
+    })
 }
 
 impl Serialize for ReferenceParameters {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::None => {
-                let mut fields = serializer.serialize_struct("References", 1)?;
-                fields.serialize_field("controlnet_strength", &1f32)?;
+                let fields = serializer.serialize_struct("References", 0)?;
                 fields.end()
             },
             Self::Vibe {
                 references,
-                strength,
+                normalize_strength,
             } => {
-                let mut fields = serializer.serialize_struct("References", 4)?;
+                let mut fields = serializer.serialize_struct("References", 3)?;
                 fields.serialize_field(
                     "reference_image_multiple",
                     &references
@@ -114,12 +142,25 @@ impl Serialize for ReferenceParameters {
                         .map(|item| item.strength)
                         .collect::<Vec<_>>(),
                 )?;
-                fields.serialize_field("normalize_reference_strength_multiple", &true)?;
-                fields.serialize_field("controlnet_strength", strength)?;
+                if let Some(normalize) = normalize_strength {
+                    fields.serialize_field("normalize_reference_strength_multiple", normalize)?;
+                } else {
+                    fields.serialize_field(
+                        "reference_information_extracted_multiple",
+                        &references
+                            .iter()
+                            .map(|item| {
+                                item.information_extracted.expect(
+                                    "normalized raw image references retain information extraction",
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )?;
+                }
                 fields.end()
             },
             Self::Character(references) => {
-                let mut fields = serializer.serialize_struct("References", 6)?;
+                let mut fields = serializer.serialize_struct("References", 5)?;
                 fields.serialize_field(
                     "director_reference_images",
                     &references
@@ -136,7 +177,10 @@ impl Serialize for ReferenceParameters {
                 )?;
                 fields.serialize_field(
                     "director_reference_information_extracted",
-                    &vec![1f32; references.len()],
+                    &references
+                        .iter()
+                        .map(|item| item.information_extracted)
+                        .collect::<Vec<_>>(),
                 )?;
                 fields.serialize_field(
                     "director_reference_secondary_strength_values",
@@ -152,7 +196,6 @@ impl Serialize for ReferenceParameters {
                         .map(|item| item.strength)
                         .collect::<Vec<_>>(),
                 )?;
-                fields.serialize_field("controlnet_strength", &1f32)?;
                 fields.end()
             },
         }

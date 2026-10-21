@@ -35,7 +35,7 @@ pub use error::{
 };
 pub use field::{
     CharacterField, CharacterReferenceField, GenerationField, GuidanceField, ImageInputField,
-    InpaintImageToImageField, RequestField,
+    InpaintImageToImageField, RequestField, VibeReferenceField,
 };
 pub use generation::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
@@ -74,8 +74,8 @@ pub use observation::{
     RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome,
 };
 pub use parameters::{
-    ImageFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, StreamMode,
-    UcPreset,
+    AlphaMode, ImageFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams,
+    StreamMode, UcPreset,
 };
 pub use pricing::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode,
@@ -104,4 +104,7 @@ pub use upscale::{
     estimate_upscale_cost,
 };
 pub use validation::{ValidationAdjustment, ValidationPolicy};
-pub use vibe::{EncodeVibeRequest, PreparedVibe, VibeEncoding, VibeReference, VibeTransferConfig};
+pub use vibe::{
+    EncodeVibeRequest, PreparedVibe, VibeEncoding, VibeReference, VibeReferenceInput,
+    VibeTransferConfig,
+};

@@ -15,7 +15,17 @@ pub enum CharacterField {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CharacterReferenceField {
     Image,
+    InformationExtracted,
     Fidelity,
+    Strength,
+}
+
+/// Editable locations in one vibe reference.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VibeReferenceField {
+    Input,
+    Image,
+    InformationExtracted,
     Strength,
 }
 
@@ -79,9 +89,11 @@ pub enum GenerationField {
         field: CharacterReferenceField,
     },
     VibeTransfer,
-    VibeStrength,
     VibeReferences,
-    VibeReferenceStrength(usize),
+    VibeReference {
+        index: usize,
+        field: VibeReferenceField,
+    },
 }
 
 impl fmt::Display for GenerationField {
@@ -121,7 +133,6 @@ impl fmt::Display for GenerationField {
             },
             Self::CharacterReferences => "references.character_references",
             Self::VibeTransfer => "references.vibe_transfer",
-            Self::VibeStrength => "references.vibe_transfer.strength",
             Self::VibeReferences => "references.vibe_transfer.references",
             Self::Character { index, field } => {
                 let suffix = match field {
@@ -136,6 +147,7 @@ impl fmt::Display for GenerationField {
             Self::CharacterReference { index, field } => {
                 let suffix = match field {
                     CharacterReferenceField::Image => "image",
+                    CharacterReferenceField::InformationExtracted => "information_extracted",
                     CharacterReferenceField::Fidelity => "fidelity",
                     CharacterReferenceField::Strength => "strength",
                 };
@@ -144,10 +156,16 @@ impl fmt::Display for GenerationField {
                     "references.character_references[{index}].{suffix}"
                 );
             },
-            Self::VibeReferenceStrength(index) => {
+            Self::VibeReference { index, field } => {
+                let suffix = match field {
+                    VibeReferenceField::Input => "input",
+                    VibeReferenceField::Image => "input.image",
+                    VibeReferenceField::InformationExtracted => "input.information_extracted",
+                    VibeReferenceField::Strength => "strength",
+                };
                 return write!(
                     formatter,
-                    "references.vibe_transfer.references[{index}].strength"
+                    "references.vibe_transfer.references[{index}].{suffix}"
                 );
             },
         };
@@ -166,6 +184,7 @@ pub enum RequestField {
     MetadataVibe,
     VibeEncoding,
     VibeInformationExtracted,
+    VibeMask,
     DirectorPrompt,
     DirectorDefry,
     StreamDelivery,
@@ -186,6 +205,7 @@ impl fmt::Display for RequestField {
             Self::MetadataVibe => "metadata.vibe",
             Self::VibeEncoding => "vibe_encoding",
             Self::VibeInformationExtracted => "information_extracted",
+            Self::VibeMask => "mask",
             Self::DirectorPrompt => "command.prompt",
             Self::DirectorDefry => "command.defry",
             Self::StreamDelivery => "delivery.stream",

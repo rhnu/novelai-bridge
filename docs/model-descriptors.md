@@ -33,11 +33,13 @@ Use the builder's `operation`, `image_to_image` or `inpainting` method to select
 
 Editable generation requests and operation envelopes reject unknown serialized fields. The operation uses a `mode` tag and an `input` object for image-to-image or inpainting. Unknown keys are rejected rather than ignored. See the [release notes](../CHANGELOG.md) for migration details.
 
-`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unimplemented input, unsupported mode and conflict with character references.
+`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unsupported mode and conflict with character references.
 
 Character support is resolved first. Unsupported character input cannot suppress valid vibe input. Empty reference subgroups are treated consistently before availability and retained-value validation. `request.policy` uses the shared `ValidationPolicy`: `Reject` turns unavailable reference input into an error; `Normalize` removes it and records diagnostics. `normalize_with(policy)` overrides the editable request policy for the resulting plan.
 
-V3 exposes legacy vibe metadata, but this bridge cannot use those vibe references for generation or encode new V3 vibe data. Use `can_encode_vibe()` for encoding capability. V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
+V3 accepts raw image vibe references in all generation modes. It prepares each image on a centered black 448×448 canvas with proportional Lanczos resizing. It does not encode new vibe data. Use `can_encode_vibe()` for encoding capability: V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
+
+`VibeReferenceInput` distinguishes raw images from precomputed encodings. Normalize removes inputs that do not match the selected profile and reports their original reference index; Reject returns that field as an error. Encoded strength normalization is an explicit `VibeTransferConfig::normalize_strength` setting. Reference strengths and character-reference fidelity accept finite signed values; information extraction uses the 0-1 range. Character information extraction is independent of its other values.
 
 ## Effective plans
 

@@ -3,8 +3,8 @@ use super::{
     ImageToImageInput, InpaintingInput, ReferenceSet,
 };
 use crate::{
-    Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule, QualityPreset,
-    Sampler, SamplingParams, UcPreset, ValidationPolicy, VibeTransferConfig,
+    AlphaMode, Character, CharacterReference, ImageFormat, ImageSize, Model, NoiseSchedule,
+    QualityPreset, Sampler, SamplingParams, UcPreset, ValidationPolicy, VibeTransferConfig,
 };
 
 /// Builder for [`GenerateImageRequest`].
@@ -200,6 +200,13 @@ impl GenerateImageRequestBuilder {
     #[must_use]
     pub const fn image_format(mut self, image_format: ImageFormat) -> Self {
         self.request.output.image_format = Some(image_format);
+        self
+    }
+
+    /// Selects the alpha representation for transparent generation.
+    #[must_use]
+    pub const fn alpha_mode(mut self, alpha_mode: AlphaMode) -> Self {
+        self.request.output.alpha_mode = alpha_mode;
         self
     }
 

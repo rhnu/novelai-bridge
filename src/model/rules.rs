@@ -19,8 +19,6 @@ pub enum ReferenceAvailability {
     Available,
     /// No provider capability is registered.
     Unsupported,
-    /// The provider supports it, but this bridge does not implement its input path.
-    InputNotImplemented,
     /// The model or reference profile does not support this generation mode.
     UnsupportedMode,
     /// Character references take precedence over vibe references.
@@ -81,7 +79,7 @@ impl ModelDescriptor {
 
     /// Whether the bridge implements encode-vibe for this model.
     ///
-    /// Provider-only legacy vibe capability does not enable this operation.
+    /// Raw-image vibe capability does not enable this operation.
     #[must_use]
     pub const fn can_encode_vibe(&self) -> bool {
         match self.support.vibe {
@@ -136,9 +134,6 @@ impl ModelDescriptor {
         let Some(profile) = self.support.vibe else {
             return ReferenceAvailability::Unsupported;
         };
-        if matches!(profile.input, VibeInputPath::ProviderOnlyLegacy) {
-            return ReferenceAvailability::InputNotImplemented;
-        }
         if character.is_available() {
             return ReferenceAvailability::ConflictWithCharacterReference;
         }
