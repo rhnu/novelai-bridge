@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 /// The variant is always available; the encoder implementations behind it require the `tokenizer`
 /// feature.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageTokenizerKind {
     /// `OpenAI` CLIP byte-level BPE. Used by the V3 family.
     Clip,
@@ -33,6 +32,8 @@ impl ImageTokenizerKind {
         }
     }
 }
+
+crate::parameters::serde_string_enum!(ImageTokenizerKind, [Self::Clip, Self::T5, Self::Qwen]);
 
 /// API identity, distinct from prompt, protocol and pricing profiles.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -312,7 +313,7 @@ impl VarietyBoostProfile {
     #[must_use]
     pub fn sigma(self, width: u32, height: u32) -> f32 {
         let ratio = (f64::from(width) * f64::from(height)) / f64::from(832 * 1216);
-        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_possible_truncation, reason = "The public sigma coefficient and output use provider f32 precision")]
         let scale = ratio.sqrt() as f32;
         self.sigma_coefficient * scale
     }

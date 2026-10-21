@@ -12,7 +12,6 @@ keywords = ["novelai", "tokenizer", "clip", "t5", "qwen"]
 categories = ["encoding", "text-processing"]
 include = [
     "/src/**",
-    "/tests/**",
     "/assets/*.gz",
     "/assets/SOURCES.toml",
     "/assets/LICENSE-CLIP",

@@ -131,48 +131,4 @@ impl ModelDescriptor {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Model, ReferenceModes};
-
-    #[test]
-    fn reference_profiles_cannot_enable_a_missing_inpainting_sibling() {
-        let mut descriptor = Model::NaiDiffusion45Full.descriptor().clone();
-        descriptor.support.inpainting = None;
-        assert!(
-            descriptor
-                .model_id_for(GenerationMode::Inpainting)
-                .is_none()
-        );
-        let query = descriptor.resolve_references(
-            GenerationMode::Inpainting,
-            ReferenceIntent {
-                vibe: true,
-                character: true,
-            },
-        );
-        assert_eq!(query.character, ReferenceAvailability::UnsupportedMode);
-        assert_eq!(query.vibe, ReferenceAvailability::UnsupportedMode);
-    }
-
-    #[test]
-    fn mode_support_is_checked_before_reference_conflict_precedence() {
-        let mut descriptor = Model::NaiDiffusion45Full.descriptor().clone();
-        descriptor
-            .support
-            .character_reference
-            .as_mut()
-            .unwrap()
-            .modes = ReferenceModes::Unmasked;
-        descriptor.support.vibe.as_mut().unwrap().modes = ReferenceModes::All;
-        let query = descriptor.resolve_references(
-            GenerationMode::Inpainting,
-            ReferenceIntent {
-                vibe: true,
-                character: true,
-            },
-        );
-        assert_eq!(query.character, ReferenceAvailability::UnsupportedMode);
-        assert_eq!(query.vibe, ReferenceAvailability::Available);
-    }
-}
+mod tests;

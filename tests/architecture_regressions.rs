@@ -1,16 +1,14 @@
 #![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
 
-//! Target contracts, not snapshots of known bugs. Ignored tests name their remaining owner.
+//! Contracts shared by generation preparation and client execution.
 mod support;
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use futures_util::StreamExt;
 use novelai_bridge::{
-    Character, CharacterPosition, Client, CreditEvent, CreditObserver, DecodeError, DecodeTarget,
-    GenerateImageRequest, GenerateImageStreamRequest, ImageSize, ImageStreamChunk, Model,
-    RequestOutcome,
+    Character, CharacterPosition, Client, CreditEvent, CreditObserver,
+    GenerateImageRequest, ImageSize, Model,
 };
 
 use support::MockTransport;
@@ -25,37 +23,11 @@ impl CreditObserver for Observer {
     }
 }
 
-#[test]
-fn reference_inpainting_requires_reference_support() {
-    for model in [Model::NaiDiffusion5Full, Model::NaiDiffusion5Curated] {
-        let caps = model.descriptor();
-        assert!(caps.support().character_reference.is_none());
-        for mode in [
-            novelai_bridge::GenerationMode::TextToImage,
-            novelai_bridge::GenerationMode::ImageToImage,
-            novelai_bridge::GenerationMode::Inpainting,
-        ] {
-            assert!(
-                !caps
-                    .resolve_references(
-                        mode,
-                        novelai_bridge::ReferenceIntent {
-                            vibe: false,
-                            character: true,
-                        }
-                    )
-                    .character
-                    .is_available()
-            );
-        }
-    }
-}
-
 #[tokio::test]
 async fn public_estimate_matches_planned_estimate_after_size_normalization() {
     let transport = MockTransport::default();
     let observer = Arc::new(Observer::default());
-    let client = Client::with_transport(transport.clone()).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default()).with_credit_observer(observer.clone());
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full)
         .size(ImageSize {
             width: 2048,
@@ -89,7 +61,7 @@ async fn disabled_empty_characters_do_not_participate_in_validation() {
         }])
         .build();
     let transport = MockTransport::default();
-    Client::with_transport(transport.clone())
+    Client::new(Arc::new(transport.clone()), Default::default())
         .generate(request)
         .await
         .unwrap();
@@ -114,7 +86,7 @@ async fn normalized_characters_respect_the_model_limit() {
         )
         .build();
     let transport = MockTransport::default();
-    Client::with_transport(transport.clone())
+    Client::new(Arc::new(transport.clone()), Default::default())
         .generate(request)
         .await
         .unwrap();
@@ -128,123 +100,9 @@ async fn normalized_characters_respect_the_model_limit() {
 }
 
 #[tokio::test]
-async fn stream_failure_is_observed_as_failure_not_success() {
-    let transport = MockTransport::default();
-    transport.set_sse_error(
-        DecodeError::new(
-            DecodeTarget::StreamChunk,
-            Box::new(std::io::Error::other("broken stream")),
-        )
-        .into(),
-    );
-    let observer = Arc::new(Observer::default());
-    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
-    let mut stream = client
-        .generate_stream(GenerateImageStreamRequest {
-            base: GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build(),
-            ..GenerateImageStreamRequest::default()
-        })
-        .await
-        .unwrap();
-    assert!(stream.next().await.unwrap().is_err());
-    let _ = stream.next().await;
-    let events = observer.0.lock().unwrap();
-    assert!(!events.iter().any(|event| matches!(
-        event,
-        CreditEvent::RequestSettled {
-            outcome: RequestOutcome::Succeeded { .. },
-            ..
-        }
-    )));
-    assert!(events.iter().any(|event| matches!(
-        event,
-        CreditEvent::RequestSettled {
-            outcome: RequestOutcome::Failed { .. },
-            ..
-        }
-    )));
-    drop(events);
-}
-
-fn stream_chunk(sample: u32) -> ImageStreamChunk {
-    ImageStreamChunk {
-        event_type: "final".to_owned(),
-        samp_ix: sample,
-        step_ix: None,
-        gen_id: 1,
-        sigma: None,
-        image: "image fragment".to_owned(),
-    }
-}
-
-fn stream_request() -> GenerateImageStreamRequest {
-    GenerateImageStreamRequest {
-        base: GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build(),
-        ..GenerateImageStreamRequest::default()
-    }
-}
-
-#[tokio::test]
-async fn stream_eof_settles_once_with_distinct_sample_count() {
-    let transport = MockTransport::default();
-    transport.set_sse_chunks(vec![stream_chunk(0), stream_chunk(0), stream_chunk(1)]);
-    let observer = Arc::new(Observer::default());
-    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
-    let chunks: Vec<_> = client
-        .generate_stream(stream_request())
-        .await
-        .unwrap()
-        .collect()
-        .await;
-    assert_eq!(chunks.len(), 3);
-    let events = observer.0.lock().unwrap();
-    assert_eq!(events.len(), 2);
-    assert!(matches!(
-        events[1],
-        CreditEvent::RequestSettled {
-            outcome: RequestOutcome::Succeeded { image_count: 2 },
-            ..
-        }
-    ));
-    drop(events);
-}
-
-#[tokio::test]
-async fn stream_explicit_cancel_is_settled_but_drop_is_not_guessed() {
-    let observer = Arc::new(Observer::default());
-    let client =
-        Client::with_transport(MockTransport::default()).with_credit_observer(observer.clone());
-    client
-        .generate_stream(stream_request())
-        .await
-        .unwrap()
-        .cancel()
-        .await;
-    {
-        let events = observer.0.lock().unwrap();
-        assert_eq!(events.len(), 2);
-        assert!(matches!(
-            events[1],
-            CreditEvent::RequestSettled {
-                outcome: RequestOutcome::Cancelled,
-                ..
-            }
-        ));
-        drop(events);
-    }
-
-    let dropped = client.generate_stream(stream_request()).await.unwrap();
-    drop(dropped);
-    let events = observer.0.lock().unwrap();
-    assert_eq!(events.len(), 3, "drop adds only the second planned event");
-    assert!(matches!(events[2], CreditEvent::RequestPlanned { .. }));
-    drop(events);
-}
-
-#[tokio::test]
 async fn non_image_response_is_rejected() {
     let client =
-        Client::with_transport(MockTransport::with_bytes_response(b"not an image".to_vec()));
+        Client::new(Arc::new(MockTransport::with_bytes_response(b"not an image".to_vec())), Default::default());
     let request = GenerateImageRequest::builder("test", Model::NaiDiffusion45Full).build();
     assert!(client.generate(request).await.is_err());
 }
@@ -255,7 +113,7 @@ async fn ordinary_and_stream_observation_share_effective_cost_fields() {
         let transport = MockTransport::default();
         let observer = Arc::new(Observer::default());
         let client =
-            Client::with_transport(transport.clone()).with_credit_observer(observer.clone());
+            Client::new(Arc::new(transport.clone()), Default::default()).with_credit_observer(observer.clone());
         let mut request =
             GenerateImageRequest::builder("private prompt", Model::NaiDiffusion45Full)
                 .size(ImageSize {
@@ -306,12 +164,13 @@ async fn ordinary_and_stream_observation_share_effective_cost_fields() {
                 _ => None,
             })
             .unwrap();
-        assert_eq!(fingerprint.size, Some(cost.size));
-        assert_eq!(fingerprint.steps, Some(cost.steps));
-        assert_eq!(fingerprint.n_samples, cost.n_samples);
-        assert_eq!(fingerprint.smea, cost.smea);
+        let (novelai_bridge::ObservedOperation::GenerateImage(summary) | novelai_bridge::ObservedOperation::GenerateImageStream(summary)) = &fingerprint.operation else { panic!("expected generation summary"); };
+        assert_eq!(summary.pricing.size, cost.size);
+        assert_eq!(summary.pricing.steps, cost.steps);
+        assert_eq!(summary.pricing.n_samples, cost.n_samples);
+        assert_eq!(summary.pricing.smea, cost.smea);
         assert_eq!(
-            usize::try_from(fingerprint.prompt_len_chars).unwrap(),
+            usize::try_from(summary.prompt_len_chars).unwrap(),
             expected_prompt_len
         );
         assert_eq!(

@@ -1,20 +1,28 @@
-#![cfg(all(feature = "client", feature = "streaming", feature = "credit-observer"))]
+#![cfg(feature = "client")]
 
 mod support;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+#[cfg(feature = "credit-observer")]
+use std::sync::Mutex;
 
+#[cfg(feature = "credit-observer")]
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
+#[cfg(feature = "streaming")]
 use futures_util::StreamExt;
 use novelai_bridge::{
-    BaseUrls, BridgeError, Character, CharacterPosition, CharacterReference,
-    CharacterReferenceType, CharacterSet, Client, CreditEvent, CreditObserver, EncodedImage,
-    GenerateImageRequest, GenerateImageStreamRequest, GeneratedImageMetadata, GuidanceParams,
-    ImageFormat, ImageSize, ImageStreamChunk, Img2ImgRequest, InvalidRequest, Model,
-    ObservedOperation, QualityPreset, ReferenceSet, RequestCostEstimate, RequestOutcome, UcPreset,
+    BridgeError, Character, CharacterPosition, CharacterReference,
+    CharacterReferenceType, CharacterSet, Client, EncodedImage,
+    GenerateImageRequest, GeneratedImageMetadata, GuidanceParams,
+    ImageFormat, ImageSize, Img2ImgRequest, InvalidRequest, Model,
+    QualityPreset, ReferenceSet, UcPreset,
     VibeEncoding, VibeReference, VibeTransferConfig,
 };
+#[cfg(feature = "streaming")]
+use novelai_bridge::{ClientConfig, GenerateImageStreamRequest, ImageStreamChunk};
+#[cfg(feature = "credit-observer")]
+use novelai_bridge::{CreditEvent, CreditObserver, ObservedOperation, RequestCostEstimate, RequestOutcome};
 use serde_json::{Value, json};
 
 use support::{
@@ -44,7 +52,7 @@ fn decoded_dimensions(value: &Value) -> (u32, u32) {
 #[tokio::test]
 async fn generate_builds_baseline_text2img_request_shape() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut params = request_for("1girl", Model::NaiDiffusion3);
     params.core.seed = 42;
@@ -80,7 +88,7 @@ async fn generate_builds_baseline_text2img_request_shape() {
 #[tokio::test]
 async fn generate_builds_v5_request_shape() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = request_for("1girl", Model::NaiDiffusion5Full);
     let _ = client.generate(params).await.unwrap();
@@ -103,7 +111,7 @@ async fn generate_builds_v5_request_shape() {
 #[tokio::test]
 async fn generate_omits_v5_extensions_for_v45() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let _ = client
         .generate(request_for("1girl", Model::NaiDiffusion45Full))
@@ -119,7 +127,7 @@ async fn generate_omits_v5_extensions_for_v45() {
 #[tokio::test]
 async fn generate_serializes_image_format() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .image_format(ImageFormat::Webp)
@@ -133,7 +141,7 @@ async fn generate_serializes_image_format() {
 #[tokio::test]
 async fn variety_boost_sigma_scales_with_model_and_canvas() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let sigma_for = |model: Model, size: ImageSize| {
         let transport = transport.clone();
@@ -171,7 +179,7 @@ async fn variety_boost_sigma_scales_with_model_and_canvas() {
 #[tokio::test]
 async fn variety_boost_is_dropped_for_v5() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .variety_boost(true)
@@ -185,7 +193,7 @@ async fn variety_boost_is_dropped_for_v5() {
 #[tokio::test]
 async fn variety_boost_is_rejected_for_v5_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .variety_boost(true)
@@ -204,7 +212,7 @@ async fn variety_boost_is_rejected_for_v5_in_strict_mode() {
 #[tokio::test]
 async fn img2img_request_uses_img2img_action_and_flat_fields() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 0.7, 0.2);
     img2img.extra_noise_seed = Some(999);
@@ -229,7 +237,7 @@ async fn img2img_request_uses_img2img_action_and_flat_fields() {
 #[tokio::test]
 async fn img2img_defaults_extra_noise_seed_to_resolved_seed() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .seed(1234)
@@ -244,7 +252,7 @@ async fn img2img_defaults_extra_noise_seed_to_resolved_seed() {
 #[tokio::test]
 async fn masked_img2img_request_uses_infill_action_and_inpainting_model() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut img2img = Img2ImgRequest::new(png_data_url(400, 600), 1.0, 0.1);
     img2img.mask = Some(png_data_url(400, 600));
@@ -277,7 +285,7 @@ async fn masked_img2img_request_uses_infill_action_and_inpainting_model() {
 #[tokio::test]
 async fn infill_uses_inpainting_model_for_each_family() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     for (model, expected) in [
         (Model::NaiDiffusion5Full, "nai-diffusion-5-full-inpainting"),
@@ -306,7 +314,7 @@ async fn infill_uses_inpainting_model_for_each_family() {
 #[tokio::test]
 async fn img2img_source_and_mask_are_fitted_to_the_requested_canvas() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut img2img = Img2ImgRequest::new(png_data_url(300, 100), 0.7, 0.0);
     img2img.mask = Some(png_data_url(50, 50));
@@ -328,20 +336,11 @@ async fn img2img_source_and_mask_are_fitted_to_the_requested_canvas() {
     );
 }
 
-#[test]
-fn encoded_image_rejects_undecodable_img2img_source_at_construction() {
-    let error = EncodedImage::from_bytes(b"not an image".to_vec()).unwrap_err();
-    assert!(matches!(
-        error,
-        BridgeError::InvalidRequest(InvalidRequest::UndecodableImage { ref field, .. })
-            if field == "image"
-    ));
-}
 
 #[tokio::test]
 async fn generate_with_auto_seed_returns_resolved_request_seed_without_faking_image_seed() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let result = client.generate(request("1girl")).await.unwrap();
 
@@ -355,7 +354,7 @@ async fn generate_with_auto_seed_returns_resolved_request_seed_without_faking_im
 #[tokio::test]
 async fn generate_with_fixed_seed_returns_exact_request_seed() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport);
+    let client = Client::new(Arc::new(transport), Default::default());
 
     let mut params = request("1girl");
     params.core.seed = 4242;
@@ -373,7 +372,7 @@ async fn generate_parses_each_zip_images_embedded_seed() {
         ("first.png", first),
         ("second.png", second),
     ]));
-    let client = Client::with_transport(transport);
+    let client = Client::new(Arc::new(transport), Default::default());
 
     let mut params = request("request prompt");
     params.core.seed = 77;
@@ -394,7 +393,7 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
         ("missing.png", valid_without_metadata),
         ("invalid-comment.png", invalid_comment),
     ]));
-    let client = Client::with_transport(transport);
+    let client = Client::new(Arc::new(transport), Default::default());
 
     let result = client.generate(request("1girl")).await.unwrap();
 
@@ -411,6 +410,7 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
 }
 
 #[tokio::test]
+#[cfg(feature = "streaming")]
 async fn generate_stream_parses_chunk() {
     let transport = MockTransport::default();
     transport.set_sse_chunks(vec![ImageStreamChunk {
@@ -421,7 +421,7 @@ async fn generate_stream_parses_chunk() {
         sigma: Some(1.1),
         image: "abc".to_owned(),
     }]);
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageStreamRequest {
         base: request("1girl"),
@@ -446,15 +446,13 @@ async fn generate_stream_parses_chunk() {
 }
 
 #[tokio::test]
+#[cfg(feature = "streaming")]
 async fn generate_stream_uses_custom_image_base_url() {
     let transport = MockTransport::default();
     transport.set_sse_chunks(vec![]);
-    let client = Client::with_transport_and_base_urls(
-        transport.clone(),
-        BaseUrls {
-            image: "https://image.example.test/root/".to_owned(),
-            api: "https://api.example.test/root/".to_owned(),
-        },
+    let client = Client::new(
+        Arc::new(transport.clone()),
+        ClientConfig { image_base_url: "https://image.example.test/root/".to_owned() },
     );
 
     let params = GenerateImageStreamRequest {
@@ -470,10 +468,11 @@ async fn generate_stream_uses_custom_image_base_url() {
 }
 
 #[tokio::test]
+#[cfg(feature = "streaming")]
 async fn generate_stream_rejects_v3_models_before_transport() {
     for model in [Model::NaiDiffusion3, Model::NaiDiffusion3Furry] {
         let transport = MockTransport::default();
-        let client = Client::with_transport(transport.clone());
+        let client = Client::new(Arc::new(transport.clone()), Default::default());
         let params = GenerateImageStreamRequest {
             base: GenerateImageRequest::builder("1girl", model).build(),
             ..Default::default()
@@ -485,7 +484,7 @@ async fn generate_stream_rejects_v3_models_before_transport() {
         assert!(matches!(
             error,
             BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-                if feature == "generate_stream"
+                if feature == "delivery.stream"
         ));
         assert!(transport.last_path().is_none());
     }
@@ -494,7 +493,7 @@ async fn generate_stream_rejects_v3_models_before_transport() {
 #[tokio::test]
 async fn generate_normalizes_character_reference_image_payloads() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .character_references(vec![CharacterReference {
@@ -516,7 +515,7 @@ async fn generate_normalizes_character_reference_image_payloads() {
 #[tokio::test]
 async fn generate_serializes_character_reference_director_fields() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .character_references(vec![
@@ -566,7 +565,7 @@ async fn generate_serializes_character_reference_director_fields() {
 #[tokio::test]
 async fn generate_rejects_character_references_on_v4_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full)
         .character_references(vec![CharacterReference {
@@ -582,7 +581,7 @@ async fn generate_rejects_character_references_on_v4_in_strict_mode() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "character_references"
+            if feature == "references.character_references"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -590,7 +589,7 @@ async fn generate_rejects_character_references_on_v4_in_strict_mode() {
 #[tokio::test]
 async fn generate_drops_character_references_on_v4_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full)
         .character_references(vec![CharacterReference {
@@ -609,7 +608,7 @@ async fn generate_drops_character_references_on_v4_when_not_strict() {
 #[tokio::test]
 async fn generate_drops_references_on_v5_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .character_references(vec![CharacterReference {
@@ -628,7 +627,7 @@ async fn generate_drops_references_on_v5_when_not_strict() {
 #[tokio::test]
 async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .vibe_transfer(VibeTransferConfig {
@@ -645,7 +644,7 @@ async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "vibe_transfer"
+            if feature == "references.vibe_transfer"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -654,7 +653,7 @@ async fn generate_rejects_vibe_transfer_on_v5_in_strict_mode() {
 async fn generate_serializes_explicit_vibe_data_cache() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     transport.set_encode_vibe_response(vec![1_u8, 2, 3]);
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
@@ -703,7 +702,7 @@ async fn generate_serializes_explicit_vibe_data_cache() {
 #[tokio::test]
 async fn generate_omits_vibe_normalization_flag_without_references() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let _ = client.generate(request("1girl")).await.unwrap();
     let body = transport.last_body().expect("generate body");
@@ -711,30 +710,12 @@ async fn generate_omits_vibe_normalization_flag_without_references() {
     assert!(body["parameters"]["reference_image_multiple"].is_null());
 }
 
-#[test]
-fn vibe_encoding_rejects_empty_input_at_construction() {
-    let error = VibeEncoding::from_bytes(Vec::new()).unwrap_err();
-    assert!(matches!(
-        error,
-        BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
-            if field == "vibe_encoding"
-    ));
-}
 
-#[test]
-fn vibe_encoding_rejects_invalid_base64_at_construction() {
-    let error = VibeEncoding::from_base64("not-base64").unwrap_err();
-    assert!(matches!(
-        error,
-        BridgeError::InvalidRequest(InvalidRequest::InvalidBase64 { ref field, .. })
-            if field == "vibe_encoding"
-    ));
-}
 
 #[tokio::test]
 async fn character_positions_enable_use_coords_when_non_center_and_not_explicit() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .characters(vec![
@@ -768,7 +749,7 @@ async fn character_positions_enable_use_coords_when_non_center_and_not_explicit(
 #[tokio::test]
 async fn explicit_use_coords_false_keeps_center_positions() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .characters(vec![Character {
@@ -795,7 +776,7 @@ async fn explicit_use_coords_false_keeps_center_positions() {
 #[tokio::test]
 async fn characters_are_rejected_on_v3_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .characters(vec![Character {
@@ -819,7 +800,7 @@ async fn characters_are_rejected_on_v3_in_strict_mode() {
 #[tokio::test]
 async fn validate_rejects_vibe_transfer_and_character_references_together() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport);
+    let client = Client::new(Arc::new(transport), Default::default());
 
     let mut params = request_for("1girl", Model::NaiDiffusion45Full);
     params.strict_mode = true;
@@ -845,14 +826,14 @@ async fn validate_rejects_vibe_transfer_and_character_references_together() {
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedFieldCombination {
             ref left,
             ref right,
-        }) if left == "vibe_transfer" && right == "character_references"
+        }) if left == "references.vibe_transfer" && right == "references.character_references"
     ));
 }
 
 #[tokio::test]
 async fn infill_drops_vibe_transfer_to_avoid_server_error() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut img2img = Img2ImgRequest::new(png_data_url(128, 128), 0.6, 0.0);
     img2img.mask = Some(png_data_url(128, 128));
@@ -876,13 +857,13 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
 #[tokio::test]
 async fn generate_rejects_empty_prompt_locally() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let error = client.generate(request("   ")).await.unwrap_err();
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
-            if field == "prompt"
+            if field == "core.prompt"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -890,7 +871,7 @@ async fn generate_rejects_empty_prompt_locally() {
 #[tokio::test]
 async fn generate_rejects_invalid_scale_locally() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::default())
         .scale(11.0)
@@ -901,7 +882,7 @@ async fn generate_rejects_invalid_scale_locally() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "scale"
+            if field == "sampling.scale"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -909,7 +890,7 @@ async fn generate_rejects_invalid_scale_locally() {
 #[tokio::test]
 async fn generate_clamps_invalid_numeric_values_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let mut params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .scale(11.0)
@@ -936,7 +917,7 @@ async fn generate_clamps_invalid_numeric_values_when_not_strict() {
 #[tokio::test]
 async fn generate_shrinks_canvas_over_the_pixel_budget_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .size(ImageSize {
@@ -957,7 +938,7 @@ async fn generate_shrinks_canvas_over_the_pixel_budget_when_not_strict() {
 #[tokio::test]
 async fn generate_clamps_reference_numeric_values_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
@@ -981,7 +962,7 @@ async fn generate_clamps_reference_numeric_values_when_not_strict() {
 #[tokio::test]
 async fn generate_rejects_reference_numeric_values_when_strict() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .vibe_transfer(VibeTransferConfig {
@@ -998,81 +979,19 @@ async fn generate_rejects_reference_numeric_values_when_strict() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { ref field, .. })
-            if field == "vibe_transfer.references[0].strength"
+            if field == "references.vibe_transfer.references[0].strength"
     ));
     assert!(transport.last_path().is_none());
 }
 
-#[test]
-fn uc_preset_uses_light_default_and_rejects_strong_alias() {
-    assert_eq!(UcPreset::default(), UcPreset::Light);
-    assert!(serde_json::from_str::<UcPreset>("\"strong\"").is_err());
-    assert_eq!(
-        serde_json::from_str::<UcPreset>("\"heavy\"").unwrap(),
-        UcPreset::Heavy
-    );
-}
 
-#[test]
-fn uc_preset_text_is_merged_before_the_caller_negative_prompt() {
-    let mut params = request_for("1girl", Model::NaiDiffusion45Full);
-    params.core.negative_prompt = Some("extra tags".to_owned());
-    params.core.uc_preset = UcPreset::Heavy;
 
-    let negative = params.resolve_prompts().unwrap().negative_prompt;
-    assert!(negative.starts_with("nsfw, lowres,"), "{negative}");
-    assert!(negative.ends_with(", extra tags"), "{negative}");
-}
 
-#[test]
-fn uc_preset_none_keeps_the_caller_negative_prompt_verbatim() {
-    let mut params = request("1girl");
-    params.core.negative_prompt = Some("only mine".to_owned());
-    params.core.uc_preset = UcPreset::None;
-    assert_eq!(
-        params.resolve_prompts().unwrap().negative_prompt,
-        "only mine"
-    );
-}
-
-#[test]
-fn quality_presets_swap_the_appended_tags() {
-    let standard = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
-        .quality(QualityPreset::Standard)
-        .build();
-    let light = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
-        .quality(QualityPreset::Light)
-        .build();
-    let none = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
-        .quality(QualityPreset::None)
-        .build();
-
-    assert_eq!(
-        standard.resolve_prompts().unwrap().prompt,
-        "1girl, very aesthetic, masterpiece, no text"
-    );
-    // Light differs from Standard only in swapping `masterpiece` for `amazing quality`.
-    assert_eq!(
-        light.resolve_prompts().unwrap().prompt,
-        "1girl, very aesthetic, amazing quality, no text"
-    );
-    assert_eq!(none.resolve_prompts().unwrap().prompt, "1girl");
-
-    // Standard is what the pre-V5 quality toggle always produced.
-    assert_eq!(
-        GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
-            .build()
-            .resolve_prompts()
-            .unwrap()
-            .prompt,
-        standard.resolve_prompts().unwrap().prompt
-    );
-}
 
 #[tokio::test]
 async fn quality_none_still_reports_the_toggle_state() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .quality(QualityPreset::None)
@@ -1090,7 +1009,7 @@ async fn quality_none_still_reports_the_toggle_state() {
 #[tokio::test]
 async fn light_quality_preset_falls_back_to_standard_off_v5() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .quality(QualityPreset::Light)
@@ -1107,7 +1026,7 @@ async fn light_quality_preset_falls_back_to_standard_off_v5() {
 #[tokio::test]
 async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .quality(QualityPreset::Light)
@@ -1118,7 +1037,7 @@ async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "quality.light"
+            if feature == "core.quality"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -1126,7 +1045,7 @@ async fn light_quality_preset_is_rejected_off_v5_in_strict_mode() {
 #[tokio::test]
 async fn transparent_background_appends_the_tag_and_sets_the_wire_hint() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full)
         .transparent_background(true)
@@ -1148,7 +1067,7 @@ async fn transparent_background_appends_the_tag_and_sets_the_wire_hint() {
 #[tokio::test]
 async fn transparent_background_hint_tracks_the_request_value() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let _ = client
         .generate(request_for("1girl", Model::NaiDiffusion5Full))
@@ -1165,7 +1084,7 @@ async fn transparent_background_hint_tracks_the_request_value() {
 #[tokio::test]
 async fn transparent_background_is_dropped_off_v5_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .transparent_background(true)
@@ -1183,7 +1102,7 @@ async fn transparent_background_is_dropped_off_v5_when_not_strict() {
 #[tokio::test]
 async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .transparent_background(true)
@@ -1194,7 +1113,7 @@ async fn transparent_background_is_rejected_off_v5_in_strict_mode() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "transparent_background"
+            if feature == "core.transparent_background"
     ));
     assert!(transport.last_path().is_none());
 }
@@ -1210,7 +1129,7 @@ async fn furry_mode_prepends_the_dataset_tag_for_v4_and_later_models() {
         Model::NaiDiffusion5Curated,
     ] {
         let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-        let client = Client::with_transport(transport.clone());
+        let client = Client::new(Arc::new(transport.clone()), Default::default());
         let params = GenerateImageRequest::builder("1girl", model)
             .furry_mode(true)
             .build();
@@ -1228,7 +1147,7 @@ async fn furry_mode_prepends_the_dataset_tag_for_v4_and_later_models() {
 #[tokio::test]
 async fn furry_mode_is_dropped_for_v3_when_not_strict() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .furry_mode(true)
         .build();
@@ -1243,7 +1162,7 @@ async fn furry_mode_is_dropped_for_v3_when_not_strict() {
 #[tokio::test]
 async fn furry_mode_is_rejected_for_v3_in_strict_mode() {
     let transport = MockTransport::default();
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .furry_mode(true)
         .strict_mode(true)
@@ -1253,76 +1172,18 @@ async fn furry_mode_is_rejected_for_v3_in_strict_mode() {
     assert!(matches!(
         error,
         BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { ref feature, .. })
-            if feature == "furry_mode"
+            if feature == "core.furry_mode"
     ));
     assert!(transport.last_path().is_none());
 }
 
-#[test]
-fn sampling_defaults_follow_model_descriptors() {
-    let v5 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion5Full).build();
-    let v45 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full).build();
-    let v4 = GenerateImageRequest::builder("1girl", Model::NaiDiffusion4Full).build();
-    let furry = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3Furry).build();
 
-    assert!((v5.sampling.scale - 7.0).abs() < 1e-6);
-    assert!((v45.sampling.scale - 5.0).abs() < 1e-6);
-    assert!((v4.sampling.scale - 5.5).abs() < 1e-6);
-    assert!((furry.sampling.scale - 6.2).abs() < 1e-6);
-    assert_eq!(v5.sampling.steps, 23);
-}
 
-#[test]
-fn descriptors_describe_each_model_family() {
-    let v5 = Model::NaiDiffusion5Full.descriptor();
-    assert!(v5.wire().uses_v5_extensions());
-    assert_eq!(v5.wire().params_version(), 4);
-    assert!(v5.sampling().variety.is_none());
-    assert!(v5.support().vibe.is_none());
-    assert!(!v5.can_encode_vibe());
-    assert!(v5.support().character_reference.is_none());
-    assert_eq!(Model::NaiDiffusion5Full.vibe_model_key(), None);
-    assert!(v5.support().streaming);
-    let v45 = Model::NaiDiffusion45Full.descriptor();
-    assert_eq!(v45.wire().params_version(), 3);
-    assert!(v45.support().character_reference.is_some());
-    assert!(!v45.sampling().smea);
-    assert!(
-        Model::NaiDiffusion4Full
-            .descriptor()
-            .support()
-            .character_reference
-            .is_none()
-    );
-    let v3 = Model::NaiDiffusion3.descriptor();
-    assert!(v3.prompt().characters.is_none());
-    assert!(v3.sampling().smea);
-    assert!(!v3.support().streaming);
-}
-
-#[test]
-fn character_set_counts_only_enabled_characters() {
-    let set = CharacterSet::new(vec![
-        Character {
-            prompt: "a".to_owned(),
-            negative_prompt: None,
-            position: CharacterPosition::default(),
-            enabled: true,
-        },
-        Character {
-            prompt: "b".to_owned(),
-            negative_prompt: None,
-            position: CharacterPosition::default(),
-            enabled: false,
-        },
-    ]);
-    assert_eq!(set.enabled_count(), 1);
-}
 
 #[tokio::test]
 async fn legacy_models_receive_smea_toggles() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion3)
         .guidance(GuidanceParams {
@@ -1343,7 +1204,7 @@ async fn legacy_models_receive_smea_toggles() {
 #[tokio::test]
 async fn generate_does_not_parse_prompt_syntax_locally() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-    let client = Client::with_transport(transport.clone());
+    let client = Client::new(Arc::new(transport.clone()), Default::default());
 
     let result = client
         .generate(request("{bad prompt syntax"))
@@ -1356,11 +1217,13 @@ async fn generate_does_not_parse_prompt_syntax_locally() {
     );
 }
 
+#[cfg(feature = "credit-observer")]
 #[derive(Default)]
 struct RecordingObserver {
     events: Mutex<Vec<CreditEvent>>,
 }
 
+#[cfg(feature = "credit-observer")]
 #[async_trait]
 impl CreditObserver for RecordingObserver {
     async fn observe(&self, event: CreditEvent) {
@@ -1369,10 +1232,11 @@ impl CreditObserver for RecordingObserver {
 }
 
 #[tokio::test]
+#[cfg(feature = "credit-observer")]
 async fn credit_observer_receives_paired_events_without_prompt_text() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let observer = Arc::new(RecordingObserver::default());
-    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport), Default::default()).with_credit_observer(observer.clone());
 
     let mut params = request_for("a very specific secret prompt", Model::NaiDiffusion45Full);
     params.core.seed = 5;
@@ -1388,9 +1252,9 @@ async fn credit_observer_receives_paired_events_without_prompt_text() {
     else {
         panic!("expected a planned event, got {:?}", events[0]);
     };
-    assert_eq!(planned.operation, ObservedOperation::GenerateImage);
-    assert_eq!(planned.model, Some(Model::NaiDiffusion45Full));
-    assert!(planned.prompt_len_chars > 0);
+    let ObservedOperation::GenerateImage(summary) = &planned.operation else { panic!("expected generation summary"); };
+    assert_eq!(summary.pricing.model, Model::NaiDiffusion45Full);
+    assert!(summary.prompt_len_chars > 0);
     assert!(matches!(estimate, RequestCostEstimate::Generation(value) if value.total > 0));
     assert!(!format!("{planned:?}").contains("secret prompt"));
 
@@ -1406,10 +1270,11 @@ async fn credit_observer_receives_paired_events_without_prompt_text() {
 }
 
 #[tokio::test]
+#[cfg(feature = "credit-observer")]
 async fn credit_observer_reports_local_validation_failures() {
     let transport = MockTransport::default();
     let observer = Arc::new(RecordingObserver::default());
-    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport), Default::default()).with_credit_observer(observer.clone());
 
     // Local validation runs before observation, so a rejected request emits nothing at all.
     let _ = client.generate(request("  ")).await.unwrap_err();
@@ -1417,6 +1282,7 @@ async fn credit_observer_reports_local_validation_failures() {
 }
 
 #[tokio::test]
+#[cfg(feature = "credit-observer")]
 async fn credit_observer_reports_transport_failures() {
     let transport = MockTransport::default();
     transport.set_bytes_error(novelai_bridge::TransportError::new(
@@ -1425,7 +1291,7 @@ async fn credit_observer_reports_transport_failures() {
         "simulated".into(),
     ));
     let observer = Arc::new(RecordingObserver::default());
-    let client = Client::with_transport(transport).with_credit_observer(observer.clone());
+    let client = Client::new(Arc::new(transport), Default::default()).with_credit_observer(observer.clone());
 
     let _ = client.generate(request("1girl")).await.unwrap_err();
 
@@ -1478,7 +1344,7 @@ async fn resolved_prompts_match_the_wire_payload_verbatim() {
         Model::NaiDiffusion5Full,
     ] {
         let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
-        let client = Client::with_transport(transport.clone());
+        let client = Client::new(Arc::new(transport.clone()), Default::default());
 
         let params = request_with_every_prompt_source(model);
         let resolved = params.resolve_prompts().unwrap();
@@ -1551,27 +1417,4 @@ async fn resolved_prompts_match_the_wire_payload_verbatim() {
 
 /// The assembled prompt must be strictly longer than the caller's raw text whenever a preset
 /// contributes, which is exactly the case token counting would otherwise under-report.
-#[test]
-fn resolved_prompts_include_every_preset_contribution() {
-    let params = request_with_every_prompt_source(Model::NaiDiffusion5Full);
-    let resolved = params.resolve_prompts().unwrap();
 
-    assert_eq!(
-        resolved.prompt,
-        "1girl, transparent background, very aesthetic, masterpiece, no text"
-    );
-    assert!(resolved.prompt.len() > params.core.prompt.len());
-
-    let raw_negative = params.core.negative_prompt.unwrap();
-    assert!(resolved.negative_prompt.ends_with(", extra tags"));
-    assert!(
-        resolved.negative_prompt.len() > raw_negative.len() + 100,
-        "the Heavy UC preset contributes hundreds of characters: {}",
-        resolved.negative_prompt
-    );
-
-    // Character prompts get neither quality tags nor UC preset text.
-    assert_eq!(resolved.characters[0].prompt, "girl, blue hair");
-    assert_eq!(resolved.characters[0].negative_prompt, "bad hands");
-    assert_eq!(resolved.characters.len(), 1);
-}

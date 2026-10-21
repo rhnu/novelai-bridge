@@ -1,34 +1,14 @@
-use serde::{Deserialize, Serialize};
+//! Vibe encoding data and transport-independent encode-vibe preparation.
+mod encoding;
+pub use encoding::VibeEncoding;
 
-use crate::{EncodedImage, Model, VibeEncoding};
-
-/// One vibe transfer reference.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct VibeReference {
-    /// Precomputed payload returned by [`crate::Client::encode_vibe`].
-    pub vibe_data_cache: VibeEncoding,
-    /// Per-image reference strength.
-    pub strength: f32,
-}
-
-/// Vibe transfer configuration.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct VibeTransferConfig {
-    /// One or more precomputed vibe payloads.
-    pub references: Vec<VibeReference>,
-    /// Overall vibe transfer strength.
-    pub strength: f32,
-}
-
-/// Request used by [`crate::Client::encode_vibe`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct EncodeVibeRequest {
-    /// Validated source image.
-    pub image: EncodedImage,
-    /// Information-extracted value in the `[0.01, 1.0]` range.
-    pub information_extracted: f32,
-    /// Target model for the encoded vibe payload.
-    pub model: Model,
-    /// Rejects out-of-range numeric values instead of clamping them.
-    pub strict_mode: bool,
-}
+#[cfg(feature = "generation")]
+mod request;
+#[cfg(feature = "generation")]
+mod prepare;
+#[cfg(feature = "generation")]
+mod wire;
+#[cfg(feature = "generation")]
+pub use request::{EncodeVibeRequest, VibeReference, VibeTransferConfig};
+#[cfg(feature = "generation")]
+pub use prepare::PreparedVibe;

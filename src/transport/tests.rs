@@ -1,5 +1,7 @@
 #[cfg(feature = "reqwest-streaming")]
 use futures_util::{StreamExt, stream};
+#[cfg(feature = "reqwest-streaming")]
+use eventsource_stream::Eventsource;
 
 use super::*;
 

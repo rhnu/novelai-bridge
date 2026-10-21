@@ -1,6 +1,23 @@
-use serde::{Deserialize, Serialize};
+macro_rules! serde_string_enum {
+    ($enum_type:ty, [$($variant:expr),+ $(,)?]) => {
+        impl serde::Serialize for $enum_type {
+            fn serialize<Serializer: serde::Serializer>(&self, serializer: Serializer) -> Result<Serializer::Ok, Serializer::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+        impl<'input> serde::Deserialize<'input> for $enum_type {
+            fn deserialize<Deserializer: serde::Deserializer<'input>>(deserializer: Deserializer) -> Result<Self, Deserializer::Error> {
+                let identifier = <String as serde::Deserialize>::deserialize(deserializer)?;
+                [$($variant),+].into_iter().find(|variant| variant.as_str() == identifier)
+                    .ok_or_else(|| serde::de::Error::custom(format!("unknown {} identifier: {identifier}", stringify!($enum_type))))
+            }
+        }
+    };
+}
 
-use crate::Model;
+pub(crate) use serde_string_enum;
+
+use serde::{Deserialize, Serialize};
 
 const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
 const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
@@ -10,39 +27,29 @@ const UC_PRESET_FURRY_FOCUS: &str = "{worst quality}, distracting watermark, unf
 const UC_PRESET_HUMAN_FOCUS: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy";
 
 /// Supported image samplers.
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Sampler {
     /// `k_euler`
-    #[serde(rename = "k_euler")]
-    KEuler,
+        KEuler,
     /// `k_euler_ancestral`
-    #[serde(rename = "k_euler_ancestral")]
-    #[default]
+        #[default]
     KEulerAncestral,
     /// `k_dpm_2`
-    #[serde(rename = "k_dpm_2")]
-    KDpm2,
+        KDpm2,
     /// `k_dpm_2_ancestral`
-    #[serde(rename = "k_dpm_2_ancestral")]
-    KDpm2Ancestral,
+        KDpm2Ancestral,
     /// `k_dpmpp_2m`
-    #[serde(rename = "k_dpmpp_2m")]
-    KDpmpp2m,
+        KDpmpp2m,
     /// `k_dpmpp_2m_sde`
-    #[serde(rename = "k_dpmpp_2m_sde")]
-    KDpmpp2mSde,
+        KDpmpp2mSde,
     /// `k_dpmpp_2s_ancestral`
-    #[serde(rename = "k_dpmpp_2s_ancestral")]
-    KDpmpp2sAncestral,
+        KDpmpp2sAncestral,
     /// `k_dpmpp_sde`
-    #[serde(rename = "k_dpmpp_sde")]
-    KDpmppSde,
+        KDpmppSde,
     /// `ddim`
-    #[serde(rename = "ddim")]
-    Ddim,
+        Ddim,
     /// `ddim_v3`
-    #[serde(rename = "ddim_v3")]
-    DdimV3,
+        DdimV3,
 }
 
 impl Sampler {
@@ -65,21 +72,17 @@ impl Sampler {
 }
 
 /// Supported noise schedules.
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum NoiseSchedule {
     /// `native`
-    #[serde(rename = "native")]
-    Native,
+        Native,
     /// `karras`
-    #[serde(rename = "karras")]
-    #[default]
+        #[default]
     Karras,
     /// `exponential`
-    #[serde(rename = "exponential")]
-    Exponential,
+        Exponential,
     /// `polyexponential`
-    #[serde(rename = "polyexponential")]
-    Polyexponential,
+        Polyexponential,
 }
 
 impl NoiseSchedule {
@@ -175,8 +178,7 @@ impl QualityPreset {
 }
 
 /// Supported image stream modes.
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum StreamMode {
     /// Server-sent events.
     #[default]
@@ -194,14 +196,12 @@ impl StreamMode {
 }
 
 /// Supported generated image output formats.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ImageFormat {
     /// PNG output.
-    #[serde(rename = "png")]
-    Png,
+        Png,
     /// WebP output.
-    #[serde(rename = "webp")]
-    Webp,
+        Webp,
 }
 
 impl ImageFormat {
@@ -298,16 +298,10 @@ pub struct SamplingParams {
     pub cfg_rescale: f32,
 }
 
-impl SamplingParams {
-    /// Returns the factory defaults registered for a model.
-    #[must_use]
-    pub const fn for_model(model: Model) -> Self {
-        model.descriptor().defaults().sampling
-    }
-}
+serde_string_enum!(Sampler, [Self::KEuler, Self::KEulerAncestral, Self::KDpm2, Self::KDpm2Ancestral, Self::KDpmpp2m, Self::KDpmpp2mSde, Self::KDpmpp2sAncestral, Self::KDpmppSde, Self::Ddim, Self::DdimV3]);
 
-impl Default for SamplingParams {
-    fn default() -> Self {
-        Self::for_model(Model::default())
-    }
-}
+serde_string_enum!(NoiseSchedule, [Self::Native, Self::Karras, Self::Exponential, Self::Polyexponential]);
+
+serde_string_enum!(StreamMode, [Self::Sse]);
+
+serde_string_enum!(ImageFormat, [Self::Png, Self::Webp]);

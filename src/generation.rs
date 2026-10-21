@@ -1,0 +1,33 @@
+//! Effective generation planning, image preparation and wire encoding.
+mod builder;
+mod characters;
+mod conditioning;
+mod diagnostics;
+mod input;
+mod normalize;
+mod plan;
+mod prepare;
+mod pricing;
+mod references;
+mod request;
+mod result;
+mod seed;
+#[cfg(test)]
+pub(crate) mod test_support;
+mod wire;
+pub(crate) mod bounds;
+#[cfg(feature = "tokenizer")]
+mod token_usage;
+
+pub use builder::GenerateImageRequestBuilder;
+pub use characters::{Character, CharacterPosition, CharacterSet};
+pub use conditioning::{ResolvedCharacterPrompt, ResolvedPrompts};
+pub use diagnostics::{CharacterField, CharacterReferenceField, GenerationField, GuidanceField, ImageInputField, NormalizationChange, NormalizationDiagnostic, NormalizationPolicy};
+pub use input::Img2ImgRequest;
+pub use plan::NormalizedGeneration;
+pub use prepare::{GenerationDelivery, PreparedGeneration};
+pub use references::{CharacterReference, CharacterReferenceType, ReferenceSet};
+pub use request::{GenerateImageRequest, GenerateImageStreamRequest, GenerationCore, GuidanceParams, OutputParams};
+pub use result::{GenerateImageResult, ImageStreamChunk};
+#[cfg(feature = "tokenizer")]
+pub use token_usage::{CharacterTokenUsage, PromptField, PromptTokenUsage};

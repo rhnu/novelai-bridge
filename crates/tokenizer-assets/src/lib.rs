@@ -10,6 +10,12 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod tests;
+
 /// `OpenAI` CLIP's `bpe_simple_vocab_16e6.txt.gz` (MIT).
 pub static CLIP_MERGES_GZ: &[u8] = include_bytes!("../assets/bpe_simple_vocab_16e6.txt.gz");
 

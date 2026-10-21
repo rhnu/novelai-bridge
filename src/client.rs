@@ -1,163 +1,82 @@
-use std::sync::{Arc, Mutex, atomic::AtomicU64};
+use std::sync::{Arc, Mutex};
 
-use crate::{
-    AnlasEstimate, AnlasPricingContext, BridgeError, CreditBalance, CreditObserver,
-    DEFAULT_API_BASE, DEFAULT_IMAGE_BASE, GenerateImageRequest, Transport,
-};
-#[cfg(feature = "reqwest-transport")]
-use crate::{DEFAULT_TIMEOUT_MS, ReqwestTransport};
+use crate::{AnlasEstimate, AnlasPricingContext, BridgeError, GenerateImageRequest, SubscriptionInfo};
 
-#[cfg(feature = "reqwest-transport")]
-mod api_key;
 mod director;
+mod execute;
 mod generate;
 mod observe;
-mod subscription;
-
-#[cfg(feature = "reqwest-transport")]
-pub use api_key::ApiKeySource;
 #[cfg(feature = "streaming")]
-pub use observe::StreamObservation;
+mod stream;
+mod subscription;
+mod vibe;
 
-#[cfg(feature = "reqwest-transport")]
-use api_key::resolve_api_key;
+#[cfg(feature = "streaming")]
+pub use stream::{GenerateImageStream, ImageStreamItem, ImageStreamResult};
 
-/// Options used to construct a [`Client`] with the default [`ReqwestTransport`].
-#[cfg(feature = "reqwest-transport")]
-#[derive(Clone)]
-pub struct ClientOptions {
-    /// Selects how the API key is resolved for authenticated requests.
-    pub api_key_source: ApiKeySource,
-    /// Configures base URLs for `NovelAI` image and API endpoints.
-    pub base_urls: BaseUrls,
-    /// Overrides the HTTP timeout in milliseconds.
-    pub timeout_ms: u64,
-    /// Optional observer notified about request cost and account credit.
-    #[cfg(feature = "credit-observer")]
-    pub credit_observer: Option<Arc<dyn CreditObserver>>,
-}
+/// Default base URL for image-service endpoints.
+pub const DEFAULT_IMAGE_BASE: &str = "https://image.novelai.net";
 
-#[cfg(feature = "reqwest-transport")]
-impl std::fmt::Debug for ClientOptions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ClientOptions")
-            .field("api_key_source", &self.api_key_source)
-            .field("base_urls", &self.base_urls)
-            .field("timeout_ms", &self.timeout_ms)
-            .field("credit_observer", &{
-                #[cfg(feature = "credit-observer")]
-                {
-                    self.credit_observer.is_some()
-                }
-                #[cfg(not(feature = "credit-observer"))]
-                {
-                    false
-                }
-            })
-            .finish()
-    }
-}
-
-#[cfg(feature = "reqwest-transport")]
-impl Default for ClientOptions {
-    fn default() -> Self {
-        Self {
-            api_key_source: ApiKeySource::Environment,
-            base_urls: BaseUrls::default(),
-            timeout_ms: DEFAULT_TIMEOUT_MS,
-            #[cfg(feature = "credit-observer")]
-            credit_observer: None,
-        }
-    }
-}
-
-/// Base URLs used by [`Client`] to resolve `NovelAI` endpoint paths.
+/// Service routing shared by all transport implementations.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BaseUrls {
-    /// Base URL for image-service endpoints, including subscription queries.
-    pub image: String,
-    /// Base URL reserved for non-image API endpoints.
-    ///
-    /// Current public client methods do not use this base URL.
-    pub api: String,
+pub struct ClientConfig {
+    pub image_base_url: String,
 }
 
-impl Default for BaseUrls {
+impl Default for ClientConfig {
     fn default() -> Self {
+        Self { image_base_url: DEFAULT_IMAGE_BASE.to_owned() }
+    }
+}
+
+/// Image API client with shared transport and sampled account state.
+pub struct Client<T: ?Sized> {
+    transport: Arc<T>,
+    config: ClientConfig,
+    account: Arc<Mutex<Option<SubscriptionInfo>>>,
+    #[cfg(feature = "tokenizer")]
+    tokenizers: Option<Arc<crate::Tokenizers>>,
+    #[cfg(feature = "credit-observer")]
+    observation: Option<observe::ObservationContext>,
+}
+
+impl<T: ?Sized> Clone for Client<T> {
+    fn clone(&self) -> Self {
         Self {
-            image: DEFAULT_IMAGE_BASE.to_owned(),
-            api: DEFAULT_API_BASE.to_owned(),
+            transport: self.transport.clone(),
+            config: self.config.clone(),
+            account: self.account.clone(),
+            #[cfg(feature = "tokenizer")]
+            tokenizers: self.tokenizers.clone(),
+            #[cfg(feature = "credit-observer")]
+            observation: self.observation.clone(),
         }
     }
 }
 
-/// High-level `NovelAI` image API client.
-///
-/// The client performs local request-shape validation, model capability gating and image payload
-/// normalization, but it intentionally does not parse or reject prompt syntax locally.
-#[derive(Clone)]
-pub struct Client<T: Transport> {
-    #[cfg(feature = "tokenizer")]
-    pub(super) tokenizers: Option<Arc<crate::Tokenizers>>,
-    pub(super) transport: Arc<T>,
-    pub(super) base_urls: BaseUrls,
-    pub(super) credit_observer: Option<Arc<dyn CreditObserver>>,
-    pub(super) request_counter: Arc<AtomicU64>,
-    pub(super) last_balance: Arc<Mutex<Option<CreditBalance>>>,
-}
-
-#[cfg(feature = "reqwest-transport")]
-impl Client<ReqwestTransport> {
-    /// Creates a client backed by [`ReqwestTransport`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`BridgeError`] when the API key cannot be resolved or the default transport cannot
-    /// be constructed.
-    pub fn new(options: ClientOptions) -> Result<Self, BridgeError> {
-        let api_key = resolve_api_key(&options.api_key_source)?;
-        let transport = ReqwestTransport::new(api_key, options.timeout_ms)?;
-        let client = Self::with_transport_and_base_urls(transport, options.base_urls);
-        #[cfg(feature = "credit-observer")]
-        let client = match options.credit_observer {
-            Some(observer) => client.with_credit_observer(observer),
-            None => client,
-        };
-        Ok(client)
-    }
-}
-
-impl<T: Transport> Client<T> {
-    /// Creates a client from an existing transport and the default base URLs.
-    pub fn with_transport(transport: T) -> Self {
-        Self::with_transport_and_base_urls(transport, BaseUrls::default())
-    }
-
-    /// Creates a client from an existing transport and explicit base URLs.
-    ///
-    /// The client resolves relative endpoint paths against the configured base URLs before
-    /// calling the transport.
-    pub fn with_transport_and_base_urls(transport: T, base_urls: BaseUrls) -> Self {
+impl<T: ?Sized> Client<T> {
+    /// Creates a client from a shared transport and service configuration.
+    pub fn new(transport: Arc<T>, config: ClientConfig) -> Self {
         Self {
-            transport: Arc::new(transport),
+            transport,
+            config,
+            account: Arc::new(Mutex::new(None)),
             #[cfg(feature = "tokenizer")]
             tokenizers: None,
-            base_urls,
-            credit_observer: None,
-            request_counter: Arc::new(AtomicU64::new(1)),
-            last_balance: Arc::new(Mutex::new(None)),
+            #[cfg(feature = "credit-observer")]
+            observation: None,
         }
     }
 
-    /// Attaches a [`CreditObserver`], replacing any previously attached observer.
+    /// Attaches a credit observer. Clones share request identifiers and the observer.
     #[must_use]
     #[cfg(feature = "credit-observer")]
-    pub fn with_credit_observer(mut self, observer: Arc<dyn CreditObserver>) -> Self {
-        self.credit_observer = Some(observer);
+    pub fn with_credit_observer(mut self, observer: Arc<dyn crate::CreditObserver>) -> Self {
+        self.observation = Some(observe::ObservationContext::new(observer));
         self
     }
 
-    /// Attaches shared local tokenizers. Generation checks each resolved prompt before transport.
+    /// Attaches local tokenizers used to check final conditioning fields.
     #[cfg(feature = "tokenizer")]
     #[must_use]
     pub fn with_tokenizers(mut self, tokenizers: Arc<crate::Tokenizers>) -> Self {
@@ -165,39 +84,32 @@ impl<T: Transport> Client<T> {
         self
     }
 
-    /// Counts final conditioning fields locally using model-input framing.
+    /// Counts final conditioning fields using model-input framing.
     ///
     /// # Errors
-    /// Returns a tokenizer error if an encoder is missing or encoding fails.
+    /// Returns an error when an encoder is missing or encoding fails.
     #[cfg(feature = "tokenizer")]
     pub fn count_tokens(
         &self,
         request: &GenerateImageRequest,
     ) -> Result<crate::PromptTokenUsage, BridgeError> {
-        let tokenizers =
-            self.tokenizers
-                .as_ref()
-                .ok_or_else(|| crate::TokenizerError::TokenizerNotLoaded {
-                    kind: request.descriptor().prompt().tokenizer,
-                })?;
+        let tokenizers = self.tokenizers.as_ref().ok_or_else(|| {
+            crate::TokenizerError::TokenizerNotLoaded {
+                kind: request.descriptor().prompt().tokenizer,
+            }
+        })?;
         request.count_tokens(tokenizers)
     }
 
-    /// Returns the most recently sampled account balance, if [`Client::get_subscription`] has run.
+    /// Returns the most recently sampled subscription, shared by client clones.
     #[must_use]
-    #[cfg(feature = "credit-observer")]
-    pub fn last_sampled_balance(&self) -> Option<CreditBalance> {
-        self.last_balance.lock().ok().and_then(|last| last.clone())
+    pub fn last_subscription(&self) -> Option<SubscriptionInfo> {
+        self.account.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 
-    /// Estimates a generation request with the most recently sampled account context.
-    ///
-    /// This is the client-facing counterpart of [`GenerateImageRequest::estimate_anlas_cost`].
-    /// It never performs network I/O; when no subscription has been sampled, the estimate assumes
-    /// a non-Opus account.
+    /// Estimates generation using the most recently sampled account context.
     ///
     /// # Errors
-    ///
     /// Returns local normalization errors.
     pub fn estimate_anlas_cost(
         &self,
@@ -206,19 +118,14 @@ impl<T: Transport> Client<T> {
         request.estimate_anlas_cost(self.last_pricing_context())
     }
 
-    pub(super) fn last_pricing_context(&self) -> AnlasPricingContext {
-        self.last_balance
-            .lock()
-            .ok()
-            .and_then(|last| last.as_ref().map(AnlasPricingContext::from))
-            .unwrap_or_default()
+    fn last_pricing_context(&self) -> AnlasPricingContext {
+        self.last_subscription().as_ref().map_or_else(AnlasPricingContext::default, AnlasPricingContext::from)
     }
 
-    pub(super) fn image_endpoint(&self, path: &str) -> String {
-        join_base_and_path(&self.base_urls.image, path)
+    fn image_endpoint(&self, endpoint: crate::protocol::Endpoint) -> String {
+        format!("{}{}", self.config.image_base_url.trim_end_matches('/'), endpoint.path())
     }
 }
 
-fn join_base_and_path(base: &str, path: &str) -> String {
-    format!("{}{}", base.trim_end_matches('/'), path)
-}
+#[cfg(test)]
+mod tests;

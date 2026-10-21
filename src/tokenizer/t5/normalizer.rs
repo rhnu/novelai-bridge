@@ -1,5 +1,5 @@
 //! `SentencePiece`'s serialized Darts charsmap and whitespace rules (no ICU dependency).
-use super::{Reader, TokenizerError, malformed};
+use super::{wire::Reader, TokenizerError, asset::malformed};
 
 #[derive(Debug)]
 // Independent flags are specified by the upstream NormalizerSpec/TrainerSpec wire format.
