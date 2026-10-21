@@ -26,10 +26,6 @@ fn registered_factory_values_satisfy_their_constraints() {
         assert!((constraints.scale.min..=constraints.scale.max).contains(&defaults.sampling.scale));
         assert!((constraints.samples.min..=constraints.samples.max).contains(&defaults.n_samples));
         assert!(defaults.size.pixels() <= constraints.canvas.max_pixels);
-        // Every combination of supported dimensions fits the independent pricing ceiling.
-        assert!(
-            u64::from(constraints.canvas.dimension.max).pow(2) <= constraints.canvas.max_pixels
-        );
         for dimension in [defaults.size.width, defaults.size.height] {
             assert!(
                 (constraints.canvas.dimension.min..=constraints.canvas.dimension.max)
@@ -59,5 +55,72 @@ fn geometry_and_schedule_rules_are_independent_of_wire_shape() {
     assert_eq!(
         NoiseScheduleSupport::ExplicitOnly.resolve(crate::NoiseSchedule::Exponential),
         crate::NoiseSchedule::Exponential
+    );
+}
+
+#[test]
+fn current_sample_limits_cover_small_batches_and_reject_empty_or_oversized_canvases() {
+    let descriptor = Model::NaiDiffusion5Full.descriptor();
+    for (size, count) in [
+        (
+            crate::ImageSize {
+                width: 704,
+                height: 512,
+            },
+            8,
+        ),
+        (
+            crate::ImageSize {
+                width: 640,
+                height: 640,
+            },
+            6,
+        ),
+        (
+            crate::ImageSize {
+                width: 832,
+                height: 512,
+            },
+            4,
+        ),
+        (
+            crate::ImageSize {
+                width: 3072,
+                height: 1024,
+            },
+            4,
+        ),
+        (
+            crate::ImageSize {
+                width: 3072,
+                height: 1025,
+            },
+            0,
+        ),
+        (
+            crate::ImageSize {
+                width: 0,
+                height: 512,
+            },
+            0,
+        ),
+    ] {
+        assert_eq!(descriptor.sample_limit(size), count);
+    }
+}
+
+#[test]
+fn curated_identity_uses_the_verified_current_base_and_existing_inpainting_sibling() {
+    assert_eq!(
+        Model::NaiDiffusion4Curated.as_str(),
+        "nai-diffusion-4-curated-preview"
+    );
+    assert_eq!(
+        Model::NaiDiffusion4Curated.inpainting_id(),
+        Some("nai-diffusion-4-curated-inpainting")
+    );
+    assert_eq!(
+        Model::NaiDiffusion5FullMedium.inpainting_id(),
+        Some("nai-diffusion-5-full-medium-inpainting")
     );
 }

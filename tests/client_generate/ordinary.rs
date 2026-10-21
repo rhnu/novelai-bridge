@@ -31,7 +31,7 @@ async fn generate_builds_baseline_text2img_request_shape() {
     assert_eq!(body["parameters"]["width"], json!(832));
     assert_eq!(body["parameters"]["height"], json!(1216));
     assert_eq!(body["parameters"]["seed"], json!(42));
-    assert_eq!(body["parameters"]["params_version"], json!(3));
+    assert_eq!(body["parameters"]["params_version"], json!(4));
     assert!(body["parameters"]["image"].is_null());
     assert!(body["parameters"]["v4_prompt"].is_null());
 }
@@ -70,7 +70,7 @@ async fn generate_omits_v5_extensions_for_v45() {
         .unwrap();
 
     let body = transport.last_body().expect("generate body");
-    assert_eq!(body["parameters"]["params_version"], json!(3));
+    assert_eq!(body["parameters"]["params_version"], json!(4));
     assert!(body["parameters"]["tag_hint_transparent_background"].is_null());
     assert!(body["parameters"]["legacy_uc"].is_null());
 }

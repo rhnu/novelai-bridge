@@ -53,7 +53,7 @@ async fn generate_clamps_invalid_numeric_values_under_normalize_policy() {
     let body = transport.last_body().expect("generate body");
     assert_eq!(body["parameters"]["scale"], json!(10.0));
     assert_eq!(body["parameters"]["cfg_rescale"], json!(0.0));
-    assert_eq!(body["parameters"]["n_samples"], json!(4));
+    assert_eq!(body["parameters"]["n_samples"], json!(8));
     assert_eq!(body["parameters"]["width"], json!(64));
     assert_eq!(body["parameters"]["height"], json!(1600));
     assert!((body["parameters"]["strength"].as_f64().unwrap() - 0.99).abs() < 1e-6);

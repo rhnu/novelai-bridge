@@ -40,11 +40,11 @@ pub use field::{
 pub use generation::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
     GenerateImageRequest, GenerateImageRequestBuilder, GenerateImageResult,
-    GenerateImageStreamRequest, GenerationCore, GenerationDelivery, GenerationInput,
-    GuidanceParams, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType, ImageToImageInput,
-    InpaintImageToImage, InpaintingInput, NormalizationChange, NormalizationDiagnostic,
-    NormalizedGeneration, OutputParams, PreparedGeneration, ReferenceSet, ResolvedCharacterPrompt,
-    ResolvedPrompts, TransportSseEvent,
+    GenerateImageStreamRequest, GenerationCore, GenerationDelivery, GenerationGeometry,
+    GenerationInput, GuidanceParams, ImageStreamChunk, ImageStreamEvent, ImageStreamEventType,
+    ImageToImageInput, InpaintImageToImage, InpaintingInput, NormalizationChange,
+    NormalizationDiagnostic, NormalizedGeneration, OutputParams, PreparedGeneration, ReferenceSet,
+    ResolvedCharacterPrompt, ResolvedPrompts, TransportSseEvent,
 };
 #[cfg(feature = "tokenizer")]
 pub use generation::{CharacterTokenUsage, PromptField, PromptTokenUsage};
@@ -65,8 +65,9 @@ pub use model::{
     GenerationMode, ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor,
     ModelIdentity, ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange,
     PricingProfile, PromptProfile, PromptStructure, QualityPresetDefinition, ReferenceAvailability,
-    ReferenceIntent, ReferenceModes, ReferenceProfile, ReferenceResolution, SamplingProfile,
-    UcPresetDefinition, VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
+    ReferenceIntent, ReferenceModes, ReferenceProfile, ReferenceResolution, SamplerCompatibility,
+    SamplingProfile, UcPresetDefinition, VarietyBoostProfile, VibeInputPath, VibeProfile,
+    WireProfile,
 };
 pub use observation::{
     CreditEvent, CreditObserver, GenerationSummary, ObservedDirectorTool, ObservedOperation,

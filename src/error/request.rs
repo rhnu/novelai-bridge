@@ -79,6 +79,9 @@ pub enum InvalidRequest {
     /// An image had impossible dimensions after decoding.
     #[error("{field} image size cannot be zero")]
     ZeroImageDimension { field: RequestField },
+    /// Max Enhance cannot form a nonzero output and a valid 32-pixel quote target.
+    #[error("Max Enhance cannot derive valid output dimensions from {width}x{height}")]
+    InvalidEnhanceDimensions { width: u32, height: u32 },
 }
 
 /// Specific data URL validation failure.

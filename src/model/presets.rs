@@ -168,3 +168,5 @@ pub(super) const V3_FURRY_QUALITY: &[QualityPresetDefinition] =
     &[V3_FURRY_QUALITY_STANDARD, V5_FULL_QUALITY_NONE];
 pub(super) const V3_FURRY_UC: &[UcPresetDefinition] =
     &[V3_FURRY_UC_HEAVY, V3_FURRY_UC_LIGHT, V3_UC_NONE];
+
+pub(super) const V5_MEDIUM_UC: &[UcPresetDefinition] = &[V5_FULL_UC_HEAVY];

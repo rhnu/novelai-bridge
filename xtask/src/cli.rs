@@ -134,6 +134,10 @@ pub struct RunArgs {
     #[arg(long, default_value_t = 0.7)]
     pub strength: f32,
 
+    /// Use V5 Max Enhance for `i2i`, normalizing the source dimensions to the model grid.
+    #[arg(long)]
+    pub max_enhance: bool,
+
     /// Rewrite a wire field after assembly, for example
     /// `--set parameters.add_original_image=false`. Repeatable.
     #[arg(long = "set", value_name = "PATH=VALUE")]

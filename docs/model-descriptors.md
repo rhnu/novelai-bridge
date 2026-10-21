@@ -53,4 +53,26 @@ Transparency, furry mode and sampling support follow the selected descriptor. V3
 
 Preparation resolves automatic seeds and transforms image pixels. Failures to obtain a random seed, encode a prepared image or satisfy its required canvas use `BridgeError::Preparation`. Debug summaries omit prompt text and image payloads.
 
+`Model::NaiDiffusion5FullMedium` selects Full's Medium variant and its inpainting sibling.
+Its profile fixes 14 steps, Euler ancestral, Heavy UC and zero CFG rescale, and removes custom
+negative conditioning under Normalize or rejects it under Reject. V5 schedules are fixed to
+Karras. Model/mode sampling rules also resolve unsupported DDIM combinations and disable SMEA
+for image inputs. DDIM's known failing step counts select an Euler ancestral fallback under
+Normalize or return a sampler diagnostic under Reject.
+
+`ImageToImageInput::max_enhance` enables V5 Max Enhance. The builder's `max_enhance(input)` method
+uses the source's original dimensions to seed the input canvas. Normalization applies the model's
+64-pixel grid, including for Max Enhance. Normalized geometry keeps the input,
+expected output and pricing target separate. Preparation and wire use the input dimensions;
+sample limits and pricing use the target dimensions. Source preparation fits the image to the
+effective input canvas, so payload dimensions and pixels agree.
+
+`ModelDescriptor::sample_limit(size)` is shared by normalization and independent pricing. The
+current area tiers allow up to eight, six or four samples. For Max Enhance, pass its pricing
+target rather than the original image size.
+
+Regular canvases use the 64-pixel grid and a 3,145,728-pixel area ceiling. The SDK's per-axis
+ceiling is the shared media budget, not an asserted API maximum. Normalize shrinks oversized
+canvases proportionally onto the grid; Reject reports the size. A 3072×1024 canvas is valid.
+
 Persist models and editable requests. Registry descriptors and prepared values are not writable configuration; edit a request and normalize it again to change effective behavior.

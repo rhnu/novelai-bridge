@@ -406,3 +406,24 @@ async fn explicit_cancel_finishes_failure_notification_after_next_is_abandoned()
     )
     .await;
 }
+
+#[tokio::test]
+async fn eight_final_samples_settle_with_the_complete_small_canvas_batch() {
+    let observer = Arc::new(Observer::default());
+    let pending = ObservationContext::new(Arc::<Observer>::clone(&observer))
+        .begin(
+            1,
+            ObservedOperation::EncodeVibe {
+                model: Model::NaiDiffusion3,
+            },
+            RequestCostEstimate::Fixed { anlas: 2 },
+        )
+        .await;
+    let input = Box::pin(stream::iter((0..8).map(|index| Ok(chunk(index)))));
+    let output = GenerateImageStream::new(10, 8, input, pending);
+    assert_eq!(output.collect::<Vec<_>>().await.len(), 8);
+    assert_eq!(
+        outcomes(&observer),
+        [RequestOutcome::Succeeded { image_count: 8 }]
+    );
+}

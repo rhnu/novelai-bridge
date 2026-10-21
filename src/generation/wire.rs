@@ -78,8 +78,8 @@ pub(super) struct CommonParameters {
     n_samples: u32,
     tag_hint_uc_preset: u8,
     tag_hint_qt: u8,
-    cfg_rescale: f32,
-    noise_schedule: NoiseSchedule,
+    cfg_rescale: Option<f32>,
+    noise_schedule: Option<NoiseSchedule>,
     legacy: bool,
     legacy_v3_extend: bool,
     deliberate_euler_ancestral_bug: bool,
@@ -122,6 +122,8 @@ pub(super) enum OperationParameters {
         extra_noise_seed: i64,
         color_correct: bool,
         add_original_image: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        upscaled_enhance: Option<bool>,
     },
     Inpainting {
         image: String,

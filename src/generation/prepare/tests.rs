@@ -117,8 +117,8 @@ fn character_geometry_is_shared_by_all_wire_representations() {
 #[test]
 fn wire_versions_select_required_and_omitted_fields() {
     for (model, version, structured, extensions) in [
-        (Model::NaiDiffusion3, 3, false, false),
-        (Model::NaiDiffusion45Full, 3, true, false),
+        (Model::NaiDiffusion3, 4, false, false),
+        (Model::NaiDiffusion45Full, 4, true, false),
         (Model::NaiDiffusion5Full, 4, true, true),
     ] {
         let prepared = GenerateImageRequest::builder("cat", model)
@@ -217,6 +217,66 @@ fn explicit_inpaint_conditioning_is_nested_and_preserved_at_full_strength() {
             assert!(parameters.get(name).is_none());
         }
     }
+}
+
+#[test]
+fn max_enhance_wire_and_source_use_input_dimensions_while_quotes_use_their_target() {
+    use base64::Engine as _;
+    let pixels = image::DynamicImage::new_rgba8(1001, 777);
+    let png = PreparedImage::from_pixels(&pixels).unwrap();
+    let source = EncodedImage::from_bytes(png.as_bytes()).unwrap();
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .seed(42)
+        .max_enhance(ImageToImageInput::new(source, 0.5, 0.0))
+        .build();
+    assert_eq!(
+        request.core.size,
+        ImageSize {
+            width: 1001,
+            height: 777
+        }
+    );
+    let plan = request.normalize().unwrap();
+    let geometry = *plan.geometry();
+    let basis = plan.anlas_estimate_input(crate::AnlasPricingContext::default());
+    assert_eq!(
+        basis.size,
+        ImageSize {
+            width: 2048,
+            height: 1536
+        }
+    );
+    let prepared = plan.prepare().unwrap();
+    assert_eq!(prepared.geometry(), &geometry);
+    assert_eq!(
+        geometry.output_size,
+        ImageSize {
+            width: 2048,
+            height: 1536
+        }
+    );
+    for delivery in [
+        GenerationDelivery::Images,
+        GenerationDelivery::Stream(StreamMode::Sse),
+    ] {
+        let body = payload(&prepared, delivery);
+        assert_eq!(body["parameters"]["width"], 1024);
+        assert_eq!(body["parameters"]["height"], 768);
+        assert_eq!(body["parameters"]["upscaled_enhance"], true);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(body["parameters"]["image"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(
+            EncodedImage::from_bytes(bytes).unwrap().size(),
+            geometry.input_size
+        );
+    }
+    assert_eq!(
+        prepared
+            .normalized()
+            .anlas_estimate_input(crate::AnlasPricingContext::default()),
+        basis
+    );
 }
 
 #[test]

@@ -1,5 +1,7 @@
 mod characters;
+mod prompting;
 mod references;
+mod sampling;
 mod values;
 
 use super::{NormalizationChange, NormalizationDiagnostic, NormalizedGeneration};
@@ -40,21 +42,26 @@ pub(super) fn normalize(
         normalizer.normalize_vibe_transfer(references.vibe_transfer.as_mut())?;
     }
     normalizer.normalize_operation(&mut request.operation, descriptor)?;
-    let schedule = descriptor
-        .sampling()
-        .resolve_noise_schedule(request.sampling.noise_schedule);
-    if schedule != request.sampling.noise_schedule {
-        normalizer.require_capability(
-            false,
-            Field::NoiseSchedule,
-            "a model supporting the selected noise schedule",
-            NormalizationChange::Fallback,
-        )?;
-        request.sampling.noise_schedule = schedule;
+    normalizer.normalize_sampling(&mut request, descriptor)?;
+    let geometry = super::geometry::resolve(&request)?;
+    let sample_limit = descriptor.sample_limit(geometry.pricing_size);
+    if sample_limit == 0 {
+        return Err(InvalidRequest::UnsupportedModelFeature {
+            feature: Field::Size.into(),
+            required_model: "a model supporting this pricing canvas".to_owned(),
+        }
+        .into());
     }
+    request.core.n_samples = normalizer.normalize_u32_range(
+        Field::Samples,
+        request.core.n_samples,
+        descriptor.constraints().samples.min,
+        sample_limit,
+    )?;
     let prompts = request.assemble_prompts();
     Ok(NormalizedGeneration {
         model_id,
+        geometry,
         request,
         prompts,
         diagnostics: normalizer.diagnostics,
@@ -100,22 +107,13 @@ impl Normalizer {
             limits.scale.min,
             limits.scale.max,
         )?;
-        params.core.n_samples = self.normalize_u32_range(
-            Field::Samples,
-            params.core.n_samples,
-            limits.samples.min,
-            limits.samples.max,
-        )?;
         params.sampling.cfg_rescale = self.normalize_f32_range(
             Field::CfgRescale,
             params.sampling.cfg_rescale,
             limits.cfg_rescale.min,
             limits.cfg_rescale.max,
         )?;
-        params.core.size.width =
-            self.normalize_image_dimension(Field::Width, params.core.size.width)?;
-        params.core.size.height =
-            self.normalize_image_dimension(Field::Height, params.core.size.height)?;
+        self.normalize_generation_canvas(params)?;
         Ok(())
     }
 
@@ -127,6 +125,7 @@ impl Normalizer {
     ) -> Result<(), BridgeError> {
         self.gate_characters(params, descriptor)?;
         self.normalize_references(params, descriptor)?;
+        self.normalize_custom_negative_prompts(params, descriptor)?;
         if !self.require_capability(
             descriptor
                 .prompt()

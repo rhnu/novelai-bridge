@@ -333,6 +333,212 @@ fn legacy_inpainting_drops_or_rejects_the_complete_source_conditioning_group() {
 }
 
 #[test]
+fn max_enhance_uses_the_final_generation_grid_and_normalizes_tiny_axes() {
+    let mut input = ImageToImageInput::new(image(), 0.5, 0.0);
+    input.max_enhance = true;
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .size(crate::ImageSize {
+            width: 1001,
+            height: 777,
+        })
+        .image_to_image(input.clone())
+        .build();
+    assert!(
+        request
+            .clone()
+            .normalize_with(ValidationPolicy::Reject)
+            .is_err()
+    );
+    let plan = request.normalize().unwrap();
+    assert_eq!(
+        plan.geometry().input_size,
+        crate::ImageSize {
+            width: 1024,
+            height: 768
+        }
+    );
+    assert_eq!(plan.request().core.size, plan.geometry().input_size);
+    assert_eq!(
+        plan.clone().into_request().normalize().unwrap().geometry(),
+        plan.geometry()
+    );
+    let tiny = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .size(crate::ImageSize {
+            width: 0,
+            height: 1,
+        })
+        .image_to_image(input)
+        .build();
+    assert!(
+        tiny.clone()
+            .normalize_with(ValidationPolicy::Reject)
+            .is_err()
+    );
+    let normalized = tiny.normalize().unwrap();
+    assert_eq!(
+        normalized.geometry().input_size,
+        crate::ImageSize {
+            width: 64,
+            height: 64
+        }
+    );
+    assert_eq!(
+        normalized.geometry().output_size,
+        crate::ImageSize {
+            width: 128,
+            height: 128
+        }
+    );
+    assert!(
+        normalized
+            .diagnostics()
+            .iter()
+            .any(|entry| entry.field == GenerationField::Width)
+    );
+    assert!(
+        normalized
+            .diagnostics()
+            .iter()
+            .any(|entry| entry.field == GenerationField::Height)
+    );
+}
+
+#[test]
+fn unsupported_max_enhance_uses_regular_canvas_rules_before_the_flag_is_removed() {
+    let mut input = ImageToImageInput::new(image(), 0.5, 0.0);
+    input.max_enhance = true;
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
+        .size(crate::ImageSize {
+            width: 1001,
+            height: 777,
+        })
+        .image_to_image(input)
+        .build();
+    let plan = request.normalize().unwrap();
+    assert_eq!(
+        plan.geometry().input_size,
+        crate::ImageSize {
+            width: 1024,
+            height: 768
+        }
+    );
+    assert_eq!(plan.geometry().input_size, plan.geometry().output_size);
+    assert!(plan.diagnostics().iter().any(
+        |entry| entry.field == GenerationField::ImageInput(crate::ImageInputField::MaxEnhance)
+    ));
+    let mut rejecting = plan.into_request();
+    let GenerationInput::ImageToImage(input) = &mut rejecting.operation else {
+        unreachable!()
+    };
+    input.max_enhance = true;
+    assert!(matches!(rejecting.normalize_with(ValidationPolicy::Reject),
+        Err(BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { feature, .. }))
+        if feature == GenerationField::ImageInput(crate::ImageInputField::MaxEnhance).into()));
+}
+
+#[test]
+fn max_enhance_checks_area_and_expected_output_media_budgets_before_preparation() {
+    let mut input = ImageToImageInput::new(image(), 0.5, 0.0);
+    input.max_enhance = true;
+    let large = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .size(crate::ImageSize {
+            width: 3072,
+            height: 2048,
+        })
+        .image_to_image(input.clone())
+        .build();
+    assert!(
+        matches!(large.clone().normalize_with(ValidationPolicy::Reject),
+        Err(BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { field, .. })) if field == GenerationField::Size.into())
+    );
+    let normalized = large.normalize().unwrap();
+    assert!(normalized.geometry().input_size.pixels() <= 3_145_728);
+    assert!(
+        normalized
+            .diagnostics()
+            .iter()
+            .any(|entry| entry.field == GenerationField::Width)
+    );
+    let too_tall = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
+        .size(crate::ImageSize {
+            width: 64,
+            height: 16_384,
+        })
+        .image_to_image(input)
+        .build();
+    assert!(
+        matches!(too_tall.normalize(), Err(BridgeError::InvalidRequest(InvalidRequest::UndecodableImage { field, .. })) if field == GenerationField::Size.into())
+    );
+}
+
+#[test]
+fn ordinary_canvas_accepts_wide_images_and_normalizes_area_on_its_grid() {
+    let mut wide = request();
+    wide.core.size = crate::ImageSize {
+        width: 3072,
+        height: 1024,
+    };
+    let plan = wide.normalize_with(ValidationPolicy::Reject).unwrap();
+    assert_eq!(
+        plan.geometry().input_size,
+        crate::ImageSize {
+            width: 3072,
+            height: 1024
+        }
+    );
+    let mut oversized = request();
+    oversized.core.size = crate::ImageSize {
+        width: 3072,
+        height: 1088,
+    };
+    assert!(
+        matches!(oversized.clone().normalize_with(ValidationPolicy::Reject),
+        Err(BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { field, .. })) if field == GenerationField::Size.into())
+    );
+    let normalized = oversized.normalize().unwrap();
+    assert_eq!(
+        normalized.geometry().input_size,
+        crate::ImageSize {
+            width: 2944,
+            height: 1024
+        }
+    );
+    assert!(normalized.geometry().input_size.pixels() <= 3_145_728);
+    for field in [GenerationField::Width, GenerationField::Height] {
+        assert!(
+            normalized
+                .diagnostics()
+                .iter()
+                .any(|entry| entry.field == field
+                    && matches!(entry.change, NormalizationChange::Adjusted { .. }))
+        );
+    }
+    assert_eq!(
+        normalized
+            .clone()
+            .into_request()
+            .normalize()
+            .unwrap()
+            .request()
+            .core
+            .size,
+        normalized.request().core.size
+    );
+}
+
+#[test]
+fn canvas_nearest_multiple_ties_choose_the_upper_grid_coordinate() {
+    for (width, expected) in [(95, 64), (96, 128), (97, 128), (160, 192), (161, 192)] {
+        let mut input = request();
+        input.core.size = crate::ImageSize { width, height: 64 };
+        assert_eq!(
+            input.normalize().unwrap().geometry().input_size.width,
+            expected
+        );
+    }
+}
+
+#[test]
 fn unsupported_noise_schedule_obeys_the_same_policy_as_other_capabilities() {
     let mut input = request();
     input.sampling.noise_schedule = NoiseSchedule::Native;
@@ -354,3 +560,5 @@ fn unsupported_noise_schedule_obeys_the_same_policy_as_other_capabilities() {
         && matches!(entry.change, NormalizationChange::Fallback))
     );
 }
+
+mod model_rules;

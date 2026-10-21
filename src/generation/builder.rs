@@ -33,7 +33,7 @@ impl GenerateImageRequestBuilder {
         self
     }
 
-    /// Sets the output canvas size.
+    /// Sets the generation canvas, or the source canvas when Max Enhance is enabled.
     #[must_use]
     pub const fn size(mut self, size: ImageSize) -> Self {
         self.request.core.size = size;
@@ -159,6 +159,15 @@ impl GenerateImageRequestBuilder {
     #[must_use]
     pub fn image_to_image(self, input: ImageToImageInput) -> Self {
         self.operation(GenerationInput::ImageToImage(input))
+    }
+
+    /// Selects Max Enhance and seeds the canvas with source dimensions before normalization.
+    #[must_use]
+    pub fn max_enhance(mut self, mut input: ImageToImageInput) -> Self {
+        self.request.core.size = input.image.size();
+        input.max_enhance = true;
+        self.request.operation = GenerationInput::ImageToImage(input);
+        self
     }
 
     /// Selects masked generation.

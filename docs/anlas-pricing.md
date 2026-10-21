@@ -22,8 +22,9 @@ values and apply model capabilities and range policy before estimating.
 
 Let:
 
-- `P = width × height`, the output pixel count;
+- `P = width × height`, the pricing canvas pixel count;
 - `steps`, the requested sampling step count;
+- `step_factor`, `1 / 1.06521739` for V5 Medium and `1` for other supported models;
 - `strength`, the image-to-image or inpainting strength, defaulting to `1.0`.
 
 The base cost is:
@@ -31,7 +32,7 @@ The base cost is:
 $$
 \text{base} = \left\lceil
 2.951823174884865 \times 10^{-6} \times P
-+ 5.753298233447344 \times 10^{-7} \times P \times \text{steps}
++ 5.753298233447344 \times 10^{-7} \times P \times \text{steps} \times \text{step\_factor}
 \right\rceil
 $$
 
@@ -72,6 +73,9 @@ round the final per-image value.
 
 The sampler does not change this formula for these model families. It belongs to the generation request and is absent from the independent pricing input.
 
+V5 Medium fixes the effective step count at 14. Its step factor applies inside the first ceiling,
+before the usual V5 multiplier. Setting 14 steps on ordinary V5 does not reproduce this pricing rule.
+
 ### Strength selection
 
 - `PricingMode::TextToImage` uses `1.0`.
@@ -84,19 +88,20 @@ does not accept that per-image price.
 
 ## Number of priced images
 
-The requested image count is first clamped to the current generation API range:
+The requested image count is first clamped to the registry range:
 
 $$
-\text{api\_samples} = \operatorname{clamp}(n_{\text{samples}}, 1, 4)
+\text{api\_samples} = \operatorname{clamp}(n_{\text{samples}}, 1, 8)
 $$
 
-The effective resolution limit is the selected model's sample maximum when `P` is within its
-pricing pixel ceiling, and zero otherwise:
+The resolution limit follows the current frontend's area table, bounded by the selected model:
 
 $$
 \text{resolution\_limit}(P) =
 \begin{cases}
-\text{model\_sample\_maximum} & P \le \text{model\_pixel\_ceiling} \\
+8 & P \le 360448 \\
+6 & 360448 < P \le 409600 \\
+4 & 409600 < P \le 3145728 \\
 0 & \text{otherwise}
 \end{cases}
 $$
@@ -108,10 +113,16 @@ $$
 = \min(\text{api\_samples}, \text{resolution\_limit}(P))
 $$
 
-Current model descriptors cap generation at four images. Requests beyond the pricing pixel
-ceiling produce zero priced samples in the independent calculator; a zero total in that case
+Requests beyond the pricing pixel ceiling produce zero priced samples in the independent calculator; a zero total in that case
 does not mean the request qualifies for free generation. Editable generation requests also apply
 the descriptor's per-axis canvas constraints during normalization.
+
+Ordinary requests use the input canvas for both output and pricing. Max Enhance retains three
+sizes in `NormalizedGeneration::geometry()`: the request input, expected output, and frontend
+pricing target. The pricing target supplies both this sample limit and the generation quote.
+It follows a 16-pixel input grid and 32-pixel target rounding, whereas expected output scales
+the effective input dimensions toward twice the width and height, capped at 3,145,728 pixels. The SDK
+keeps these frontend estimates distinct from the actual returned image dimensions.
 
 ## Opus first-image allowance
 

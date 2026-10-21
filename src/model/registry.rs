@@ -3,19 +3,22 @@ use super::{
     CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
     ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
     ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
-    PromptProfile, ReferenceModes, ReferenceProfile, SamplingProfile, VarietyBoostProfile,
-    VibeInputPath, VibeProfile, WireProfile,
+    PromptProfile, ReferenceModes, ReferenceProfile, SamplerCompatibility, SamplingProfile,
+    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
 };
 use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
 
 const CONSTRAINTS: GenerationConstraints = GenerationConstraints {
     canvas: CanvasConstraints {
-        dimension: ParameterRange { min: 64, max: 1600 },
+        dimension: ParameterRange {
+            min: 64,
+            max: 16_384,
+        },
         multiple: 64,
         max_pixels: 3_145_728,
     },
     steps: ParameterRange { min: 1, max: 50 },
-    samples: ParameterRange { min: 1, max: 4 },
+    samples: ParameterRange { min: 1, max: 8 },
     scale: ParameterRange {
         min: 0.0,
         max: 10.0,
@@ -55,6 +58,8 @@ const fn defaults(scale: f32) -> ModelDefaults {
 }
 
 const SAMPLING_LEGACY: SamplingProfile = SamplingProfile {
+    fixed_sampler: None,
+    sampler_compatibility: SamplerCompatibility::Legacy,
     noise_schedules: NoiseScheduleSupport::NativeAndExplicit,
     smea: true,
     dynamic_thresholding: true,
@@ -63,6 +68,8 @@ const SAMPLING_LEGACY: SamplingProfile = SamplingProfile {
     }),
 };
 const SAMPLING_V4: SamplingProfile = SamplingProfile {
+    fixed_sampler: None,
+    sampler_compatibility: SamplerCompatibility::Structured,
     noise_schedules: NoiseScheduleSupport::ExplicitOnly,
     smea: false,
     dynamic_thresholding: false,
@@ -71,6 +78,8 @@ const SAMPLING_V4: SamplingProfile = SamplingProfile {
     }),
 };
 const SAMPLING_V45: SamplingProfile = SamplingProfile {
+    fixed_sampler: None,
+    sampler_compatibility: SamplerCompatibility::Structured,
     noise_schedules: NoiseScheduleSupport::ExplicitOnly,
     smea: false,
     dynamic_thresholding: false,
@@ -79,7 +88,9 @@ const SAMPLING_V45: SamplingProfile = SamplingProfile {
     }),
 };
 const SAMPLING_V5: SamplingProfile = SamplingProfile {
-    noise_schedules: NoiseScheduleSupport::ExplicitOnly,
+    fixed_sampler: None,
+    sampler_compatibility: SamplerCompatibility::Structured,
+    noise_schedules: NoiseScheduleSupport::KarrasOnly,
     smea: false,
     dynamic_thresholding: false,
     variety: None,
@@ -96,6 +107,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: true,
         vibe: None,
         character_reference: None,
     },
@@ -111,6 +123,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V5_FULL_QUALITY,
         uc_presets: super::presets::V5_FULL_UC,
         suppress_nsfw: true,
+        custom_negative_prompts: true,
         transparent_background: true,
         furry_mode: true,
     },
@@ -118,6 +131,60 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV5,
     pricing: PricingProfile {
         multiplier: 1.5,
+        step_factor: 1.0,
+        opus_allowance: OpusAllowance::Metered,
+    },
+};
+
+const V5_MEDIUM: ModelDescriptor = ModelDescriptor {
+    identity: ModelIdentity {
+        model: Model::NaiDiffusion5FullMedium,
+        api_id: "nai-diffusion-5-full-medium",
+    },
+    support: ModelSupport {
+        inpainting: Some(InpaintingProfile {
+            model_id: "nai-diffusion-5-full-medium-inpainting",
+            image_to_image: true,
+        }),
+        streaming: true,
+        max_enhance: true,
+        vibe: None,
+        character_reference: None,
+    },
+    constraints: GenerationConstraints {
+        steps: ParameterRange { min: 14, max: 14 },
+        cfg_rescale: ParameterRange { min: 0.0, max: 0.0 },
+        ..CONSTRAINTS
+    },
+    defaults: ModelDefaults {
+        sampling: SamplingParams {
+            steps: 14,
+            ..defaults(7.0).sampling
+        },
+        ..defaults(7.0)
+    },
+    prompt: PromptProfile {
+        tokenizer: ImageTokenizerKind::Qwen,
+        token_limit: 1471,
+        characters: Some(CharacterPromptProfile {
+            max_characters: 32,
+            positioning: CharacterPositionProfile::Freeform,
+        }),
+        quality_presets: super::presets::V5_FULL_QUALITY,
+        uc_presets: super::presets::V5_MEDIUM_UC,
+        suppress_nsfw: true,
+        custom_negative_prompts: false,
+        transparent_background: true,
+        furry_mode: true,
+    },
+    sampling: SamplingProfile {
+        fixed_sampler: Some(Sampler::KEulerAncestral),
+        ..SAMPLING_V5
+    },
+    wire: WireProfile::StructuredV5,
+    pricing: PricingProfile {
+        multiplier: 1.5,
+        step_factor: 1.0 / 1.065_217_39,
         opus_allowance: OpusAllowance::Metered,
     },
 };
@@ -133,6 +200,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: true,
         vibe: None,
         character_reference: None,
     },
@@ -148,6 +216,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V5_CURATED_QUALITY,
         uc_presets: super::presets::V5_CURATED_UC,
         suppress_nsfw: false,
+        custom_negative_prompts: true,
         transparent_background: true,
         furry_mode: true,
     },
@@ -155,6 +224,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV5,
     pricing: PricingProfile {
         multiplier: 1.5,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Metered,
     },
 };
@@ -170,6 +240,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v4-5full",
             input: VibeInputPath::Encoded,
@@ -191,6 +262,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V45_FULL_QUALITY,
         uc_presets: super::presets::V45_FULL_UC,
         suppress_nsfw: true,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -198,6 +270,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -213,6 +286,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v4-5curated",
             input: VibeInputPath::Encoded,
@@ -234,6 +308,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V45_CURATED_QUALITY,
         uc_presets: super::presets::V45_CURATED_UC,
         suppress_nsfw: false,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -241,6 +316,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -256,6 +332,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v4full",
             input: VibeInputPath::Encoded,
@@ -275,6 +352,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V4_FULL_QUALITY,
         uc_presets: super::presets::V4_FULL_UC,
         suppress_nsfw: true,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -282,6 +360,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -289,7 +368,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
 const V4_CURATED: ModelDescriptor = ModelDescriptor {
     identity: ModelIdentity {
         model: Model::NaiDiffusion4Curated,
-        api_id: "nai-diffusion-4-curated",
+        api_id: "nai-diffusion-4-curated-preview",
     },
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
@@ -297,6 +376,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
             image_to_image: true,
         }),
         streaming: true,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v4curated",
             input: VibeInputPath::Encoded,
@@ -316,6 +396,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V4_CURATED_QUALITY,
         uc_presets: super::presets::V4_CURATED_UC,
         suppress_nsfw: false,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -323,6 +404,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -338,6 +420,7 @@ const V3: ModelDescriptor = ModelDescriptor {
             image_to_image: false,
         }),
         streaming: false,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v3",
             input: VibeInputPath::ProviderOnlyLegacy,
@@ -354,6 +437,7 @@ const V3: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V3_QUALITY,
         uc_presets: super::presets::V3_UC,
         suppress_nsfw: true,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: false,
     },
@@ -361,6 +445,7 @@ const V3: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::LegacyV3,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -376,6 +461,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
             image_to_image: false,
         }),
         streaming: false,
+        max_enhance: false,
         vibe: Some(VibeProfile {
             metadata_key: "v3furry",
             input: VibeInputPath::ProviderOnlyLegacy,
@@ -392,6 +478,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
         quality_presets: super::presets::V3_FURRY_QUALITY,
         uc_presets: super::presets::V3_FURRY_UC,
         suppress_nsfw: true,
+        custom_negative_prompts: true,
         transparent_background: false,
         furry_mode: false,
     },
@@ -399,6 +486,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::LegacyV3,
     pricing: PricingProfile {
         multiplier: 1.0,
+        step_factor: 1.0,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -406,6 +494,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
 pub(super) const fn descriptor(model: Model) -> &'static ModelDescriptor {
     match model {
         Model::NaiDiffusion5Full => &V5_FULL,
+        Model::NaiDiffusion5FullMedium => &V5_MEDIUM,
         Model::NaiDiffusion5Curated => &V5_CURATED,
         Model::NaiDiffusion45Full => &V45_FULL,
         Model::NaiDiffusion45Curated => &V45_CURATED,

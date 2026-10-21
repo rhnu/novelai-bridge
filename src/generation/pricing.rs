@@ -38,7 +38,7 @@ impl NormalizedGeneration {
         };
         AnlasEstimateInput {
             model: request.core.model,
-            size: request.core.size,
+            size: self.geometry().pricing_size,
             steps: request.sampling.steps,
             smea: request.guidance.smea,
             smea_dyn: request.guidance.smea_dyn,

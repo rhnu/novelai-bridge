@@ -19,6 +19,8 @@ pub enum Model {
     /// `nai-diffusion-5-full`
     #[default]
     NaiDiffusion5Full,
+    /// `nai-diffusion-5-full-medium`, the Medium variant of V5 Full.
+    NaiDiffusion5FullMedium,
     /// `nai-diffusion-5-curated`
     NaiDiffusion5Curated,
     /// `nai-diffusion-4-5-full`
@@ -27,7 +29,7 @@ pub enum Model {
     NaiDiffusion45Curated,
     /// `nai-diffusion-4-full`
     NaiDiffusion4Full,
-    /// `nai-diffusion-4-curated`
+    /// `nai-diffusion-4-curated-preview`
     NaiDiffusion4Curated,
     /// `nai-diffusion-3`
     NaiDiffusion3,
@@ -37,8 +39,9 @@ pub enum Model {
 
 impl Model {
     /// Every supported base model, in display order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::NaiDiffusion5Full,
+        Self::NaiDiffusion5FullMedium,
         Self::NaiDiffusion5Curated,
         Self::NaiDiffusion45Full,
         Self::NaiDiffusion45Curated,

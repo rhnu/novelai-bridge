@@ -68,7 +68,7 @@ pub enum AnlasEstimateStatus {
 pub struct AnlasEstimateInput {
     /// Target NAI 3, NAI 4, NAI 4.5 or NAI 5 model.
     pub model: Model,
-    /// Output canvas.
+    /// Effective pricing canvas; use the normalized request projection for Max Enhance.
     pub size: ImageSize,
     /// Sampling step count.
     pub steps: u32,
@@ -76,7 +76,7 @@ pub struct AnlasEstimateInput {
     pub smea: bool,
     /// Whether dynamic SMEA is enabled.
     pub smea_dyn: bool,
-    /// Number of images requested. Values outside the API's `[1, 4]` range are clamped for the
+    /// Number of images requested. Values outside the API's `[1, 8]` range are clamped for the
     /// calculation and preserved as [`AnlasEstimate::requested_samples`].
     pub n_samples: u32,
     /// The selected operation and its effective strength.

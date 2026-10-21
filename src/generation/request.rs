@@ -16,11 +16,11 @@ pub struct GenerationCore {
     pub negative_prompt: Option<String>,
     /// Target image model.
     pub model: Model,
-    /// Output canvas size.
+    /// Generation canvas, or source canvas when Max Enhance is enabled.
     pub size: ImageSize,
     /// Seed value. `0` requests a locally generated seed.
     pub seed: i64,
-    /// Number of images to generate in the `[1, 4]` range.
+    /// Number of images to generate, capped at 8, 6 or 4 by effective output area.
     pub n_samples: u32,
     /// Built-in quality tags appended to the positive prompt.
     pub quality: QualityPreset,

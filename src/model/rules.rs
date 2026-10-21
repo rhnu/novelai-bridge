@@ -44,6 +44,27 @@ pub struct ReferenceResolution {
 }
 
 impl ModelDescriptor {
+    /// Maximum simultaneous samples for the effective pricing canvas.
+    #[must_use]
+    pub const fn sample_limit(&self, size: crate::ImageSize) -> u32 {
+        let pixels = size.pixels();
+        if pixels == 0 || pixels > self.constraints.canvas.max_pixels {
+            return 0;
+        }
+        let limit = if pixels <= 360_448 {
+            8
+        } else if pixels <= 409_600 {
+            6
+        } else {
+            4
+        };
+        if limit < self.constraints.samples.max {
+            limit
+        } else {
+            self.constraints.samples.max
+        }
+    }
+
     /// Selects the API identity for a supported mode.
     #[must_use]
     pub const fn model_id_for(&self, mode: GenerationMode) -> Option<&'static str> {

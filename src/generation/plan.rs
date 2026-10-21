@@ -1,6 +1,6 @@
 use super::{
-    GenerateImageRequest, NormalizationDiagnostic, PreparedGeneration, ResolvedPrompts, normalize,
-    prepare,
+    GenerateImageRequest, GenerationGeometry, NormalizationDiagnostic, PreparedGeneration,
+    ResolvedPrompts, normalize, prepare,
 };
 use crate::{BridgeError, ImagePreprocessor, ValidationPolicy};
 
@@ -29,6 +29,7 @@ pub struct NormalizedGeneration {
     pub(super) request: GenerateImageRequest,
     pub(super) prompts: ResolvedPrompts,
     pub(super) diagnostics: Vec<NormalizationDiagnostic>,
+    pub(super) geometry: GenerationGeometry,
 }
 
 impl GenerateImageRequest {
@@ -79,6 +80,10 @@ impl NormalizedGeneration {
     /// Cached effective text shared by token counting, wire construction and observation.
     #[must_use]
     pub const fn resolved_prompts(&self) -> &ResolvedPrompts { &self.prompts }
+
+    /// Fixed request, expected-output and quote dimensions shared by every later stage.
+    #[must_use]
+    pub const fn geometry(&self) -> &GenerationGeometry { &self.geometry }
 
     /// Decisions made while constructing this plan, in normalization order.
     #[must_use]

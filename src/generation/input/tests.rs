@@ -164,3 +164,26 @@ fn each_serialized_operation_preserves_its_explicit_mode_and_inputs() {
         assert_eq!(decoded, operation);
     }
 }
+
+#[test]
+fn max_enhance_is_an_image_to_image_option_and_defaults_to_disabled() {
+    let ordinary = ImageToImageInput::new(image(), 0.5, 0.0);
+    assert!(!ordinary.max_enhance);
+    let mut encoded = serde_json::to_value(&ordinary).unwrap();
+    encoded.as_object_mut().unwrap().remove("max_enhance");
+    assert!(
+        !serde_json::from_value::<ImageToImageInput>(encoded)
+            .unwrap()
+            .max_enhance
+    );
+    let mut max = ordinary;
+    max.max_enhance = true;
+    assert!(
+        serde_json::from_value::<ImageToImageInput>(serde_json::to_value(max).unwrap())
+            .unwrap()
+            .max_enhance
+    );
+    let mut inpaint = serde_json::to_value(InpaintingInput::new(image(), image())).unwrap();
+    inpaint["max_enhance"] = json!(true);
+    assert!(serde_json::from_value::<InpaintingInput>(inpaint).is_err());
+}

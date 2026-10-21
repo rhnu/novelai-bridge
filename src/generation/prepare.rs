@@ -1,5 +1,5 @@
 use super::{
-    NormalizedGeneration,
+    GenerationGeometry, NormalizedGeneration,
     wire::{
         ImageGenerationRequestBody, ImageStreamParameters, StreamImageGenerationRequestBody,
         build_generate_request,
@@ -37,6 +37,7 @@ impl std::fmt::Debug for PreparedGeneration {
             .field("model", &request.core.model)
             .field("mode", &request.mode())
             .field("size", &request.core.size)
+            .field("geometry", self.normalized.geometry())
             .field("samples", &request.core.n_samples)
             .field("resolved_seed", &self.resolved_seed)
             .field("diagnostics", &self.normalized.diagnostics().len())
@@ -48,6 +49,10 @@ impl PreparedGeneration {
     /// Effective input and cached prompts used to construct this payload.
     #[must_use]
     pub const fn normalized(&self) -> &NormalizedGeneration { &self.normalized }
+
+    /// Request, expected-output and quote dimensions fixed by normalization.
+    #[must_use]
+    pub const fn geometry(&self) -> &GenerationGeometry { self.normalized.geometry() }
 
     /// Request-level seed selected once during preparation.
     #[must_use]

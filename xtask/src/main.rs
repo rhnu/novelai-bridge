@@ -47,6 +47,9 @@ async fn main() -> TaskResult<()> {
 }
 
 async fn run(args: &RunArgs, live: bool) -> TaskResult<()> {
+    if args.max_enhance && args.preset != Preset::I2i {
+        anyhow::bail!("--max-enhance requires the i2i preset");
+    }
     let model = args.model.unwrap_or_default();
     let size = parse_size(&args.size)?;
     let edits = RequestEdits::new(&args.overrides, args.removals.clone())?;

@@ -46,9 +46,9 @@ async fn public_estimate_matches_planned_estimate_after_size_normalization() {
         })
         .unwrap();
     drop(events);
-    assert_eq!(transport.last_body().unwrap()["parameters"]["width"], 1600);
+    assert_eq!(transport.last_body().unwrap()["parameters"]["width"], 1728);
     assert_eq!(estimate.total, planned);
-    assert_eq!(planned, 42);
+    assert_eq!(planned, 49);
 }
 
 #[tokio::test]

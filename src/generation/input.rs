@@ -48,6 +48,9 @@ pub struct ImageToImageInput {
     pub extra_noise_seed: Option<i64>,
     /// Whether the server retains the original source image.
     pub add_original_image: bool,
+    /// Requests the model's Max Enhance path, with a separate output and quote geometry.
+    #[serde(default)]
+    pub max_enhance: bool,
 }
 
 impl ImageToImageInput {
@@ -61,6 +64,7 @@ impl ImageToImageInput {
             color_correct: true,
             extra_noise_seed: None,
             add_original_image: true,
+            max_enhance: false,
         }
     }
 }

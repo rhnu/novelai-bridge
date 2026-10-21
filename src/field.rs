@@ -25,6 +25,7 @@ pub enum GuidanceField {
     VarietyBoost,
     Decrisp,
     Smea,
+    SmeaDyn,
 }
 
 /// Image-to-image input properties.
@@ -34,6 +35,7 @@ pub enum ImageInputField {
     Mask,
     Strength,
     Noise,
+    MaxEnhance,
 }
 
 /// Locations in the optional image-to-image conditioning group used by inpainting.
@@ -62,6 +64,7 @@ pub enum GenerationField {
     Scale,
     CfgRescale,
     NoiseSchedule,
+    Sampler,
     Characters,
     Character {
         index: usize,
@@ -98,14 +101,17 @@ impl fmt::Display for GenerationField {
             Self::Scale => "sampling.scale",
             Self::CfgRescale => "sampling.cfg_rescale",
             Self::NoiseSchedule => "sampling.noise_schedule",
+            Self::Sampler => "sampling.sampler",
             Self::Characters => "characters",
             Self::Guidance(GuidanceField::VarietyBoost) => "guidance.variety_boost",
             Self::Guidance(GuidanceField::Decrisp) => "guidance.decrisp",
             Self::Guidance(GuidanceField::Smea) => "guidance.smea",
+            Self::Guidance(GuidanceField::SmeaDyn) => "guidance.smea_dyn",
             Self::ImageInput(ImageInputField::Image) => "operation.input.image",
             Self::ImageInput(ImageInputField::Mask) => "operation.input.mask",
             Self::ImageInput(ImageInputField::Strength) => "operation.input.strength",
             Self::ImageInput(ImageInputField::Noise) => "operation.input.noise",
+            Self::ImageInput(ImageInputField::MaxEnhance) => "operation.input.max_enhance",
             Self::InpaintImageToImage(InpaintImageToImageField::Entry) => "operation.input.img2img",
             Self::InpaintImageToImage(InpaintImageToImageField::Strength) => {
                 "operation.input.img2img.strength"

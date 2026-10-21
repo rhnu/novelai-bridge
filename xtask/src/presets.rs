@@ -208,11 +208,12 @@ fn generation_request(
     let mut request = base_request(args, model, size);
     match args.preset {
         Preset::I2i => {
-            request.operation = GenerationInput::ImageToImage(ImageToImageInput::new(
-                inputs::source(args, size)?,
-                args.strength,
-                0.0,
-            ));
+            let mut input = ImageToImageInput::new(inputs::source(args, size)?, args.strength, 0.0);
+            if args.max_enhance {
+                input.max_enhance = true;
+                request.core.size = input.image.size();
+            }
+            request.operation = GenerationInput::ImageToImage(input);
         },
         Preset::Infill => {
             let mut input =

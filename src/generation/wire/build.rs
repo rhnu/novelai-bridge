@@ -20,8 +20,8 @@ pub(in crate::generation) fn build_generate_request(
     let descriptor = params.descriptor();
     let common = CommonParameters {
         params_version: descriptor.wire().params_version(),
-        width: params.core.size.width,
-        height: params.core.size.height,
+        width: normalized.geometry().input_size.width,
+        height: normalized.geometry().input_size.height,
         steps: params.sampling.steps,
         scale: params.sampling.scale,
         sampler: params.sampling.sampler,
@@ -29,8 +29,11 @@ pub(in crate::generation) fn build_generate_request(
         n_samples: params.core.n_samples,
         tag_hint_uc_preset: params.core.uc_preset.tag_hint(),
         tag_hint_qt: params.core.quality.tag_hint(),
-        cfg_rescale: params.sampling.cfg_rescale,
-        noise_schedule: params.sampling.noise_schedule,
+        cfg_rescale: (descriptor.constraints().cfg_rescale.max > 0.0)
+            .then_some(params.sampling.cfg_rescale),
+        noise_schedule: descriptor
+            .sampling()
+            .resolve_noise_schedule_for(params.sampling.sampler, params.sampling.noise_schedule),
         legacy: false,
         legacy_v3_extend: false,
         deliberate_euler_ancestral_bug: false,
@@ -142,24 +145,25 @@ fn prepare_operation(
             image: prepare_image(
                 ImageInputField::Image,
                 &input.image,
-                ImagePreparation::Source(request.core.size),
+                ImagePreparation::Source(normalized.geometry().input_size),
             )?,
             strength: input.strength,
             noise: input.noise,
             extra_noise_seed: input.extra_noise_seed.unwrap_or(resolved_seed),
             color_correct: input.color_correct,
             add_original_image: input.add_original_image,
+            upscaled_enhance: input.max_enhance.then_some(true),
         }),
         GenerationInput::Inpainting(input) => Ok(OperationParameters::Inpainting {
             image: prepare_image(
                 ImageInputField::Image,
                 &input.image,
-                ImagePreparation::Source(request.core.size),
+                ImagePreparation::Source(normalized.geometry().input_size),
             )?,
             mask: prepare_image(
                 ImageInputField::Mask,
                 &input.mask,
-                ImagePreparation::Mask(request.core.size),
+                ImagePreparation::Mask(normalized.geometry().input_size),
             )?,
             request_type: "NativeInfillingRequest",
             add_original_image: input.add_original_image,

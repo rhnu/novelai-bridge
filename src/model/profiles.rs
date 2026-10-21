@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Model;
-use crate::{ImageSize, NoiseSchedule, QualityPreset, SamplingParams, UcPreset};
+use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
 
 /// Prompt tokenizer used by a model family.
 ///
@@ -123,6 +123,8 @@ pub struct ModelSupport {
     pub inpainting: Option<InpaintingProfile>,
     /// Availability of the streaming endpoint.
     pub streaming: bool,
+    /// Supports source-sized requests with Max Enhance output geometry.
+    pub max_enhance: bool,
     /// Provider vibe capability, including input implementation status.
     pub vibe: Option<VibeProfile>,
     /// Character-reference support and its allowed modes.
@@ -143,7 +145,7 @@ pub struct ParameterRange<T> {
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct CanvasConstraints {
-    /// Allowed width and height range.
+    /// Local per-axis resource range, independent from the maximum total pixel count.
     pub dimension: ParameterRange<u32>,
     /// Pixel grid used by both dimensions.
     pub multiple: u32,
@@ -256,6 +258,10 @@ pub struct UcPresetDefinition {
 /// Conditioning support, independent from its wire representation.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent provider prompt capabilities are inspected separately"
+)]
 pub struct PromptProfile {
     /// Encoder and compatible asset format.
     pub tokenizer: ImageTokenizerKind,
@@ -269,6 +275,8 @@ pub struct PromptProfile {
     pub uc_presets: &'static [UcPresetDefinition],
     /// Adds `nsfw` to a nonempty selected UC preset unless the positive prompt includes it.
     pub suppress_nsfw: bool,
+    /// Supports user-provided base and character negative prompts.
+    pub custom_negative_prompts: bool,
     /// Transparent-background tag support.
     pub transparent_background: bool,
     /// Anime/furry prompt dataset switching support.
@@ -313,13 +321,19 @@ pub enum NoiseScheduleSupport {
     NativeAndExplicit,
     /// Native is replaced by Karras; explicit schedules are preserved.
     ExplicitOnly,
+    /// Karras is fixed by the model and cannot be selected independently.
+    KarrasOnly,
 }
 
 impl NoiseScheduleSupport {
     /// Whether a schedule is accepted unchanged.
     #[must_use]
     pub const fn supports(self, schedule: NoiseSchedule) -> bool {
-        !matches!(schedule, NoiseSchedule::Native) || matches!(self, Self::NativeAndExplicit)
+        match self {
+            Self::NativeAndExplicit => true,
+            Self::ExplicitOnly => !matches!(schedule, NoiseSchedule::Native),
+            Self::KarrasOnly => matches!(schedule, NoiseSchedule::Karras),
+        }
     }
 
     /// Applies this sampling profile's fallback.
@@ -355,10 +369,23 @@ impl VarietyBoostProfile {
     }
 }
 
+/// Frontend sampler substitutions for the supported model families.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SamplerCompatibility {
+    /// V3 replaces DDIM and DDIM V3 only when using its inpainting sibling.
+    Legacy,
+    /// V4-and-later replace DDIM for all generation modes.
+    Structured,
+}
+
 /// Sampling support, separate from protocol version and prompt tokenizer.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct SamplingProfile {
+    /// Fixed sampler, when the model exposes no sampler selection.
+    pub fixed_sampler: Option<Sampler>,
+    /// Model-family substitutions, independent from wire representation.
+    pub sampler_compatibility: SamplerCompatibility,
     /// Noise-schedule support and fallback.
     pub noise_schedules: NoiseScheduleSupport,
     /// SMEA and dynamic SMEA parameters.
@@ -374,6 +401,78 @@ impl SamplingProfile {
     #[must_use]
     pub const fn resolve_noise_schedule(&self, schedule: NoiseSchedule) -> NoiseSchedule {
         self.noise_schedules.resolve(schedule)
+    }
+
+    /// Resolves the sampler using model and operation substitutions.
+    #[must_use]
+    pub const fn resolve_sampler(&self, mode: GenerationMode, sampler: Sampler) -> Sampler {
+        if let Some(fixed) = self.fixed_sampler {
+            return fixed;
+        }
+        let replace = match self.sampler_compatibility {
+            SamplerCompatibility::Legacy => {
+                matches!(mode, GenerationMode::Inpainting)
+                    && matches!(sampler, Sampler::Ddim | Sampler::DdimV3)
+            },
+            SamplerCompatibility::Structured => matches!(sampler, Sampler::Ddim),
+        };
+        if replace {
+            Sampler::KEulerAncestral
+        } else {
+            sampler
+        }
+    }
+
+    /// Applies model substitutions and avoids frontend-known sampler/step failures.
+    #[must_use]
+    pub const fn resolve_sampler_for_steps(
+        &self,
+        mode: GenerationMode,
+        sampler: Sampler,
+        steps: u32,
+    ) -> Sampler {
+        let sampler = self.resolve_sampler(mode, sampler);
+        if matches!(sampler, Sampler::Ddim | Sampler::DdimV3)
+            && matches!(steps, 3 | 9 | 27 | 36 | 37)
+        {
+            Sampler::KEulerAncestral
+        } else {
+            sampler
+        }
+    }
+
+    /// Selects an applicable schedule, or `None` for a sampler without schedule parameters.
+    #[must_use]
+    pub const fn resolve_noise_schedule_for(
+        &self,
+        sampler: Sampler,
+        schedule: NoiseSchedule,
+    ) -> Option<NoiseSchedule> {
+        if matches!(self.noise_schedules, NoiseScheduleSupport::KarrasOnly) {
+            return Some(NoiseSchedule::Karras);
+        }
+        if matches!(sampler, Sampler::Ddim | Sampler::DdimV3) {
+            return None;
+        }
+        let schedule = self.resolve_noise_schedule(schedule);
+        if matches!(sampler, Sampler::KDpm2)
+            && !matches!(
+                schedule,
+                NoiseSchedule::Exponential | NoiseSchedule::Polyexponential
+            )
+        {
+            Some(NoiseSchedule::Exponential)
+        } else {
+            Some(schedule)
+        }
+    }
+
+    /// Whether SMEA is effective for this operation and sampler.
+    #[must_use]
+    pub const fn supports_smea(&self, mode: GenerationMode, sampler: Sampler) -> bool {
+        self.smea
+            && matches!(mode, GenerationMode::TextToImage)
+            && !matches!(sampler, Sampler::Ddim | Sampler::DdimV3)
     }
 
     /// Returns variety sigma or `None` if unsupported.
@@ -398,9 +497,9 @@ pub enum PromptStructure {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum WireProfile {
-    /// Version 3 parameters with flat conditioning.
+    /// Version 4 parameters with flat V3-family conditioning.
     LegacyV3,
-    /// Version 3 parameters with structured conditioning.
+    /// Version 4 parameters with structured V4-family conditioning.
     StructuredV4,
     /// Version 4 parameters with structured conditioning and V5 extensions.
     StructuredV5,
@@ -409,12 +508,7 @@ pub enum WireProfile {
 impl WireProfile {
     /// Protocol parameter version.
     #[must_use]
-    pub const fn params_version(self) -> u32 {
-        match self {
-            Self::LegacyV3 | Self::StructuredV4 => 3,
-            Self::StructuredV5 => 4,
-        }
-    }
+    pub const fn params_version(self) -> u32 { 4 }
 
     /// Conditioning representation.
     #[must_use]
@@ -450,6 +544,8 @@ pub enum OpusAllowance {
 pub struct PricingProfile {
     /// Model price multiplier.
     pub multiplier: f64,
+    /// Factor applied to the area-times-steps term before its first rounding.
+    pub step_factor: f64,
     /// Opus usage policy.
     pub opus_allowance: OpusAllowance,
 }

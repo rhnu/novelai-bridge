@@ -6,6 +6,8 @@ Anlas cost estimates.
 
 Supports the Diffusion V3, V4, V4.5 and V5 families. The default model is V5 Full;
 [model descriptors](docs/model-descriptors.md) describe which operations each model supports.
+V5 models are listed as Full, Full Medium, then Curated. `Model::NaiDiffusion5FullMedium` is the
+Medium variant of Full, with fixed sampling and negative-conditioning rules.
 
 ## Get started
 
@@ -107,6 +109,10 @@ Inpainting defaults to pure infill. Set `input.img2img` to
 `Some(InpaintImageToImage::new(strength, noise))` for additional source-image conditioning on
 V4 and later. That group owns its color correction and optional noise seed; V3 supports pure
 infill only.
+
+For V5 Max Enhance, use `.max_enhance(ImageToImageInput::new(image, strength, noise))`.
+The source dimensions seed the request canvas, then normalization applies the model's grid.
+`NormalizedGeneration::geometry()` exposes the effective input, expected output and pricing target separately.
 
 For inspection or reuse, call `request.normalize()` to get the effective plan and its diagnostics,
 then `plan.prepare()` to transform images and resolve an automatic seed. Send that preparation

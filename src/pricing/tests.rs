@@ -55,10 +55,10 @@ fn applies_resolution_sample_cap_and_smea_multiplier() {
     small.n_samples = 12;
     let capped = estimate_anlas_cost(small);
     assert_eq!(capped.requested_samples, 12);
-    assert_eq!(capped.sample_limit, 4);
-    assert_eq!(capped.priced_samples, 4);
-    assert_eq!(capped.billable_samples, 4);
-    assert_eq!(capped.total, capped.per_image * 4);
+    assert_eq!(capped.sample_limit, 8);
+    assert_eq!(capped.priced_samples, 8);
+    assert_eq!(capped.billable_samples, 8);
+    assert_eq!(capped.total, capped.per_image * 8);
 
     let mut smea = input(Model::NaiDiffusion3, ImageSize::square(), 28);
     smea.smea = true;
@@ -238,4 +238,21 @@ fn vibe_overage_obeys_reference_availability_for_the_selected_mode() {
     assert_eq!(estimate_anlas_cost(basis).vibe_reference_overage, 4);
     basis.mode = PricingMode::Inpainting { strength: 0.5 };
     assert_eq!(estimate_anlas_cost(basis).vibe_reference_overage, 0);
+}
+
+#[test]
+fn medium_prices_its_adjusted_step_term_before_rounding_and_uses_the_v5_allowance() {
+    let medium = input(Model::NaiDiffusion5FullMedium, ImageSize::portrait(), 14);
+    assert_eq!(estimate_anlas_cost(medium).per_image, 17);
+    let full = input(Model::NaiDiffusion5Full, ImageSize::portrait(), 14);
+    assert_eq!(estimate_anlas_cost(full).per_image, 18);
+    let mut eligible = medium;
+    eligible.context = AnlasPricingContext {
+        tier: 3,
+        subscription_active: true,
+        ..Default::default()
+    };
+    assert!(estimate_anlas_cost(eligible).is_free());
+    eligible.context.v5_usage_is_negative = true;
+    assert_eq!(estimate_anlas_cost(eligible).total, 17);
 }

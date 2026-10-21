@@ -7,6 +7,8 @@
 - Add standalone `Client::upscale` / `upscale_prepared`, typed blur declarations, complete image results and input-area cost estimates.
 - Add URL-encoded English/Japanese tag queries through `Client::suggest_tags`, preserving their distinct response shapes and ranking fields.
 - Add `DirectorCommand::DeclutterKeepBubbles`.
+- Add V5 Full Medium and its inpainting sibling with fixed sampling, Heavy UC, custom-negative restrictions and the Medium pricing step factor.
+- Add V5 Max Enhance with explicit input, expected-output and pricing geometry. Apply the model's canvas grid before source preparation and serialization.
 
 ### Changed
 
@@ -14,6 +16,9 @@
 - Use one raw-byte `Transport` contract for ordinary and streamed responses. Parse SSE and apply response budgets in the core so custom transports share the same limits.
 - Define quality and UC preset text per model. Derive conditioning and the current `tag_hint_qt` / `tag_hint_uc_preset` fields from the effective selection; send the same assembled positive prompt in the top-level input and conditioning fields.
 - Represent optional inpainting source conditioning with a nested `img2img` group on V4 and later. Pure infill has no source-conditioning group and uses strength one for pricing.
+- Resolve sampler/schedule combinations by model and operation, force V5 Karras, and disable SMEA for image inputs. Normalize or reject known failing DDIM step combinations. Share dynamic eight/six/four-sample limits between normalization and pricing.
+- Use the current V4 Curated `nai-diffusion-4-curated-preview` identity and request parameter version four.
+- Replace the unsupported 1600-pixel axis restriction with the shared media resource ceiling and an explicit 3MP area rule. Normalize canvases on the nearest 64-pixel grid.
 
 ### Fixed
 

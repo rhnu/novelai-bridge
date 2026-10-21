@@ -29,14 +29,18 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
         reason = "Pricing follows the provider floating point area formula"
     )]
     let pixels_f = pixels as f64;
+    let descriptor = input.model.descriptor();
     // Keep the web client's operation order; an FMA can cross an integer ceil boundary.
     #[expect(
         clippy::suboptimal_flops,
         reason = "Changing operation order can cross an integer price rounding boundary"
     )]
     let base = (COST_AREA_TERM * pixels_f
-        + COST_AREA_STEP_TERM * pixels_f * f64::from(input.steps))
-    .ceil();
+        + COST_AREA_STEP_TERM
+            * pixels_f
+            * f64::from(input.steps)
+            * descriptor.pricing().step_factor)
+        .ceil();
     let smea_multiplier = if input.smea && input.smea_dyn {
         1.4
     } else if input.smea {
@@ -44,7 +48,6 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     } else {
         1.0
     };
-    let descriptor = input.model.descriptor();
     let base_cost = base * smea_multiplier * descriptor.pricing().multiplier;
     let strength = input.mode.effective_strength();
     let per_image = saturating_u32((base_cost * strength).ceil()).max(2);
@@ -57,11 +60,7 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     let requested_samples = input.n_samples;
     let sample_range = descriptor.constraints().samples;
     let api_samples = requested_samples.clamp(sample_range.min, sample_range.max);
-    let sample_limit = if pixels <= descriptor.constraints().canvas.max_pixels {
-        sample_range.max
-    } else {
-        0
-    };
+    let sample_limit = descriptor.sample_limit(input.size);
     let priced_samples = api_samples.min(sample_limit);
     let character_reference_count = chargeable_character_reference_count(&input);
     let character_reference = character_reference_count
