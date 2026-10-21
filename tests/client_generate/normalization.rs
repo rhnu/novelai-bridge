@@ -61,7 +61,7 @@ async fn generate_clamps_invalid_numeric_values_under_normalize_policy() {
 }
 
 #[tokio::test]
-async fn quality_none_still_reports_the_toggle_state() {
+async fn quality_none_reports_the_effective_hint() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -71,7 +71,7 @@ async fn quality_none_still_reports_the_toggle_state() {
 
     let _ = client.generate(params).await.unwrap();
     let body = transport.last_body().expect("generate body");
-    assert_eq!(body["parameters"]["qualityToggle"], json!(false));
+    assert_eq!(body["parameters"]["tag_hint_qt"], json!(0));
     assert_eq!(
         body["parameters"]["v4_prompt"]["caption"]["base_caption"],
         json!("1girl")

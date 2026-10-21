@@ -2,8 +2,8 @@ use futures_util::StreamExt;
 use novelai_bridge::{
     ApiEndpoint, CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE,
     EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
-    GenerationInput, ImageSize, ImageToImageInput, InpaintingInput, Model, ReferenceSet,
-    StreamMode, Transport, VibeReference, VibeTransferConfig,
+    GenerationInput, ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model,
+    ReferenceSet, StreamMode, Transport, VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -177,12 +177,10 @@ fn generation_request(
             ));
         },
         Preset::Infill => {
-            request.operation = GenerationInput::Inpainting(InpaintingInput::new(
-                inputs::source(args, size)?,
-                inputs::mask(args, size)?,
-                args.strength,
-                0.0,
-            ));
+            let mut input =
+                InpaintingInput::new(inputs::source(args, size)?, inputs::mask(args, size)?);
+            input.img2img = Some(InpaintImageToImage::new(args.strength, 0.0));
+            request.operation = GenerationInput::Inpainting(input);
         },
         Preset::Charref => {
             request.references = Some(ReferenceSet {

@@ -1,4 +1,5 @@
 //! Read-only model registry and pure request-combination rules.
+mod presets;
 mod profiles;
 mod registry;
 mod rules;

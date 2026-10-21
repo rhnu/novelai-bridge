@@ -20,7 +20,7 @@ async fn generate_builds_baseline_text2img_request_shape() {
         Some("https://image.novelai.net/ai/generate-image")
     );
     assert_eq!(body["action"], json!("generate"));
-    assert_eq!(body["input"], json!("1girl"));
+    assert_eq!(body["input"], json!(expected_prompt));
     assert_eq!(body["model"], json!("nai-diffusion-3"));
     assert_eq!(body["parameters"]["prompt"], json!(expected_prompt));
     assert_eq!(

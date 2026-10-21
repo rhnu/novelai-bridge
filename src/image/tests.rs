@@ -166,7 +166,7 @@ fn custom_preprocessor_observes_each_semantic_input_once() {
     use crate::{
         CharacterReference, CharacterReferenceType, GenerateImageRequest, InpaintingInput, Model,
     };
-    let inpainting = InpaintingInput::new(image(4, 3), image(4, 3), 0.5, 0.0);
+    let inpainting = InpaintingInput::new(image(4, 3), image(4, 3));
     let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
         .size(ImageSize {
             width: 64,

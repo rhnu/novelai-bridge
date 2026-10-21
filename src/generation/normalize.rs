@@ -5,7 +5,7 @@ mod values;
 use super::{NormalizationChange, NormalizationDiagnostic, NormalizedGeneration};
 use crate::{
     BridgeError, GenerateImageRequest, GenerationConstraints, GenerationField as Field,
-    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, ModelDescriptor, QualityPreset,
+    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, ModelDescriptor,
     ValidationPolicy,
 };
 
@@ -39,7 +39,7 @@ pub(super) fn normalize(
         normalizer.normalize_character_references(references)?;
         normalizer.normalize_vibe_transfer(references.vibe_transfer.as_mut())?;
     }
-    normalizer.normalize_operation(&mut request.operation)?;
+    normalizer.normalize_operation(&mut request.operation, descriptor)?;
     let schedule = descriptor
         .sampling()
         .resolve_noise_schedule(request.sampling.noise_schedule);
@@ -127,15 +127,27 @@ impl Normalizer {
     ) -> Result<(), BridgeError> {
         self.gate_characters(params, descriptor)?;
         self.normalize_references(params, descriptor)?;
-        if params.core.quality == QualityPreset::Light
-            && !self.require_capability(
-                descriptor.prompt().quality.supports(params.core.quality),
-                Field::Quality,
-                "a model supporting this prompt option",
-                NormalizationChange::Fallback,
-            )?
-        {
-            params.core.quality = QualityPreset::Standard;
+        if !self.require_capability(
+            descriptor
+                .prompt()
+                .quality_preset(params.core.quality)
+                .is_some(),
+            Field::Quality,
+            "a model supporting this prompt option",
+            NormalizationChange::Fallback,
+        )? {
+            params.core.quality = descriptor.defaults().quality;
+        }
+        if !self.require_capability(
+            descriptor
+                .prompt()
+                .uc_preset(params.core.uc_preset)
+                .is_some(),
+            Field::UcPreset,
+            "a model supporting this UC preset",
+            NormalizationChange::Fallback,
+        )? {
+            params.core.uc_preset = descriptor.defaults().uc_preset;
         }
         if params.core.transparent_background
             && !self.require_capability(

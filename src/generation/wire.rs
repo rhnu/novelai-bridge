@@ -76,10 +76,8 @@ pub(super) struct CommonParameters {
     sampler: Sampler,
     seed: i64,
     n_samples: u32,
-    #[serde(rename = "ucPreset")]
-    uc_preset: i32,
-    #[serde(rename = "qualityToggle")]
-    quality_toggle: bool,
+    tag_hint_uc_preset: u8,
+    tag_hint_qt: u8,
     cfg_rescale: f32,
     noise_schedule: NoiseSchedule,
     legacy: bool,
@@ -116,8 +114,6 @@ pub(super) enum ConditioningParameters {
 pub(super) enum OperationParameters {
     TextToImage {
         add_original_image: bool,
-        #[serde(rename = "inpaintImg2ImgStrength")]
-        inpaint_strength: f32,
     },
     ImageToImage {
         image: String,
@@ -126,18 +122,24 @@ pub(super) enum OperationParameters {
         extra_noise_seed: i64,
         color_correct: bool,
         add_original_image: bool,
-        #[serde(rename = "inpaintImg2ImgStrength")]
-        inpaint_strength: f32,
     },
     Inpainting {
         image: String,
         mask: String,
-        noise: f32,
         request_type: &'static str,
         add_original_image: bool,
-        #[serde(rename = "inpaintImg2ImgStrength")]
-        strength: f32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        img2img: Option<InpaintImageToImageParameters>,
     },
+}
+
+/// Inpaint source conditioning is a nested protocol object, independent from flat img2img.
+#[derive(Serialize)]
+pub(super) struct InpaintImageToImageParameters {
+    strength: f32,
+    noise: f32,
+    color_correct: bool,
+    extra_noise_seed: i64,
 }
 
 /// Optional sampling and prompt hints are independent capabilities.

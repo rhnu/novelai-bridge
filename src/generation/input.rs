@@ -65,7 +65,34 @@ impl ImageToImageInput {
     }
 }
 
-/// Inpainting input with a required mask and its own strength range.
+/// Image-to-image conditioning applied within an inpainting request.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct InpaintImageToImage {
+    /// Source influence in `[0.01, 1.0]`.
+    pub strength: f32,
+    /// Source noise in `[0, 0.99]`.
+    pub noise: f32,
+    /// Whether the server applies source color correction.
+    pub color_correct: bool,
+    /// Explicit noise seed, otherwise the resolved request seed.
+    pub extra_noise_seed: Option<i64>,
+}
+
+impl InpaintImageToImage {
+    /// Creates explicit source conditioning with the provider's color correction enabled.
+    #[must_use]
+    pub const fn new(strength: f32, noise: f32) -> Self {
+        Self {
+            strength,
+            noise,
+            color_correct: true,
+            extra_noise_seed: None,
+        }
+    }
+}
+
+/// Inpainting input with a required mask and optional source conditioning.
 ///
 /// ```compile_fail
 /// use novelai_bridge::InpaintingInput;
@@ -80,10 +107,9 @@ pub struct InpaintingInput {
     pub image: EncodedImage,
     /// Required validated mask, fitted using nearest-neighbor sampling.
     pub mask: EncodedImage,
-    /// Masked-generation strength in `[0.01, 1.0]`.
-    pub strength: f32,
-    /// Source noise in `[0, 0.99]`.
-    pub noise: f32,
+    /// Source conditioning within the mask. `None` performs pure infilling.
+    #[serde(default)]
+    pub img2img: Option<InpaintImageToImage>,
     /// Preserve untouched pixels outside the mask rather than re-encoding the whole canvas.
     pub add_original_image: bool,
 }
@@ -91,12 +117,11 @@ pub struct InpaintingInput {
 impl InpaintingInput {
     /// Creates masked input that preserves the untouched source outside the mask.
     #[must_use]
-    pub const fn new(image: EncodedImage, mask: EncodedImage, strength: f32, noise: f32) -> Self {
+    pub const fn new(image: EncodedImage, mask: EncodedImage) -> Self {
         Self {
             image,
             mask,
-            strength,
-            noise,
+            img2img: None,
             add_original_image: true,
         }
     }

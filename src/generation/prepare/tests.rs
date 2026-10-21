@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::{
     BridgeError, DefaultImagePreprocessor, EncodedImage, GenerationInput, ImagePreparation,
-    ImagePreprocessor, ImageSize, ImageToImageInput, InpaintingInput, Model, PreparedImage,
-    RequestField, StreamMode,
+    ImagePreprocessor, ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model,
+    PreparedImage, RequestField, StreamMode,
     generation::{
         Character, CharacterPosition, CharacterSet, GenerateImageRequest, GenerationDelivery,
         test_support::image,
@@ -138,9 +138,9 @@ fn wire_versions_select_required_and_omitted_fields() {
 }
 
 #[test]
-fn inpainting_requires_a_mask_and_cannot_accept_image_to_image_only_options() {
+fn pure_inpainting_requires_a_mask_and_omits_source_conditioning() {
     let source = image();
-    let input = InpaintingInput::new(source.clone(), source, 1.0, 0.2);
+    let input = InpaintingInput::new(source.clone(), source);
     let mut serialized = serde_json::to_value(&input).unwrap();
     serialized["extra_noise_seed"] = serde_json::json!(123);
     assert!(serde_json::from_value::<InpaintingInput>(serialized).is_err());
@@ -164,10 +164,59 @@ fn inpainting_requires_a_mask_and_cannot_accept_image_to_image_only_options() {
     let parameters = &body["parameters"];
     assert_eq!(body["action"], "infill");
     assert!(parameters["mask"].is_string());
-    assert_eq!(parameters["inpaintImg2ImgStrength"], 1.0);
+    assert!(parameters.get("img2img").is_none());
+    assert!(parameters.get("inpaintImg2ImgStrength").is_none());
+    assert!(parameters.get("noise").is_none());
     assert!(parameters.get("extra_noise_seed").is_none());
     assert!(parameters.get("color_correct").is_none());
     assert!(parameters.get("strength").is_none());
+}
+
+#[test]
+fn explicit_inpaint_conditioning_is_nested_and_preserved_at_full_strength() {
+    for (extra_noise_seed, expected_seed) in [(None, 42), (Some(73), 73)] {
+        let mut input = InpaintingInput::new(image(), image());
+        input.img2img = Some(InpaintImageToImage {
+            strength: 1.0,
+            noise: 0.25,
+            color_correct: false,
+            extra_noise_seed,
+        });
+        let prepared = GenerateImageRequest::builder("cat", Model::NaiDiffusion45Full)
+            .seed(42)
+            .size(ImageSize {
+                width: 64,
+                height: 64,
+            })
+            .inpainting(input)
+            .build()
+            .normalize()
+            .unwrap()
+            .prepare()
+            .unwrap();
+        let ordinary = payload(&prepared, GenerationDelivery::Images);
+        let stream = payload(&prepared, GenerationDelivery::Stream(StreamMode::Sse));
+        let parameters = &ordinary["parameters"];
+        assert_eq!(
+            parameters["img2img"],
+            serde_json::json!({
+                "strength": 1.0,
+                "noise": 0.25,
+                "color_correct": false,
+                "extra_noise_seed": expected_seed,
+            })
+        );
+        assert_eq!(stream["parameters"]["img2img"], parameters["img2img"]);
+        for name in [
+            "strength",
+            "noise",
+            "color_correct",
+            "extra_noise_seed",
+            "inpaintImg2ImgStrength",
+        ] {
+            assert!(parameters.get(name).is_none());
+        }
+    }
 }
 
 #[test]

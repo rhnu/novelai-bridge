@@ -6,11 +6,14 @@
 
 - Include request planning, media processing, metadata, the client, streaming and credit observation in the core. Retain only `reqwest-transport`, `tokenizer` and `bundled-assets` Cargo features.
 - Use one raw-byte `Transport` contract for ordinary and streamed responses. Parse SSE and apply response budgets in the core so custom transports share the same limits.
+- Define quality and UC preset text per model. Derive conditioning and the current `tag_hint_qt` / `tag_hint_uc_preset` fields from the effective selection; send the same assembled positive prompt in the top-level input and conditioning fields.
+- Represent optional inpainting source conditioning with a nested `img2img` group on V4 and later. Pure infill has no source-conditioning group and uses strength one for pricing.
 
 ### Fixed
 
 - Retain every Director result instead of discarding images after the first. Preserve each decoded image's raw or archive source identity, including archive entry name and index.
 - Accept pre-epoch subscription expiration timestamps returned by the service and preserve their signed millisecond value.
+- Use the official Heavy UC default, model-specific full/curated prompt text, and V3 Variety+ sigma profile.
 
 ### Migration
 
@@ -18,6 +21,8 @@
 - Implement `Transport::execute` with `TransportResponse` headers and a `TransportByteStream`, or use `TransportResponse::from_bytes` for complete bodies. Remove separate `StreamingTransport` implementations and configure response budgets through `ClientConfig::response_limits`.
 - Read Director images from `RunDirectorToolResult::images`. Use `GeneratedImage::source()` to inspect raw versus named archive entries.
 - `SubscriptionInfo::expires_at_ms` is now `Option<i64>` to represent expiration timestamps before the Unix epoch.
+- Construct `InpaintingInput::new(image, mask)` for pure infill. Move strength and noise into `img2img: Some(InpaintImageToImage::new(strength, noise))`; this group also owns color correction and an optional noise seed. Remove the old flat inpainting fields.
+- Inspect preset text through `model.descriptor().prompt().quality_preset(...)` or `uc_preset(...)`. Remove calls to global `QualityPreset::tags` / `UcPreset::preset_text` and replace `QualitySupport` inspection with the model's supported definition lists.
 
 ## 0.6.0 - 2026-10-21
 

@@ -3,8 +3,8 @@ use serde_json::json;
 use crate::{
     Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
     GenerateImageRequest, GenerateImageStreamRequest, GenerationInput, GenerationMode,
-    ImageToImageInput, InpaintingInput, Model, ReferenceSet, ValidationPolicy, VibeEncoding,
-    VibeReference, VibeTransferConfig, generation::test_support::image,
+    ImageToImageInput, InpaintImageToImage, InpaintingInput, Model, ReferenceSet, ValidationPolicy,
+    VibeEncoding, VibeReference, VibeTransferConfig, generation::test_support::image,
 };
 
 fn request_with_nested_inputs() -> GenerateImageRequest {
@@ -82,17 +82,36 @@ fn editable_requests_reject_unknown_fields_at_every_nested_input_group() {
 #[test]
 fn inpainting_input_rejects_unknown_fields_inside_an_editable_request() {
     let mut request = request_with_nested_inputs();
-    request.operation =
-        GenerationInput::Inpainting(InpaintingInput::new(image(), image(), 1.0, 0.0));
+    let mut input = InpaintingInput::new(image(), image());
+    input.img2img = Some(InpaintImageToImage {
+        strength: 0.5,
+        noise: 0.2,
+        color_correct: false,
+        extra_noise_seed: Some(42),
+    });
+    request.operation = GenerationInput::Inpainting(input);
     for policy in [ValidationPolicy::Normalize, ValidationPolicy::Reject] {
         request.policy = policy;
-        let mut value = serde_json::to_value(&request).unwrap();
+        let value = serde_json::to_value(&request).unwrap();
         assert_eq!(
             serde_json::from_value::<GenerateImageRequest>(value.clone()).unwrap(),
             request,
         );
-        value["operation"]["input"]["color_correct"] = json!(true);
-        assert!(serde_json::from_value::<GenerateImageRequest>(value).is_err());
+        for path in ["/operation/input", "/operation/input/img2img"] {
+            let mut unknown = value.clone();
+            unknown.pointer_mut(path).unwrap()["unknown"] = json!(true);
+            assert!(serde_json::from_value::<GenerateImageRequest>(unknown).is_err());
+        }
+        for (field, invalid) in [
+            ("strength", json!(0.5)),
+            ("noise", json!(0.2)),
+            ("color_correct", json!(true)),
+            ("extra_noise_seed", json!(42)),
+        ] {
+            let mut flat = value.clone();
+            flat["operation"]["input"][field] = invalid;
+            assert!(serde_json::from_value::<GenerateImageRequest>(flat).is_err());
+        }
     }
 }
 
@@ -135,7 +154,7 @@ fn each_serialized_operation_preserves_its_explicit_mode_and_inputs() {
             GenerationMode::ImageToImage,
         ),
         (
-            GenerationInput::Inpainting(InpaintingInput::new(image(), image(), 1.0, 0.0)),
+            GenerationInput::Inpainting(InpaintingInput::new(image(), image())),
             GenerationMode::Inpainting,
         ),
     ] {

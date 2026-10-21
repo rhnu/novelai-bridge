@@ -93,13 +93,18 @@ operations use validated `EncodedImage` inputs:
 | -------------- | ----------------------------------------------------------------- |
 | Text-to-image  | `GenerateImageRequest::builder(...)`                              |
 | Image-to-image | `.image_to_image(ImageToImageInput::new(...))`                    |
-| Inpainting     | `.inpainting(InpaintingInput::new(image, mask, strength, noise))` |
+| Inpainting     | `.inpainting(InpaintingInput::new(image, mask))`                  |
 | Director Tools | `Client::run_director_tool` with `RunDirectorToolRequest`         |
 | Vibe encoding  | `Client::encode_vibe` with `EncodeVibeRequest`                    |
 
 Requests default to `ValidationPolicy::Normalize`, which adjusts unsupported or out-of-range
 settings and records diagnostics. Select `.policy(ValidationPolicy::Reject)` to reject those
 settings instead. Unknown serialized request fields are rejected under both policies.
+
+Inpainting defaults to pure infill. Set `input.img2img` to
+`Some(InpaintImageToImage::new(strength, noise))` for additional source-image conditioning on
+V4 and later. That group owns its color correction and optional noise seed; V3 supports pure
+infill only.
 
 For inspection or reuse, call `request.normalize()` to get the effective plan and its diagnostics,
 then `plan.prepare()` to transform images and resolve an automatic seed. Send that preparation

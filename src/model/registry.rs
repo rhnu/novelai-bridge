@@ -3,8 +3,8 @@ use super::{
     CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
     ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
     ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
-    PromptProfile, QualitySupport, ReferenceModes, ReferenceProfile, SamplingProfile,
-    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
+    PromptProfile, ReferenceModes, ReferenceProfile, SamplingProfile, VarietyBoostProfile,
+    VibeInputPath, VibeProfile, WireProfile,
 };
 use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
 
@@ -50,7 +50,7 @@ const fn defaults(scale: f32) -> ModelDefaults {
         },
         n_samples: 1,
         quality: QualityPreset::Standard,
-        uc_preset: UcPreset::Light,
+        uc_preset: UcPreset::Heavy,
     }
 }
 
@@ -58,7 +58,9 @@ const SAMPLING_LEGACY: SamplingProfile = SamplingProfile {
     noise_schedules: NoiseScheduleSupport::NativeAndExplicit,
     smea: true,
     dynamic_thresholding: true,
-    variety: None,
+    variety: Some(VarietyBoostProfile {
+        sigma_coefficient: 19.0,
+    }),
 };
 const SAMPLING_V4: SamplingProfile = SamplingProfile {
     noise_schedules: NoiseScheduleSupport::ExplicitOnly,
@@ -91,6 +93,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-5-full-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: None,
@@ -105,7 +108,9 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
             max_characters: 32,
             positioning: CharacterPositionProfile::Freeform,
         }),
-        quality: QualitySupport::StandardAndLight,
+        quality_presets: super::presets::V5_FULL_QUALITY,
+        uc_presets: super::presets::V5_FULL_UC,
+        suppress_nsfw: true,
         transparent_background: true,
         furry_mode: true,
     },
@@ -125,6 +130,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-5-curated-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: None,
@@ -139,7 +145,9 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
             max_characters: 32,
             positioning: CharacterPositionProfile::Freeform,
         }),
-        quality: QualitySupport::StandardAndLight,
+        quality_presets: super::presets::V5_CURATED_QUALITY,
+        uc_presets: super::presets::V5_CURATED_UC,
+        suppress_nsfw: false,
         transparent_background: true,
         furry_mode: true,
     },
@@ -159,6 +167,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-4-5-full-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: Some(VibeProfile {
@@ -179,7 +188,9 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
             max_characters: 6,
             positioning: CharacterPositionProfile::Grid5x5,
         }),
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V45_FULL_QUALITY,
+        uc_presets: super::presets::V45_FULL_UC,
+        suppress_nsfw: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -199,6 +210,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-4-5-curated-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: Some(VibeProfile {
@@ -219,7 +231,9 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
             max_characters: 6,
             positioning: CharacterPositionProfile::Grid5x5,
         }),
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V45_CURATED_QUALITY,
+        uc_presets: super::presets::V45_CURATED_UC,
+        suppress_nsfw: false,
         transparent_background: false,
         furry_mode: true,
     },
@@ -239,6 +253,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-4-full-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: Some(VibeProfile {
@@ -257,7 +272,9 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
             max_characters: 6,
             positioning: CharacterPositionProfile::Grid5x5,
         }),
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V4_FULL_QUALITY,
+        uc_presets: super::presets::V4_FULL_UC,
+        suppress_nsfw: true,
         transparent_background: false,
         furry_mode: true,
     },
@@ -277,6 +294,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-4-curated-inpainting",
+            image_to_image: true,
         }),
         streaming: true,
         vibe: Some(VibeProfile {
@@ -295,7 +313,9 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
             max_characters: 6,
             positioning: CharacterPositionProfile::Grid5x5,
         }),
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V4_CURATED_QUALITY,
+        uc_presets: super::presets::V4_CURATED_UC,
+        suppress_nsfw: false,
         transparent_background: false,
         furry_mode: true,
     },
@@ -315,6 +335,7 @@ const V3: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-3-inpainting",
+            image_to_image: false,
         }),
         streaming: false,
         vibe: Some(VibeProfile {
@@ -330,7 +351,9 @@ const V3: ModelDescriptor = ModelDescriptor {
         tokenizer: ImageTokenizerKind::Clip,
         token_limit: 225,
         characters: None,
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V3_QUALITY,
+        uc_presets: super::presets::V3_UC,
+        suppress_nsfw: true,
         transparent_background: false,
         furry_mode: false,
     },
@@ -350,6 +373,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
             model_id: "nai-diffusion-furry-3-inpainting",
+            image_to_image: false,
         }),
         streaming: false,
         vibe: Some(VibeProfile {
@@ -365,7 +389,9 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
         tokenizer: ImageTokenizerKind::Clip,
         token_limit: 225,
         characters: None,
-        quality: QualitySupport::Standard,
+        quality_presets: super::presets::V3_FURRY_QUALITY,
+        uc_presets: super::presets::V3_FURRY_UC,
+        suppress_nsfw: true,
         transparent_background: false,
         furry_mode: false,
     },

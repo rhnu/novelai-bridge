@@ -22,7 +22,7 @@ pub use builder::GenerateImageRequestBuilder;
 pub use characters::{Character, CharacterPosition, CharacterSet};
 pub use conditioning::{ResolvedCharacterPrompt, ResolvedPrompts};
 pub use diagnostics::{NormalizationChange, NormalizationDiagnostic};
-pub use input::{GenerationInput, ImageToImageInput, InpaintingInput};
+pub use input::{GenerationInput, ImageToImageInput, InpaintImageToImage, InpaintingInput};
 pub use plan::NormalizedGeneration;
 pub use prepare::{GenerationDelivery, PreparedGeneration};
 pub use references::{CharacterReference, CharacterReferenceType, ReferenceSet};

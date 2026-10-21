@@ -8,8 +8,8 @@ This document describes the generation-cost estimate used by `novelai-bridge` fo
 3, NAI 4, NAI 4.5, and NAI 5 model families. Legacy pricing paths are outside the scope of this
 formula. Director and upscale operations use a separate pricing rule.
 
-The independent `estimate_anlas_cost(AnlasEstimateInput)` function remains available without the
-`generation` feature. Request and client helpers first normalize the editable request using its
+The independent `estimate_anlas_cost(AnlasEstimateInput)` function is part of the core.
+Request and client helpers first normalize the editable request using its
 `ValidationPolicy`, then project its effective values into that same formula. A normalized plan's
 pricing helpers reuse the plan directly. The selected `GenerationInput` supplies one operation;
 its source or inpainting strength is projected into the corresponding `PricingMode`.
@@ -75,7 +75,7 @@ The sampler does not change this formula for these model families. It belongs to
 
 - `PricingMode::TextToImage` uses `1.0`.
 - `PricingMode::ImageToImage { strength }` uses the source-image strength.
-- `PricingMode::Inpainting { strength }` uses the masked-generation strength.
+- `PricingMode::Inpainting { strength }` uses the optional nested image-to-image strength; pure infill uses `1.0`.
 - A non-finite strength is treated as `1.0`.
 
 If `per_image` exceeds 140 Anlas, the estimate is marked as too expensive because the web client

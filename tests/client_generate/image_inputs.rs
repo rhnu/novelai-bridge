@@ -45,7 +45,7 @@ async fn inpainting_request_uses_infill_action_and_inpainting_model() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let img2img = InpaintingInput::new(png_data_url(400, 600), png_data_url(400, 600), 1.0, 0.1);
+    let img2img = InpaintingInput::new(png_data_url(400, 600), png_data_url(400, 600));
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .inpainting(img2img)
         .build();
@@ -60,16 +60,9 @@ async fn inpainting_request_uses_infill_action_and_inpainting_model() {
         json!("NativeInfillingRequest")
     );
     assert!(body["parameters"]["mask"].is_string());
-    // Infill carries the user strength through inpaintImg2ImgStrength, not `strength`.
     assert!(body["parameters"]["strength"].is_null());
-    assert!(
-        (body["parameters"]["inpaintImg2ImgStrength"]
-            .as_f64()
-            .unwrap()
-            - 1.0)
-            .abs()
-            < 1e-6
-    );
+    assert!(body["parameters"].get("img2img").is_none());
+    assert!(body["parameters"].get("inpaintImg2ImgStrength").is_none());
 }
 
 #[tokio::test]
@@ -89,8 +82,7 @@ async fn infill_uses_inpainting_model_for_each_family() {
             "nai-diffusion-furry-3-inpainting",
         ),
     ] {
-        let img2img =
-            InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128), 0.6, 0.0);
+        let img2img = InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128));
         let params = GenerateImageRequest::builder("1girl", model)
             .inpainting(img2img)
             .build();
@@ -106,7 +98,7 @@ async fn inpainting_source_and_mask_are_fitted_to_the_requested_canvas() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let img2img = InpaintingInput::new(png_data_url(300, 100), png_data_url(50, 50), 0.7, 0.0);
+    let img2img = InpaintingInput::new(png_data_url(300, 100), png_data_url(50, 50));
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .size(ImageSize::square())
         .inpainting(img2img)
@@ -350,7 +342,7 @@ async fn infill_drops_vibe_transfer_to_avoid_server_error() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
-    let img2img = InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128), 0.6, 0.0);
+    let img2img = InpaintingInput::new(png_data_url(128, 128), png_data_url(128, 128));
     let params = GenerateImageRequest::builder("1girl", Model::NaiDiffusion45Full)
         .inpainting(img2img)
         .vibe_transfer(VibeTransferConfig {

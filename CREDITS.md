@@ -11,6 +11,10 @@ This project was informed by the following open-source projects:
 
 This repository is an independent implementation and is not affiliated with, or endorsed by, the projects above or by NovelAI.
 
+Model-specific quality/UC preset text and request semantics follow the
+[official NovelAI image frontend](https://novelai.net/image), inspected on 2026-10-21, and the
+[official image API schema](https://image.novelai.net/docs/doc.json).
+
 ## Tokenizers
 
 - [OpenAI CLIP](https://github.com/openai/CLIP/tree/d05afc436d78f1c48dc0dbf8e5980a9d471f35f6), MIT:

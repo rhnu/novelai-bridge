@@ -10,7 +10,7 @@
 | `support()` | Streaming and optional inpainting/reference profiles |
 | `constraints()` | Canvas and numeric bounds |
 | `defaults()` | Core and sampling defaults used by request builders |
-| `prompt()` | Encoder kind, per-field limit and conditioning support |
+| `prompt()` | Encoder kind, per-field limit, model-specific presets and conditioning support |
 | `sampling()` | Noise schedules, fallback and sampling capabilities |
 | `wire()` | Conditioning representation and protocol extensions |
 | `pricing()` | Model multiplier and Opus allowance policy |
@@ -25,9 +25,9 @@ Request factories read `model.descriptor().defaults()`; basic parameter values d
 
 - `TextToImage` has no source image.
 - `ImageToImage(ImageToImageInput)` carries a source image and its color-correction and noise-seed options.
-- `Inpainting(InpaintingInput)` carries a source image and a required mask. It has its own strength range and source-preservation option.
+- `Inpainting(InpaintingInput)` carries a source image, required mask and source-preservation option. Its optional `img2img` group adds strength, noise, color correction and a noise seed on models whose inpainting profile supports it.
 
-Use the builder's `operation`, `image_to_image` or `inpainting` method to select the operation. Inpainting is selected explicitly and always requires a mask. Image-to-image-only options cannot be set on `InpaintingInput`.
+Use the builder's `operation`, `image_to_image` or `inpainting` method to select the operation. `InpaintingInput::new(image, mask)` selects pure infill. Set `img2img` to `Some(InpaintImageToImage::new(strength, noise))` for source conditioning. The nested group owns color correction and the optional noise seed; omitted seeds reuse the resolved request seed. V3 supports pure infill; V4 and later also support the nested group.
 
 `request.mode()` delegates to the selected input. `descriptor.model_id_for(mode)` queries the supported API identity; normalization resolves it once, exposed as `NormalizedGeneration::model_id()`. Unsupported operations are rejected rather than converted to another operation.
 
@@ -45,7 +45,9 @@ Normalization assembles effective positive/negative text and enabled character c
 
 The selected prompt profile supplies the enabled-character limit. Normalize disables enabled overflow while preserving original indices; Reject reports it. Disabled characters do not participate in validation, token counting or wire conditioning.
 
-Quality presets, transparency, furry mode and sampling support follow the selected descriptor. When a model does not support native noise scheduling, Normalize selects its Karras fallback and records the change; Reject returns an unsupported-feature error.
+Quality and UC preset definitions belong to each model's prompt profile. They determine supported selections, effective text and the wire hints. Use `quality_preset` and `uc_preset` to inspect a supported selection; preset enums alone do not supply universal text. Full and curated models can use different presets and defaults. V3's default UC selection is Heavy.
+
+Transparency, furry mode and sampling support follow the selected descriptor. V3 supports Variety+ with its own sigma profile. When a model does not support native noise scheduling, Normalize selects its Karras fallback and records the change; Reject returns an unsupported-feature error.
 
 `NormalizationDiagnostic::field` is a typed `GenerationField`. Local request errors and image preprocessing use the common `RequestField`, with generation locations carried by `RequestField::Generation`. Token-limit errors use these same locations. Display values identify the editable request path, including original character indices and image fields such as `operation.input.mask`. Conflict diagnostics identify the retained field with a `GenerationField`.
 

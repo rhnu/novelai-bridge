@@ -1,10 +1,10 @@
 use crate::{
-    BridgeError, CharacterField, GenerationField, ImageInputField, InvalidRequest, Model,
+    BridgeError, CharacterField, GenerationField, InpaintImageToImageField, InvalidRequest, Model,
     NoiseSchedule, ValidationPolicy, VibeEncoding, VibeReference, VibeTransferConfig,
     generation::{
         Character, CharacterPosition, CharacterReference, CharacterReferenceType, CharacterSet,
-        GenerateImageRequest, GenerationInput, ImageToImageInput, InpaintingInput,
-        NormalizationChange, ReferenceSet, test_support::image,
+        GenerateImageRequest, GenerationInput, ImageToImageInput, InpaintImageToImage,
+        InpaintingInput, NormalizationChange, ReferenceSet, test_support::image,
     },
 };
 
@@ -223,8 +223,9 @@ fn image_and_mask_strengths_use_separate_bounds() {
     ordinary.operation = GenerationInput::ImageToImage(ImageToImageInput::new(image(), 1.0, 0.0));
     assert!(ordinary.normalize_with(ValidationPolicy::Reject).is_err());
     let mut masked = request();
-    masked.operation =
-        GenerationInput::Inpainting(InpaintingInput::new(image(), image(), 1.0, 0.0));
+    let mut inpainting = InpaintingInput::new(image(), image());
+    inpainting.img2img = Some(InpaintImageToImage::new(1.0, 0.0));
+    masked.operation = GenerationInput::Inpainting(inpainting);
     assert!(
         masked
             .clone()
@@ -234,13 +235,101 @@ fn image_and_mask_strengths_use_separate_bounds() {
     let GenerationInput::Inpainting(input) = &mut masked.operation else {
         unreachable!()
     };
-    input.strength = 1.1;
+    input.img2img.as_mut().unwrap().strength = 1.1;
     let plan = masked.normalize().unwrap();
-    assert!(
-        plan.diagnostics()
-            .iter()
-            .any(|entry| entry.field == GenerationField::ImageInput(ImageInputField::Strength))
-    );
+    assert!(plan.diagnostics().iter().any(|entry| entry.field
+        == GenerationField::InpaintImageToImage(InpaintImageToImageField::Strength)));
+}
+
+#[test]
+fn inpaint_conditioning_ranges_and_diagnostics_use_nested_field_locations() {
+    for (strength, noise, field, path) in [
+        (
+            0.0,
+            0.0,
+            InpaintImageToImageField::Strength,
+            "operation.input.img2img.strength",
+        ),
+        (
+            0.5,
+            1.5,
+            InpaintImageToImageField::Noise,
+            "operation.input.img2img.noise",
+        ),
+    ] {
+        let mut input = InpaintingInput::new(image(), image());
+        input.img2img = Some(InpaintImageToImage::new(strength, noise));
+        let mut request = request();
+        request.operation = GenerationInput::Inpainting(input);
+        let expected = GenerationField::InpaintImageToImage(field);
+        assert_eq!(expected.to_string(), path);
+        assert!(matches!(
+            request.clone().normalize_with(ValidationPolicy::Reject),
+            Err(BridgeError::InvalidRequest(InvalidRequest::NumericOutOfRange { field, .. }))
+                if field == expected.into()
+        ));
+        let normalized = request.normalize().unwrap();
+        assert!(
+            normalized
+                .diagnostics()
+                .iter()
+                .any(|entry| entry.field == expected)
+        );
+    }
+}
+
+#[test]
+fn inpaint_conditioning_rejects_nonfinite_nested_values_under_both_policies() {
+    for (strength, noise, expected) in [
+        (f32::NAN, 0.0, InpaintImageToImageField::Strength),
+        (0.5, f32::INFINITY, InpaintImageToImageField::Noise),
+    ] {
+        for policy in [ValidationPolicy::Normalize, ValidationPolicy::Reject] {
+            let mut input = InpaintingInput::new(image(), image());
+            input.img2img = Some(InpaintImageToImage::new(strength, noise));
+            let mut request = request();
+            request.operation = GenerationInput::Inpainting(input);
+            assert!(matches!(
+                request.normalize_with(policy),
+                Err(BridgeError::InvalidRequest(InvalidRequest::NonFiniteNumber { field, .. }))
+                    if field == GenerationField::InpaintImageToImage(expected).into()
+            ));
+        }
+    }
+}
+
+#[test]
+fn legacy_inpainting_drops_or_rejects_the_complete_source_conditioning_group() {
+    for model in [Model::NaiDiffusion3, Model::NaiDiffusion3Furry] {
+        let mut input = InpaintingInput::new(image(), image());
+        input.img2img = Some(InpaintImageToImage::new(0.5, 0.2));
+        let request = GenerateImageRequest::builder("cat", model)
+            .inpainting(input)
+            .build();
+        let expected = GenerationField::InpaintImageToImage(InpaintImageToImageField::Entry);
+        assert_eq!(expected.to_string(), "operation.input.img2img");
+        assert!(matches!(
+            request.clone().normalize_with(ValidationPolicy::Reject),
+            Err(BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { feature, .. }))
+                if feature == expected.into()
+        ));
+        let plan = request.normalize().unwrap();
+        let GenerationInput::Inpainting(input) = &plan.request().operation else {
+            unreachable!()
+        };
+        assert!(input.img2img.is_none());
+        assert!(
+            plan.diagnostics()
+                .iter()
+                .any(|entry| entry.field == expected
+                    && matches!(entry.change, NormalizationChange::Unsupported))
+        );
+        assert_eq!(
+            plan.anlas_estimate_input(crate::AnlasPricingContext::default())
+                .mode,
+            crate::PricingMode::Inpainting { strength: 1.0 }
+        );
+    }
 }
 
 #[test]

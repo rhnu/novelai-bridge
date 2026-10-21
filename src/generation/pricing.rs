@@ -27,7 +27,10 @@ impl NormalizedGeneration {
         let mode = match &request.operation {
             GenerationInput::TextToImage => PricingMode::TextToImage,
             GenerationInput::Inpainting(input) => PricingMode::Inpainting {
-                strength: input.strength,
+                strength: input
+                    .img2img
+                    .as_ref()
+                    .map_or(1.0, |parameters| parameters.strength),
             },
             GenerationInput::ImageToImage(input) => PricingMode::ImageToImage {
                 strength: input.strength,

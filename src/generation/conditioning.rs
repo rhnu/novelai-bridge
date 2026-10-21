@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{CharacterPosition, GenerateImageRequest, GenerationCore};
 
-const TRANSPARENT_BACKGROUND_TAG: &str = ", transparent background";
+const TRANSPARENT_BACKGROUND_TAG: &str = "transparent background";
 const FURRY_DATASET_TAG: &str = "fur dataset";
 
 /// Final conditioning text a request will actually send, per field.
@@ -76,26 +76,50 @@ impl GenerationCore {
         } else {
             self.prompt.clone()
         };
+        let profile = self.model.descriptor().prompt();
+        let preset = profile
+            .quality_preset(self.quality)
+            .expect("normalization selects a supported quality preset");
         if self.transparent_background {
-            prompt.push_str(TRANSPARENT_BACKGROUND_TAG);
+            append_prompt(&mut prompt, TRANSPARENT_BACKGROUND_TAG);
         }
-        prompt.push_str(self.quality.tags());
+        append_prompt(&mut prompt, preset.suffix);
         prompt
     }
 
-    /// Assembles the negative prompt from every contributing source.
-    ///
-    /// The UC preset text is placed before the caller's negative prompt, matching the `NovelAI`
-    /// web client.
-    fn assemble_negative_prompt(&self) -> String {
-        let preset = self.uc_preset.preset_text();
+    /// Resolves the model's preset before applying its contextual NSFW suppression rule.
+    fn assemble_negative_prompt(&self, prompt: &str) -> String {
+        let profile = self.model.descriptor().prompt();
+        let preset = profile
+            .uc_preset(self.uc_preset)
+            .expect("normalization selects a supported UC preset");
         let negative = self.negative_prompt.as_deref().unwrap_or_default();
-        match (preset.is_empty(), negative.is_empty()) {
-            (true, _) => negative.to_owned(),
-            (false, true) => preset.to_owned(),
-            (false, false) => format!("{preset}, {negative}"),
+        let prefix = if self.uc_preset == crate::UcPreset::None && !negative.is_empty() {
+            ""
+        } else {
+            preset.prefix
+        };
+        let mut result = prefix.to_owned();
+        append_prompt(&mut result, negative);
+        if profile.suppress_nsfw
+            && self.uc_preset != crate::UcPreset::None
+            && !prefix.is_empty()
+            && !prompt.to_lowercase().contains("nsfw")
+        {
+            result = format!("nsfw, {result}");
         }
+        result
     }
+}
+
+fn append_prompt(prompt: &mut String, tags: &str) {
+    if tags.is_empty() {
+        return;
+    }
+    if !prompt.is_empty() {
+        prompt.push_str(", ");
+    }
+    prompt.push_str(tags);
 }
 
 #[cfg(test)]
@@ -122,9 +146,11 @@ impl GenerateImageRequest {
             })
             .unwrap_or_default();
 
+        let prompt = self.core.assemble_prompt();
+        let negative_prompt = self.core.assemble_negative_prompt(&prompt);
         ResolvedPrompts {
-            prompt: self.core.assemble_prompt(),
-            negative_prompt: self.core.assemble_negative_prompt(),
+            prompt,
+            negative_prompt,
             characters,
             use_coords: self
                 .characters

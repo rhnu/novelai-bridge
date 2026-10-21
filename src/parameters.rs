@@ -18,13 +18,6 @@ macro_rules! serde_string_enum {
 use serde::{Deserialize, Serialize};
 pub(crate) use serde_string_enum;
 
-const QUALITY_TAGS_STANDARD: &str = ", very aesthetic, masterpiece, no text";
-const QUALITY_TAGS_LIGHT: &str = ", very aesthetic, amazing quality, no text";
-const UC_PRESET_HEAVY: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page";
-const UC_PRESET_LIGHT: &str = "nsfw, lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page";
-const UC_PRESET_FURRY_FOCUS: &str = "{worst quality}, distracting watermark, unfinished, bad quality, {widescreen}, upscale, {sequence}, {{grandfathered content}}, blurred foreground, chromatic aberration, sketch, everyone, [sketch background], simple, [flat colors], ych (character), outline, multiple scenes, [[horror (theme)]], comic";
-const UC_PRESET_HUMAN_FOCUS: &str = "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy";
-
 /// Supported image samplers.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Sampler {
@@ -102,42 +95,28 @@ impl NoiseSchedule {
 #[serde(rename_all = "snake_case")]
 pub enum UcPreset {
     /// Heavy UC preset.
-    Heavy,
-    /// Light default UC preset.
     #[default]
+    Heavy,
+    /// Light UC preset.
     Light,
-    /// Furry-focused UC preset, intended for the V3 furry model.
+    /// Furry-focused UC preset, offered by V4.5 Full and V5.
     FurryFocus,
     /// Human-focused UC preset.
     HumanFocus,
-    /// No preset text.
+    /// Disables the selected preset; V3 retains its empty-negative fallback.
     None,
 }
 
 impl UcPreset {
-    /// Returns the integer value expected by the API.
+    /// Provider hint identifying the selected preset; this is not a model's list index.
     #[must_use]
-    pub const fn as_api_value(&self) -> i32 {
+    pub const fn tag_hint(self) -> u8 {
         match self {
-            Self::Heavy => 0,
-            Self::Light => 1,
-            Self::FurryFocus => 2,
-            Self::HumanFocus => 3,
-            Self::None => 4,
-        }
-    }
-
-    /// Returns the preset text merged into the negative prompt.
-    ///
-    /// The `NovelAI` web client places this text *before* the caller's negative prompt.
-    #[must_use]
-    pub const fn preset_text(&self) -> &'static str {
-        match self {
-            Self::Heavy => UC_PRESET_HEAVY,
-            Self::Light => UC_PRESET_LIGHT,
-            Self::FurryFocus => UC_PRESET_FURRY_FOCUS,
-            Self::HumanFocus => UC_PRESET_HUMAN_FOCUS,
-            Self::None => "",
+            Self::None => 0,
+            Self::Heavy => 2,
+            Self::Light => 3,
+            Self::HumanFocus => 4,
+            Self::FurryFocus => 5,
         }
     }
 }
@@ -145,33 +124,29 @@ impl UcPreset {
 /// Built-in quality tag presets appended to the positive prompt.
 ///
 /// V5 exposes all three; earlier families only offer the equivalent of [`QualityPreset::Standard`]
-/// and [`QualityPreset::None`], gated by [`crate::PromptProfile::quality`].
+/// and [`QualityPreset::None`], listed by [`crate::PromptProfile::quality_presets`].
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QualityPreset {
-    /// `very aesthetic, masterpiece, no text`.
+    /// The selected model's standard quality tags.
     #[default]
     Standard,
-    /// `very aesthetic, amazing quality, no text`. V5 only.
+    /// The selected model's light quality tags. V5 only.
     Light,
     /// No quality tags.
     None,
 }
 
 impl QualityPreset {
-    /// Returns the tag text appended to the positive prompt.
+    /// Provider hint identifying the selected quality preset.
     #[must_use]
-    pub const fn tags(&self) -> &'static str {
+    pub const fn tag_hint(self) -> u8 {
         match self {
-            Self::Standard => QUALITY_TAGS_STANDARD,
-            Self::Light => QUALITY_TAGS_LIGHT,
-            Self::None => "",
+            Self::None => 0,
+            Self::Standard => 1,
+            Self::Light => 3,
         }
     }
-
-    /// Returns the `qualityToggle` value that accompanies the merged prompt.
-    #[must_use]
-    pub const fn is_enabled(&self) -> bool { !matches!(self, Self::None) }
 }
 
 /// Supported image stream modes.

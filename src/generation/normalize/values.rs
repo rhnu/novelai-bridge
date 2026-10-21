@@ -1,6 +1,7 @@
 use super::{Field, Normalizer};
 use crate::{
-    BridgeError, GenerationInput, ImageInputField, InvalidRequest,
+    BridgeError, GenerationInput, ImageInputField, InpaintImageToImageField, InvalidRequest,
+    ModelDescriptor,
     parameters::bounds::{normalize_float, normalize_integer},
 };
 
@@ -8,33 +9,49 @@ impl Normalizer {
     pub(super) fn normalize_operation(
         &mut self,
         operation: &mut GenerationInput,
+        descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
-        let (strength, noise, limits) = match operation {
+        let (strength, noise, strength_field, noise_field, limits) = match operation {
             GenerationInput::TextToImage => return Ok(()),
             GenerationInput::ImageToImage(input) => (
                 &mut input.strength,
                 &mut input.noise,
+                Field::ImageInput(ImageInputField::Strength),
+                Field::ImageInput(ImageInputField::Noise),
                 self.constraints.img2img_strength,
             ),
-            GenerationInput::Inpainting(input) => (
-                &mut input.strength,
-                &mut input.noise,
-                self.constraints.inpaint_strength,
-            ),
+            GenerationInput::Inpainting(input) => {
+                if input.img2img.is_none() {
+                    return Ok(());
+                }
+                if !self.require_capability(
+                    descriptor
+                        .support()
+                        .inpainting
+                        .is_some_and(|profile| profile.image_to_image),
+                    Field::InpaintImageToImage(InpaintImageToImageField::Entry),
+                    "models supporting image-to-image conditioning in inpainting",
+                    super::NormalizationChange::Unsupported,
+                )? {
+                    input.img2img = None;
+                    return Ok(());
+                }
+                let parameters = input
+                    .img2img
+                    .as_mut()
+                    .expect("conditioning was present before capability validation");
+                (
+                    &mut parameters.strength,
+                    &mut parameters.noise,
+                    Field::InpaintImageToImage(InpaintImageToImageField::Strength),
+                    Field::InpaintImageToImage(InpaintImageToImageField::Noise),
+                    self.constraints.inpaint_strength,
+                )
+            },
         };
-        *strength = self.normalize_f32_range(
-            Field::ImageInput(ImageInputField::Strength),
-            *strength,
-            limits.min,
-            limits.max,
-        )?;
+        *strength = self.normalize_f32_range(strength_field, *strength, limits.min, limits.max)?;
         let limits = self.constraints.img2img_noise;
-        *noise = self.normalize_f32_range(
-            Field::ImageInput(ImageInputField::Noise),
-            *noise,
-            limits.min,
-            limits.max,
-        )?;
+        *noise = self.normalize_f32_range(noise_field, *noise, limits.min, limits.max)?;
         Ok(())
     }
 

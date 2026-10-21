@@ -111,6 +111,8 @@ pub struct ReferenceProfile {
 pub struct InpaintingProfile {
     /// API sibling identifier required for inpainting.
     pub model_id: &'static str,
+    /// Supports an independent image-to-image refinement strength within the mask operation.
+    pub image_to_image: bool,
 }
 
 /// Optional capabilities carry their parameters; absent profiles mean unsupported features.
@@ -231,22 +233,24 @@ pub struct CharacterPromptProfile {
     pub positioning: CharacterPositionProfile,
 }
 
-/// Available quality presets.
+/// A model's supported quality selection and its effective prompt suffix.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum QualitySupport {
-    /// Standard or no quality tags.
-    Standard,
-    /// Standard, light or no quality tags.
-    StandardAndLight,
+pub struct QualityPresetDefinition {
+    /// Typed selection used by requests and wire hints.
+    pub preset: QualityPreset,
+    /// Appended without delimiters when the preset is selected.
+    pub suffix: &'static str,
 }
 
-impl QualitySupport {
-    /// Whether this preset is supported without fallback.
-    #[must_use]
-    pub const fn supports(self, preset: QualityPreset) -> bool {
-        !matches!(preset, QualityPreset::Light) || matches!(self, Self::StandardAndLight)
-    }
+/// A model's supported undesired-content selection and its negative-prompt prefix.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct UcPresetDefinition {
+    /// Typed selection used by requests and wire hints.
+    pub preset: UcPreset,
+    /// Prepended to the negative prompt before contextual suppression.
+    pub prefix: &'static str,
 }
 
 /// Conditioning support, independent from its wire representation.
@@ -259,8 +263,12 @@ pub struct PromptProfile {
     pub token_limit: u32,
     /// Optional character prompting with its limit.
     pub characters: Option<CharacterPromptProfile>,
-    /// Quality presets.
-    pub quality: QualitySupport,
+    /// Supported quality presets and their model-specific suffixes.
+    pub quality_presets: &'static [QualityPresetDefinition],
+    /// Supported UC presets and their model-specific prefixes.
+    pub uc_presets: &'static [UcPresetDefinition],
+    /// Adds `nsfw` to a nonempty selected UC preset unless the positive prompt includes it.
+    pub suppress_nsfw: bool,
     /// Transparent-background tag support.
     pub transparent_background: bool,
     /// Anime/furry prompt dataset switching support.
@@ -268,6 +276,25 @@ pub struct PromptProfile {
 }
 
 impl PromptProfile {
+    /// Finds a quality selection supported by this model.
+    #[must_use]
+    pub fn quality_preset(
+        &self,
+        preset: QualityPreset,
+    ) -> Option<&'static QualityPresetDefinition> {
+        self.quality_presets
+            .iter()
+            .find(|definition| definition.preset == preset)
+    }
+
+    /// Finds an undesired-content selection supported by this model.
+    #[must_use]
+    pub fn uc_preset(&self, preset: UcPreset) -> Option<&'static UcPresetDefinition> {
+        self.uc_presets
+            .iter()
+            .find(|definition| definition.preset == preset)
+    }
+
     /// Maximum enabled characters, or zero when unsupported.
     #[must_use]
     pub const fn max_characters(&self) -> u32 {

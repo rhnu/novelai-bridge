@@ -1,7 +1,7 @@
 use super::{
     CapabilityParameters, CommonParameters, ConditioningParameters, ImageGenerationRequestBody,
-    ImageParameters, NegativeCondition, OperationParameters, PositiveCondition, ProtocolExtensions,
-    V4Caption, WireAction,
+    ImageParameters, InpaintImageToImageParameters, NegativeCondition, OperationParameters,
+    PositiveCondition, ProtocolExtensions, V4Caption, WireAction,
     prompt::{build_character_captions, build_character_prompts},
     references::prepare_references,
 };
@@ -27,8 +27,8 @@ pub(in crate::generation) fn build_generate_request(
         sampler: params.sampling.sampler,
         seed: resolved_seed,
         n_samples: params.core.n_samples,
-        uc_preset: params.core.uc_preset.as_api_value(),
-        quality_toggle: params.core.quality.is_enabled(),
+        tag_hint_uc_preset: params.core.uc_preset.tag_hint(),
+        tag_hint_qt: params.core.quality.tag_hint(),
         cfg_rescale: params.sampling.cfg_rescale,
         noise_schedule: params.sampling.noise_schedule,
         legacy: false,
@@ -68,7 +68,7 @@ pub(in crate::generation) fn build_generate_request(
             GenerationMode::ImageToImage => WireAction::ImageToImage,
             GenerationMode::Inpainting => WireAction::Inpainting,
         },
-        input: params.core.prompt.clone(),
+        input: normalized.resolved_prompts().prompt.clone(),
         model: normalized.model_id(),
         use_new_shared_trial: true,
         parameters: ImageParameters {
@@ -137,7 +137,6 @@ fn prepare_operation(
     match &request.operation {
         GenerationInput::TextToImage => Ok(OperationParameters::TextToImage {
             add_original_image: true,
-            inpaint_strength: 1.0,
         }),
         GenerationInput::ImageToImage(input) => Ok(OperationParameters::ImageToImage {
             image: prepare_image(
@@ -150,7 +149,6 @@ fn prepare_operation(
             extra_noise_seed: input.extra_noise_seed.unwrap_or(resolved_seed),
             color_correct: input.color_correct,
             add_original_image: input.add_original_image,
-            inpaint_strength: 1.0,
         }),
         GenerationInput::Inpainting(input) => Ok(OperationParameters::Inpainting {
             image: prepare_image(
@@ -163,10 +161,17 @@ fn prepare_operation(
                 &input.mask,
                 ImagePreparation::Mask(request.core.size),
             )?,
-            noise: input.noise,
             request_type: "NativeInfillingRequest",
             add_original_image: input.add_original_image,
-            strength: input.strength,
+            img2img: input
+                .img2img
+                .as_ref()
+                .map(|parameters| InpaintImageToImageParameters {
+                    strength: parameters.strength,
+                    noise: parameters.noise,
+                    color_correct: parameters.color_correct,
+                    extra_noise_seed: parameters.extra_noise_seed.unwrap_or(resolved_seed),
+                }),
         }),
     }
 }

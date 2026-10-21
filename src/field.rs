@@ -36,6 +36,14 @@ pub enum ImageInputField {
     Noise,
 }
 
+/// Locations in the optional image-to-image conditioning group used by inpainting.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum InpaintImageToImageField {
+    Entry,
+    Strength,
+    Noise,
+}
+
 /// A typed location in the editable generation request.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -47,6 +55,7 @@ pub enum GenerationField {
     Height,
     Samples,
     Quality,
+    UcPreset,
     TransparentBackground,
     FurryMode,
     Steps,
@@ -60,6 +69,7 @@ pub enum GenerationField {
     },
     Guidance(GuidanceField),
     ImageInput(ImageInputField),
+    InpaintImageToImage(InpaintImageToImageField),
     CharacterReferences,
     CharacterReference {
         index: usize,
@@ -81,6 +91,7 @@ impl fmt::Display for GenerationField {
             Self::Height => "core.size.height",
             Self::Samples => "core.n_samples",
             Self::Quality => "core.quality",
+            Self::UcPreset => "core.uc_preset",
             Self::TransparentBackground => "core.transparent_background",
             Self::FurryMode => "core.furry_mode",
             Self::Steps => "sampling.steps",
@@ -95,6 +106,13 @@ impl fmt::Display for GenerationField {
             Self::ImageInput(ImageInputField::Mask) => "operation.input.mask",
             Self::ImageInput(ImageInputField::Strength) => "operation.input.strength",
             Self::ImageInput(ImageInputField::Noise) => "operation.input.noise",
+            Self::InpaintImageToImage(InpaintImageToImageField::Entry) => "operation.input.img2img",
+            Self::InpaintImageToImage(InpaintImageToImageField::Strength) => {
+                "operation.input.img2img.strength"
+            },
+            Self::InpaintImageToImage(InpaintImageToImageField::Noise) => {
+                "operation.input.img2img.noise"
+            },
             Self::CharacterReferences => "references.character_references",
             Self::VibeTransfer => "references.vibe_transfer",
             Self::VibeStrength => "references.vibe_transfer.strength",
