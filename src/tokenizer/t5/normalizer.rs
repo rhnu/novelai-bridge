@@ -33,9 +33,13 @@ impl Default for Normalizer {
     }
 }
 
-const fn offset(unit: u32) -> usize { ((unit >> 10) << ((unit & 512) >> 6)) as usize }
+const fn offset(unit: u32) -> usize {
+    ((unit >> 10) << ((unit & 512) >> 6)) as usize
+}
 
-const fn label(unit: u32) -> u32 { unit & 0x8000_00FF }
+const fn label(unit: u32) -> u32 {
+    unit & 0x8000_00FF
+}
 
 impl Normalizer {
     pub(super) fn parse(bytes: &[u8]) -> Result<Self, TokenizerError> {

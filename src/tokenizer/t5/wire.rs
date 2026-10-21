@@ -9,9 +9,13 @@ pub(super) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    pub(super) const fn new(bytes: &'a [u8]) -> Self { Self { bytes, position: 0 } }
+    pub(super) const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
 
-    pub(super) const fn is_done(&self) -> bool { self.position >= self.bytes.len() }
+    pub(super) const fn is_done(&self) -> bool {
+        self.position >= self.bytes.len()
+    }
 
     pub(super) fn varint(&mut self) -> Result<u64, TokenizerError> {
         let mut value = 0u64;
@@ -68,16 +72,16 @@ impl<'a> Reader<'a> {
         match wire_type {
             0 => {
                 self.varint()?;
-            },
+            }
             1 => {
                 self.take(8)?;
-            },
+            }
             2 => {
                 self.length_delimited()?;
-            },
+            }
             5 => {
                 self.take(4)?;
-            },
+            }
             other => return Err(malformed(&format!("unsupported wire type {other}"))),
         }
         Ok(())

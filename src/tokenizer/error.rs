@@ -53,10 +53,11 @@ pub enum TokenizerError {
         reason: String,
     },
     /// Encoding failed rather than returning a partial token count.
-    #[error("{asset} encoding failed: {reason}")]
+    #[error("{asset} encoding failed")]
     EncodingFailed {
         asset: TokenizerAsset,
-        reason: String,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
     /// A gzip-compressed asset could not be decompressed.
     #[error("{asset} could not be decompressed")]

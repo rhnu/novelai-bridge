@@ -134,3 +134,37 @@ fn regex_failure_is_not_a_partial_success() {
         Err(TokenizerError::EncodingFailed { .. })
     ));
 }
+
+#[test]
+fn json_and_regex_asset_errors_retain_sources_and_asset_identity() {
+    use std::error::Error as _;
+    let error = QwenTokenizer::from_assets(b"{", None).unwrap_err();
+    assert!(error.source().unwrap().is::<serde_json::Error>());
+    let mut asset = qwen_asset();
+    asset["pre_tokenizer"]["pretokenizers"][0]["pattern"]["Regex"] = json!("(");
+    let error = load_qwen(&asset).unwrap_err();
+    assert!(error.source().unwrap().is::<fancy_regex::Error>());
+    let asset = qwen_asset();
+    let error = QwenTokenizer::from_assets(asset.to_string().as_bytes(), Some(b"{")).unwrap_err();
+    assert!(matches!(
+        error,
+        TokenizerError::InvalidAssetData {
+            asset: TokenizerAsset::QwenTokenizerConfig,
+            ..
+        }
+    ));
+    assert!(error.source().unwrap().is::<serde_json::Error>());
+    let config = json!({"added_tokens_decoder":{"300":{"content":"special","lstrip":true}}});
+    let error = QwenTokenizer::from_assets(
+        asset.to_string().as_bytes(),
+        Some(config.to_string().as_bytes()),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        TokenizerError::UnsupportedAssetVersion {
+            asset: TokenizerAsset::QwenTokenizerConfig,
+            ..
+        }
+    ));
+}

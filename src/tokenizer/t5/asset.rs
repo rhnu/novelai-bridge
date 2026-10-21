@@ -13,7 +13,6 @@ pub(super) struct T5Asset {
     pub(super) normalizer: Normalizer,
     pub(super) user_symbols: Vec<String>,
     pub(super) unknown_score: f32,
-    pub(super) user_score: f32,
 }
 
 impl PieceType {
@@ -30,7 +29,9 @@ impl PieceType {
     }
 
     /// Returns `true` when the piece may be produced by ordinary segmentation.
-    const fn is_segmentable(self) -> bool { matches!(self, Self::Normal | Self::UserDefined) }
+    const fn is_segmentable(self) -> bool {
+        matches!(self, Self::Normal | Self::UserDefined)
+    }
 }
 
 pub(super) fn load(bytes: &[u8]) -> Result<T5Asset, TokenizerError> {
@@ -46,7 +47,6 @@ pub(super) fn load(bytes: &[u8]) -> Result<T5Asset, TokenizerError> {
     let mut all_pieces = std::collections::HashSet::new();
     let mut user_symbols = Vec::new();
     let mut min_score = f32::INFINITY;
-    let mut max_score = f32::NEG_INFINITY;
 
     for (index, piece) in pieces.iter().enumerate() {
         let id =
@@ -72,7 +72,6 @@ pub(super) fn load(bytes: &[u8]) -> Result<T5Asset, TokenizerError> {
         }
         if piece.kind == PieceType::Normal {
             min_score = min_score.min(piece.score);
-            max_score = max_score.max(piece.score);
         }
         if piece.kind == PieceType::UserDefined {
             user_symbols.push(piece.text.clone());
@@ -100,7 +99,6 @@ pub(super) fn load(bytes: &[u8]) -> Result<T5Asset, TokenizerError> {
         normalizer,
         user_symbols,
         unknown_score: min_score - 10.0,
-        user_score: max_score,
     })
 }
 
@@ -123,22 +121,22 @@ fn parse_model_proto(bytes: &[u8]) -> Result<(Vec<Piece>, Normalizer, String), T
                             if trainer.varint()? != 1 {
                                 return Err(malformed("T5 requires a Unigram model"));
                             }
-                        },
+                        }
                         (24, 0) => suffix = trainer.varint()? != 0,
                         (35, 0) => {
                             if trainer.varint()? != 0 {
                                 return Err(malformed("T5 byte fallback is unsupported"));
                             }
-                        },
+                        }
                         (47, 2) => {
                             std::str::from_utf8(trainer.length_delimited()?)
                                 .map_err(|source| invalid_data("EOS piece text", source))?
                                 .clone_into(&mut eos_piece);
-                        },
+                        }
                         (_, wire) => trainer.skip(wire)?,
                     }
                 }
-            },
+            }
             (3, 2) => normalizer = Normalizer::parse(reader.length_delimited()?)?,
             (_, wire) => reader.skip(wire)?,
         }
@@ -163,15 +161,15 @@ fn parse_piece(bytes: &[u8]) -> Result<Piece, TokenizerError> {
                         .map_err(|source| invalid_data("piece text", source))?
                         .to_owned(),
                 );
-            },
+            }
             (2, 5) => {
                 let raw = reader.take(4)?;
                 score = f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
-            },
+            }
             (3, 0) => {
                 let raw = reader.varint()?;
                 kind = PieceType::from_wire(raw)?;
-            },
+            }
             (_, wire_type) => reader.skip(wire_type)?,
         }
     }

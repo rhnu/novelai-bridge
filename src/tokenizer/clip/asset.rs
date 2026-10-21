@@ -36,13 +36,13 @@ pub(super) fn parse(bytes: &[u8]) -> Result<ClipAsset, TokenizerError> {
         match (parts.next(), parts.next(), parts.next()) {
             (Some(left), Some(right), None) if !left.is_empty() && !right.is_empty() => {
                 pairs.push((left.to_owned(), right.to_owned()));
-            },
+            }
             _ => {
                 return Err(TokenizerError::MalformedAsset {
                     asset: TokenizerAsset::ClipMerges,
                     reason: format!("merge line {line:?} is not an exact symbol pair"),
                 });
-            },
+            }
         }
     }
 
@@ -94,9 +94,12 @@ pub(super) fn parse(bytes: &[u8]) -> Result<ClipAsset, TokenizerError> {
 fn decompress_if_gzip(bytes: &[u8]) -> Result<String, TokenizerError> {
     let is_gzip = bytes.starts_with(&[0x1F, 0x8B]);
     if !is_gzip {
-        return String::from_utf8(bytes.to_vec()).map_err(|error| TokenizerError::MalformedAsset {
-            asset: TokenizerAsset::ClipMerges,
-            reason: format!("merge asset is not valid UTF-8: {error}"),
+        return String::from_utf8(bytes.to_vec()).map_err(|source| {
+            TokenizerError::InvalidAssetData {
+                asset: TokenizerAsset::ClipMerges,
+                context: "merge text",
+                source: Box::new(source),
+            }
         });
     }
 

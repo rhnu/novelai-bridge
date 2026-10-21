@@ -57,7 +57,9 @@ impl ClipTokenizer {
 
     /// Returns the number of vocabulary entries.
     #[must_use]
-    pub fn vocabulary_size(&self) -> usize { self.bpe.vocabulary_size() }
+    pub fn vocabulary_size(&self) -> usize {
+        self.bpe.vocabulary_size()
+    }
 
     /// Encodes text into CLIP token IDs.
     ///
@@ -80,7 +82,7 @@ impl ClipTokenizer {
         for word in PATTERN.find_iter(&cleaned) {
             let word = word.map_err(|error| TokenizerError::EncodingFailed {
                 asset: TokenizerAsset::ClipMerges,
-                reason: error.to_string(),
+                source: Box::new(error),
             })?;
             self.encode_word(word.as_str(), &mut out);
         }
@@ -126,5 +128,7 @@ impl super::TokenEncoder for ClipTokenizer {
         Self::encode(self, text, framing)
     }
 
-    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
+    fn vocabulary_size(&self) -> usize {
+        Self::vocabulary_size(self)
+    }
 }

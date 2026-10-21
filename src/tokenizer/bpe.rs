@@ -70,7 +70,9 @@ pub struct Symbol {
 impl Symbol {
     /// Returns the symbol text.
     #[must_use]
-    pub fn text(&self) -> &str { &self.text }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
 }
 
 /// Ranked merge table with interned symbols.
@@ -190,7 +192,9 @@ impl ByteBpe {
         }
     }
 
-    pub(super) fn vocabulary_size(&self) -> usize { self.vocab.len() }
+    pub(super) fn vocabulary_size(&self) -> usize {
+        self.vocab.len()
+    }
 
     pub(super) fn token_id(&self, token: &str) -> Option<super::TokenId> {
         self.vocab.get(token).copied()

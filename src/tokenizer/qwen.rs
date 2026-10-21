@@ -116,7 +116,7 @@ impl QwenTokenizer {
         for piece in self.pattern.find_iter(&normalized) {
             let piece = piece.map_err(|error| TokenizerError::EncodingFailed {
                 asset: TokenizerAsset::QwenTokenizer,
-                reason: error.to_string(),
+                source: Box::new(error),
             })?;
             // Split(Isolated) keeps unmatched spans as well as matches.
             if cursor < piece.start() {
@@ -138,5 +138,7 @@ impl super::TokenEncoder for QwenTokenizer {
         Self::encode(self, text, framing)
     }
 
-    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
+    fn vocabulary_size(&self) -> usize {
+        Self::vocabulary_size(self)
+    }
 }

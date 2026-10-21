@@ -92,3 +92,12 @@ fn invalid_piece_text_retains_the_utf8_failure() {
     ));
     assert!(error.source().unwrap().is::<std::str::Utf8Error>());
 }
+
+#[test]
+fn overlapping_user_symbols_prefer_the_longest_complete_symbol() {
+    let mut bytes = t5_asset();
+    bytes.extend(piece("猫狗", 0.0, 4));
+    bytes.extend(piece("狗", 0.0, 4));
+    let tokenizer = T5Tokenizer::from_sentencepiece_model(&bytes).unwrap();
+    assert_eq!(tokenizer.encode("猫狗", FramingPolicy::ContentOnly), [2, 8]);
+}

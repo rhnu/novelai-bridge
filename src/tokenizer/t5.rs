@@ -54,7 +54,6 @@ pub struct T5Tokenizer {
     normalizer: Normalizer,
     user_symbols: Vec<String>,
     unknown_score: f32,
-    user_score: f32,
 }
 
 impl T5Tokenizer {
@@ -75,13 +74,14 @@ impl T5Tokenizer {
             normalizer: parsed.normalizer,
             user_symbols: parsed.user_symbols,
             unknown_score: parsed.unknown_score,
-            user_score: parsed.user_score,
         })
     }
 
     /// Returns the number of pieces in the model.
     #[must_use]
-    pub const fn vocabulary_size(&self) -> usize { self.pieces.len() }
+    pub const fn vocabulary_size(&self) -> usize {
+        self.pieces.len()
+    }
 
     /// Encodes text into T5 token IDs.
     ///
@@ -141,7 +141,8 @@ impl T5Tokenizer {
                 has_single |= end == next;
                 let piece = &self.pieces[id as usize];
                 let piece_score = if piece.kind == PieceType::UserDefined {
-                    self.user_score * text[start..end].chars().count() as f32 + 1.0
+                    // SentencePiece 0.2.2 penalizes splitting overlapping user symbols.
+                    0.1 * (text[start..end].chars().count() as f32 - 1.0)
                 } else {
                     piece.score
                 };
@@ -149,7 +150,7 @@ impl T5Tokenizer {
                 let candidate = (score, start, id);
                 match best[end] {
                     Some((existing, _, existing_id))
-                        if existing > score || (existing == score && existing_id <= id) => {},
+                        if existing > score || (existing == score && existing_id <= id) => {}
                     _ => best[end] = Some(candidate),
                 }
             }
@@ -194,5 +195,7 @@ impl super::TokenEncoder for T5Tokenizer {
         Ok(Self::encode(self, text, framing))
     }
 
-    fn vocabulary_size(&self) -> usize { Self::vocabulary_size(self) }
+    fn vocabulary_size(&self) -> usize {
+        Self::vocabulary_size(self)
+    }
 }
