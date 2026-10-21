@@ -277,6 +277,8 @@ pub struct PromptProfile {
     pub suppress_nsfw: bool,
     /// Supports user-provided base and character negative prompts.
     pub custom_negative_prompts: bool,
+    /// Supports selecting V4's legacy negative-conditioning behavior.
+    pub legacy_uc: bool,
     /// Transparent-background tag support.
     pub transparent_background: bool,
     /// Anime/furry prompt dataset switching support.

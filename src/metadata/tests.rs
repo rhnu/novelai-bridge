@@ -1,7 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 
 use crate::{
-    GeneratedImageMetadata, PngMetadataWarning, VibeMetadataSource,
+    GeneratedImageMetadata, MetadataWarning, VibeMetadataSource,
     extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
     parse_png_metadata_from_bytes, parse_png_metadata_from_payload,
 };
@@ -55,8 +55,92 @@ fn inspect_metadata_distinguishes_absent_invalid_and_unsupported() {
     ));
     assert!(matches!(
         inspect_generated_image_metadata(b"RIFF0000WEBP", Some("image/webp")),
-        GeneratedImageMetadata::UnsupportedFormat
+        GeneratedImageMetadata::Invalid { .. }
     ));
+}
+
+#[test]
+fn complete_carrier_precedence_does_not_fill_missing_fields_from_a_lower_priority_source() {
+    use crate::metadata::{
+        MetadataOrigin,
+        test_support::{ascii_comment, png, tiff},
+    };
+    let hidden = r#"{"Description":"hidden prompt","Comment":"{\"seed\":42}","Software":"hidden"}"#;
+    let exif = tiff(&ascii_comment(
+        r#"{"Description":"Exif prompt","Source":"Exif source"}"#,
+    ));
+    let png_text = png(&[("Comment", r#"{"seed":7}"#)], Some(&exif), Some(hidden));
+    let metadata = crate::metadata::parse_image_metadata_from_bytes(&png_text).unwrap();
+    assert_eq!(metadata.origin, Some(MetadataOrigin::PngText));
+    assert_eq!(metadata.seed, Some(7));
+    assert_eq!(metadata.prompt, None);
+    assert_eq!(metadata.source, None);
+    let exif_only = png(&[], Some(&exif), Some(hidden));
+    let metadata = crate::metadata::parse_image_metadata_from_bytes(&exif_only).unwrap();
+    assert_eq!(metadata.origin, Some(MetadataOrigin::ExifUserComment));
+    assert_eq!(metadata.prompt.as_deref(), Some("Exif prompt"));
+    assert_eq!(metadata.seed, None);
+    assert_eq!(metadata.software, None);
+    let hidden_only = png(&[], None, Some(hidden));
+    let metadata = crate::metadata::parse_png_metadata_from_bytes(&hidden_only).unwrap();
+    assert_eq!(metadata.origin, Some(MetadataOrigin::StealthPngComp));
+    assert_eq!(metadata.seed, Some(42));
+    assert_eq!(metadata.prompt.as_deref(), Some("hidden prompt"));
+}
+
+#[test]
+fn invalid_metadata_warns_but_png_media_failure_cannot_be_hidden_by_fallback() {
+    use crate::metadata::{MetadataOrigin, test_support::png};
+    let hidden = r#"{"Comment":"{\"seed\":42}"}"#;
+    let bytes = png(&[], Some(b"not TIFF"), Some(hidden));
+    let metadata = crate::metadata::parse_image_metadata_from_bytes(&bytes).unwrap();
+    assert_eq!(metadata.origin, Some(MetadataOrigin::StealthPngComp));
+    assert_eq!(metadata.seed, Some(42));
+    assert!(matches!(
+        metadata.warnings.as_slice(),
+        [MetadataWarning::InvalidCarrier {
+            origin: MetadataOrigin::ExifUserComment,
+            ..
+        }]
+    ));
+    let mut truncated = bytes;
+    truncated.truncate(truncated.len() - 12);
+    assert!(crate::metadata::parse_image_metadata_from_bytes(&truncated).is_err());
+    let malformed = png(&[], None, Some("{not JSON"));
+    let metadata = crate::metadata::parse_image_metadata_from_bytes(&malformed).unwrap();
+    assert_eq!(metadata.origin, None);
+    assert!(matches!(
+        metadata.warnings.as_slice(),
+        [MetadataWarning::InvalidCarrier {
+            origin: MetadataOrigin::StealthPngComp,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn generic_reader_recovers_webp_and_jpeg_exif_and_checks_the_same_media_budget() {
+    use crate::metadata::{
+        MetadataOrigin,
+        test_support::{ascii_comment, jpeg, tiff, webp},
+    };
+    let raw = tiff(&ascii_comment(
+        r#"{"Comment":"{\"seed\":123,\"prompt\":\"cat\"}"}"#,
+    ));
+    for bytes in [webp(&raw), jpeg(&raw)] {
+        let metadata = crate::metadata::parse_image_metadata_from_bytes(&bytes).unwrap();
+        assert_eq!(metadata.origin, Some(MetadataOrigin::ExifUserComment));
+        assert_eq!(metadata.prompt.as_deref(), Some("cat"));
+        assert_eq!(metadata.seed, Some(123));
+        assert!(crate::metadata::parse_png_metadata_from_bytes(&bytes).is_err());
+        let policy = crate::ImageDecodePolicy {
+            max_width: 1,
+            ..Default::default()
+        };
+        assert!(
+            crate::metadata::parse_image_metadata_from_bytes_with_policy(&bytes, policy).is_err()
+        );
+    }
 }
 
 #[test]
@@ -66,7 +150,7 @@ fn malformed_comment_is_recoverable_and_diagnostic() {
     let metadata = parse_png_metadata_from_bytes(&png).expect("valid png");
     assert_eq!(metadata.prompt.as_deref(), Some("fallback prompt"));
     assert!(
-        matches!(metadata.warnings.as_slice(), [PngMetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
+        matches!(metadata.warnings.as_slice(), [MetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
     );
 }
 
@@ -122,7 +206,7 @@ fn invalid_compressed_text_is_recoverable_and_diagnostic() {
     assert_eq!(metadata.prompt.as_deref(), Some("fallback prompt"));
     assert!(matches!(
         metadata.warnings.as_slice(),
-        [PngMetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "Comment"
+        [MetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "Comment"
     ));
 }
 
@@ -176,7 +260,7 @@ fn parse_vibe_chunks_extracts_naidata_and_direct_encoding() {
                 "name": "demo",
                 "encodings": {
                     "vibe": "QUJDREVGR0hJSktMTU5PUFFSU1Q=",
-                    "v4-5full": { "encoding": "R0hJSktMTU5PUFFSU1RVVldYWVo=" }
+                    "v4-5full": { "unknown": { "encoding": "R0hJSktMTU5PUFFSU1RVVldYWVo=" } }
                 },
                 "importInfo": {
                     "strength": 0.55,
@@ -207,7 +291,10 @@ fn parse_vibe_chunks_extracts_naidata_and_direct_encoding() {
         Some("QUJDREVGR0hJSktMTU5PUFFSU1Q=")
     );
     assert_eq!(
-        naidata.model_encodings.get("v4-5full"),
+        naidata
+            .model_encodings
+            .get("v4-5full")
+            .and_then(|records| records.get("unknown")),
         Some(&"R0hJSktMTU5PUFFSU1RVVldYWVo=".to_owned())
     );
     assert!(
@@ -255,11 +342,36 @@ fn extract_embedded_vibe_document_reads_naidata() {
 
 #[test]
 fn vibe_metadata_keeps_model_encodings_separate() {
-    let document = serde_json::json!({"encodings": {"v4-5full": {"encoding": "AQID"}}});
+    let document = serde_json::json!({"encodings": {"v4-5full": {"unknown": {"encoding": "AQID"}, "other-params": {"encoding":"BAUG"}}, "v4full": {"unknown":{"encoding":"BwgJ"}}}});
     let png = create_png_with_text_chunks(&[("naidata", &document.to_string())]);
     let metadata = parse_png_metadata_from_bytes(&png).unwrap();
     assert_eq!(metadata.vibe_entries[0].encoding, None);
-    assert_eq!(metadata.vibe_entries[0].model_encodings["v4-5full"], "AQID");
+    assert_eq!(
+        metadata.vibe_entries[0].model_encodings["v4-5full"]["unknown"],
+        "AQID"
+    );
+    assert_eq!(
+        metadata.vibe_entries[0].model_encodings["v4-5full"]["other-params"],
+        "BAUG"
+    );
+    assert_eq!(
+        metadata.vibe_entries[0].model_encodings["v4full"]["unknown"],
+        "BwgJ"
+    );
+}
+
+#[test]
+fn embedded_vibe_extraction_preserves_original_json_order_and_strings() {
+    let raw = r#"{ "identifier":"novelai-vibe-transfer", "encodings":{"z-last":{"z-params":{"encoding":" Q Q = = "}},"a-first":{"unknown":{"encoding":"BAUG"}}}, "version":1,"type":"encoding" }"#;
+    for text in [raw.to_owned(), STANDARD.encode(raw)] {
+        let bytes = create_png_with_text_chunks(&[("naidata", &text)]);
+        assert_eq!(
+            extract_embedded_vibe_document_from_png_bytes(&bytes)
+                .unwrap()
+                .as_deref(),
+            Some(raw)
+        );
+    }
 }
 
 #[test]
@@ -306,7 +418,7 @@ fn non_finite_and_unrepresentable_numeric_metadata_is_diagnostic() {
         metadata
             .warnings
             .iter()
-            .filter(|warning| matches!(warning, PngMetadataWarning::InvalidNumericValue { .. }))
+            .filter(|warning| matches!(warning, MetadataWarning::InvalidNumericValue { .. }))
             .count(),
         3
     );
@@ -320,7 +432,7 @@ fn non_finite_and_unrepresentable_numeric_metadata_is_diagnostic() {
     assert_eq!(metadata.scale, None);
     assert!(matches!(
         metadata.warnings.as_slice(),
-        [PngMetadataWarning::InvalidNumericValue {
+        [MetadataWarning::InvalidNumericValue {
             field: super::MetadataField::Scale,
             ..
         }]
@@ -354,7 +466,7 @@ fn inspection_keeps_the_complete_failure_chain() {
     let bytes = create_png_with_text_chunks(&[("Comment", r#""{broken""#)]);
     let parsed = parse_png_metadata_from_bytes(&bytes).unwrap();
     assert!(
-        matches!(parsed.warnings.as_slice(), [PngMetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
+        matches!(parsed.warnings.as_slice(), [MetadataWarning::InvalidCommentJson { message }] if message.contains("line 1"))
     );
 }
 
@@ -430,7 +542,7 @@ fn compressed_latin1_expansion_is_recoverable_and_does_not_consume_text_budget()
     assert_eq!(parsed.text_chunks["extra"], ["x"]);
     assert!(!parsed.text_chunks.contains_key("oversize"));
     assert!(
-        matches!(parsed.warnings.as_slice(), [PngMetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "oversize")
+        matches!(parsed.warnings.as_slice(), [MetadataWarning::InvalidTextChunk { keyword, .. }] if keyword == "oversize")
     );
 }
 

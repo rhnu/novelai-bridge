@@ -37,6 +37,9 @@ pub struct GenerationCore {
     pub furry_mode: bool,
     /// Built-in UC preset merged into the negative prompt.
     pub uc_preset: UcPreset,
+    /// Selects V4's legacy negative-conditioning behavior.
+    #[serde(default)]
+    pub legacy_uc: bool,
 }
 
 impl std::fmt::Debug for GenerationCore {
@@ -50,6 +53,7 @@ impl std::fmt::Debug for GenerationCore {
             .field("transparent_background", &self.transparent_background)
             .field("furry_mode", &self.furry_mode)
             .field("uc_preset", &self.uc_preset)
+            .field("legacy_uc", &self.legacy_uc)
             .finish_non_exhaustive()
     }
 }
@@ -70,6 +74,7 @@ impl GenerationCore {
             transparent_background: false,
             furry_mode: false,
             uc_preset: defaults.uc_preset,
+            legacy_uc: false,
         }
     }
 }

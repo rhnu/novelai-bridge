@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use super::PngMetadataWarning;
+mod write;
+pub use write::{PngTextEntry, write_png_text_chunks, write_png_text_chunks_with_policy};
+
+use super::MetadataWarning;
 use crate::{
     BridgeError, MetadataError, RequestField,
     media_policy::{ImageDecodePolicy, ImageLimit},
@@ -8,7 +11,7 @@ use crate::{
 
 pub struct ExtractedPngText {
     pub(super) text_chunks: BTreeMap<String, Vec<String>>,
-    pub(super) warnings: Vec<PngMetadataWarning>,
+    pub(super) warnings: Vec<MetadataWarning>,
     pub usage: crate::media_policy::ImageResourceUsage,
     pub pixels: Option<PngPixels>,
 }
@@ -116,7 +119,7 @@ pub fn extract_png_text_chunks(
 
 fn decode_compressed_text_chunk<T>(
     chunks: &mut BTreeMap<String, Vec<String>>,
-    warnings: &mut Vec<PngMetadataWarning>,
+    warnings: &mut Vec<MetadataWarning>,
     keyword: &str,
     mut chunk: T,
     total: &mut usize,
@@ -130,12 +133,12 @@ fn decode_compressed_text_chunk<T>(
     match chunk.decode_text(limit) {
         Ok(text) => match account_text(text.len(), total, maximum, policy) {
             Ok(()) => push_text_chunk(chunks, keyword, text.as_str()),
-            Err(error) => warnings.push(PngMetadataWarning::InvalidTextChunk {
+            Err(error) => warnings.push(MetadataWarning::InvalidTextChunk {
                 keyword: keyword.to_owned(),
                 message: super::format_error_chain(&error),
             }),
         },
-        Err(error) => warnings.push(PngMetadataWarning::InvalidTextChunk {
+        Err(error) => warnings.push(MetadataWarning::InvalidTextChunk {
             keyword: keyword.to_owned(),
             message: error.to_string(),
         }),
@@ -214,7 +217,16 @@ fn preflight_chunks(bytes: &[u8], policy: ImageDecodePolicy) -> Result<(), Bridg
                     account_text(text.len(), &mut total, &mut maximum, policy)?;
                 }
             },
-            b"IEND" => break,
+            b"IEND" => {
+                if end != bytes.len() {
+                    return Err(invalid_png_payload(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "data follows the PNG end chunk",
+                    ))
+                    .into());
+                }
+                break;
+            },
             _ => {},
         }
         position = end;

@@ -1,5 +1,5 @@
 use super::{
-    PngMetadata, PngMetadataWarning,
+    ImageMetadata, MetadataWarning,
     png::first_chunk_value_ci,
     value::{
         extract_first_f32, extract_non_empty_string, extract_v4_character_prompts,
@@ -18,7 +18,7 @@ const SCALE_KEYS: &[&str] = &[
     "cfgScale",
 ];
 
-pub(super) fn parse_comment_payload(parsed: &mut PngMetadata) {
+pub(super) fn parse_comment_payload(parsed: &mut ImageMetadata) {
     let Some(comment) = first_chunk_value_ci(&parsed.text_chunks, KEY_COMMENT) else {
         return;
     };
@@ -33,11 +33,9 @@ pub(super) fn parse_comment_payload(parsed: &mut PngMetadata) {
     };
     let Some(payload) = payload else {
         if !comment.trim().is_empty() {
-            parsed
-                .warnings
-                .push(PngMetadataWarning::InvalidCommentJson {
-                    message: failure.expect("an absent payload has an interpretation diagnostic"),
-                });
+            parsed.warnings.push(MetadataWarning::InvalidCommentJson {
+                message: failure.expect("an absent payload has an interpretation diagnostic"),
+            });
         }
         return;
     };

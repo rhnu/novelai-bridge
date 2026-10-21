@@ -1,15 +1,18 @@
-//! PNG validation, metadata formats and interpretation precedence.
+//! Image validation, metadata carriers and interpretation precedence.
+mod exif;
 mod novelai;
 pub mod png;
+mod read;
+mod stealth;
 mod types;
 mod value;
 mod vibe;
 mod webui;
 
-use png::{extract_png_text_chunks, first_chunk_value_ci};
+use png::first_chunk_value_ci;
 pub use types::{
-    CharacterMetadata, GeneratedImageMetadata, MetadataField, PngMetadata, PngMetadataWarning,
-    VibeMetadataEntry, VibeMetadataSource,
+    CharacterMetadata, GeneratedImageMetadata, ImageMetadata, MetadataField, MetadataOrigin,
+    MetadataWarning, VibeMetadataEntry, VibeMetadataSource,
 };
 
 use crate::{BridgeError, RequestField, media_policy::ImageDecodePolicy};
@@ -22,7 +25,7 @@ const KEY_SOFTWARE: &str = "Software";
 ///
 /// Returns [`BridgeError`] when the payload is empty, invalid base64/data URL input, or not a
 /// valid PNG payload.
-pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, BridgeError> {
+pub fn parse_png_metadata_from_payload(image: &str) -> Result<ImageMetadata, BridgeError> {
     let decoded = crate::payload::decode_image(
         RequestField::MetadataImage,
         image,
@@ -36,7 +39,7 @@ pub fn parse_png_metadata_from_payload(image: &str) -> Result<PngMetadata, Bridg
 /// # Errors
 ///
 /// Returns [`BridgeError`] when `bytes` cannot be decoded as a PNG payload.
-pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, BridgeError> {
+pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<ImageMetadata, BridgeError> {
     parse_png_metadata_from_bytes_with_policy(bytes, ImageDecodePolicy::default())
 }
 
@@ -47,18 +50,50 @@ pub fn parse_png_metadata_from_bytes(bytes: &[u8]) -> Result<PngMetadata, Bridge
 pub fn parse_png_metadata_from_bytes_with_policy(
     bytes: &[u8],
     policy: ImageDecodePolicy,
-) -> Result<PngMetadata, BridgeError> {
-    Ok(interpret_png_text(extract_png_text_chunks(
-        bytes, policy, false,
-    )?))
+) -> Result<ImageMetadata, BridgeError> {
+    read::parse_png(bytes, policy)
 }
 
-pub fn interpret_png_text(extracted: png::ExtractedPngText) -> PngMetadata {
-    let mut parsed = PngMetadata {
-        source: first_chunk_value_ci(&extracted.text_chunks, KEY_SOURCE).map(str::to_owned),
-        software: first_chunk_value_ci(&extracted.text_chunks, KEY_SOFTWARE).map(str::to_owned),
-        text_chunks: extracted.text_chunks,
-        warnings: extracted.warnings,
+/// Parses PNG, JPEG or WebP metadata after validating the complete supported media.
+///
+/// # Errors
+/// Returns media validation or resource-budget failures. Invalid metadata is reported as warnings.
+pub fn parse_image_metadata_from_bytes(bytes: &[u8]) -> Result<ImageMetadata, BridgeError> {
+    parse_image_metadata_from_bytes_with_policy(bytes, ImageDecodePolicy::default())
+}
+
+/// Parses supported image metadata within explicit media and metadata budgets.
+///
+/// # Errors
+/// Returns media validation or resource-budget failures.
+pub fn parse_image_metadata_from_bytes_with_policy(
+    bytes: &[u8],
+    policy: ImageDecodePolicy,
+) -> Result<ImageMetadata, BridgeError> {
+    read::parse_image(bytes, policy)
+}
+
+pub use read::from_decoded as interpret_decoded_image;
+
+pub fn interpret_png_text(extracted: png::ExtractedPngText) -> ImageMetadata {
+    interpret_text_entries(
+        extracted.text_chunks,
+        extracted.warnings,
+        MetadataOrigin::PngText,
+    )
+}
+
+pub fn interpret_text_entries(
+    text_chunks: std::collections::BTreeMap<String, Vec<String>>,
+    warnings: Vec<MetadataWarning>,
+    origin: MetadataOrigin,
+) -> ImageMetadata {
+    let mut parsed = ImageMetadata {
+        origin: (!text_chunks.is_empty()).then_some(origin),
+        source: first_chunk_value_ci(&text_chunks, KEY_SOURCE).map(str::to_owned),
+        software: first_chunk_value_ci(&text_chunks, KEY_SOFTWARE).map(str::to_owned),
+        text_chunks,
+        warnings,
         ..Default::default()
     };
 
@@ -68,6 +103,7 @@ pub fn interpret_png_text(extracted: png::ExtractedPngText) -> PngMetadata {
 
     if parsed.prompt.is_none() {
         parsed.prompt = first_chunk_value_ci(&parsed.text_chunks, "prompt")
+            .or_else(|| first_chunk_value_ci(&parsed.text_chunks, "Description"))
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_owned);
@@ -85,21 +121,32 @@ pub fn interpret_png_text(extracted: png::ExtractedPngText) -> PngMetadata {
 
 /// Inspects a generated image without promoting metadata problems to generation failures.
 ///
-/// PNG payloads are parsed with [`parse_png_metadata_from_bytes`]. Non-PNG payloads are reported
-/// as [`GeneratedImageMetadata::UnsupportedFormat`]. A supplied MIME type is treated as a hint;
-/// the PNG signature is also recognized.
+/// Text, Exif and stealth metadata carriers are inspected in that order within each image.
+/// A supplied MIME type is only a hint; recognized media is always validated first.
 #[must_use]
 pub fn inspect_generated_image_metadata(
     bytes: &[u8],
     mime_type: Option<&str>,
 ) -> GeneratedImageMetadata {
-    let is_png = bytes.starts_with(&[0x89, b'P', b'N', b'G'])
-        || mime_type.is_some_and(|value| value.eq_ignore_ascii_case("image/png"));
-    if !is_png {
+    let supported = matches!(
+        image::guess_format(bytes),
+        Ok(image::ImageFormat::Png | image::ImageFormat::Jpeg | image::ImageFormat::WebP)
+    ) || mime_type.is_some_and(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "image/png" | "image/jpeg" | "image/webp"
+        )
+    });
+    if !supported {
         return GeneratedImageMetadata::UnsupportedFormat;
     }
 
-    match parse_png_metadata_from_bytes(bytes) {
+    let parsed = if mime_type.is_some_and(|value| value.eq_ignore_ascii_case("image/png")) {
+        parse_png_metadata_from_bytes(bytes)
+    } else {
+        parse_image_metadata_from_bytes(bytes)
+    };
+    match parsed {
         Ok(metadata) if metadata.is_empty() => GeneratedImageMetadata::NotPresent,
         Ok(metadata) => GeneratedImageMetadata::Parsed(Box::new(metadata)),
         Err(error) => GeneratedImageMetadata::Invalid {
@@ -129,5 +176,7 @@ pub fn extract_embedded_vibe_document_from_png_bytes(
     vibe::extract_document(bytes)
 }
 
+#[cfg(test)]
+pub mod test_support;
 #[cfg(test)]
 mod tests;

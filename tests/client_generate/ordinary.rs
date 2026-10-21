@@ -228,6 +228,6 @@ async fn generate_keeps_images_when_metadata_is_missing_or_invalid() {
     assert!(matches!(
         result.images[1].metadata(),
         GeneratedImageMetadata::Parsed(metadata)
-            if metadata.warnings.iter().any(|warning| matches!(warning, novelai_bridge::PngMetadataWarning::InvalidCommentJson { .. }))
+            if metadata.warnings.iter().any(|warning| matches!(warning, novelai_bridge::MetadataWarning::InvalidCommentJson { .. }))
     ));
 }

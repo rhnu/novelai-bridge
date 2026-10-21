@@ -7,7 +7,7 @@ use crate::media_policy::{ImageDecodePolicy, ImageLimit, ImageResourceUsage};
 
 pub(super) type CodecError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(super) struct DecodedImage {
+pub struct DecodedImage {
     pub pixels: DynamicImage,
     pub usage: ImageResourceUsage,
 }
@@ -71,7 +71,7 @@ impl std::io::Seek for BoundedWriter {
 }
 
 /// The common input/prepared-image decoder applies budgets before allocating full pixels.
-pub(super) fn decode(bytes: &[u8], policy: ImageDecodePolicy) -> Result<DecodedImage, CodecError> {
+pub fn decode(bytes: &[u8], policy: ImageDecodePolicy) -> Result<DecodedImage, CodecError> {
     policy.check(ImageLimit::EncodedBytes, bytes.len() as u64)?;
     let raw_format = image::guess_format(bytes)?;
     let format = ImageMediaFormat::from_image_format(raw_format)

@@ -41,6 +41,8 @@ getrandom = { version = "0.4.3", features = ["std"] }
 httpdate = "1.0.3"
 hmac = "0.13.0"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+indexmap = { version = "2.14.2", features = ["serde"] }
+kamadak-exif = "0.6.1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 novelai-bridge = { path = ".", version = "0.6.0" }
@@ -65,7 +67,7 @@ async-trait.workspace = true
 base64.workspace = true
 eventsource-stream.workspace = true
 fancy-regex = { workspace = true, optional = true }
-flate2 = { workspace = true, optional = true }
+flate2.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 form_urlencoded.workspace = true
@@ -73,6 +75,8 @@ getrandom.workspace = true
 httpdate.workspace = true
 hmac.workspace = true
 image.workspace = true
+indexmap.workspace = true
+kamadak-exif.workspace = true
 tracing.workspace = true
 novelai-bridge-tokenizer-assets = { workspace = true, optional = true }
 png.workspace = true
@@ -89,7 +93,6 @@ zip.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-sha2.workspace = true
 tokio.workspace = true
 
 [[test]]
@@ -100,6 +103,6 @@ default = ["reqwest-transport", "tokenizer"]
 # Optional authenticated HTTP adapter; custom transports use the complete core API.
 reqwest-transport = ["dep:reqwest", "dep:secrecy"]
 # Local CLIP, T5 and Qwen encoding without embedded assets.
-tokenizer = ["dep:fancy-regex", "dep:unicode-normalization", "dep:flate2"]
+tokenizer = ["dep:fancy-regex", "dep:unicode-normalization"]
 # Pinned embedded tokenizer assets remain opt-in.
 bundled-assets = ["tokenizer", "dep:novelai-bridge-tokenizer-assets"]

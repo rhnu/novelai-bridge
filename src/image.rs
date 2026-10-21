@@ -5,6 +5,7 @@ mod input;
 mod output;
 mod preparation;
 mod response;
+pub use codec::{DecodedImage, decode as decode_validated_image};
 pub use input::EncodedImage;
 pub use output::{GeneratedImage, GeneratedImageSource, ImageMediaFormat};
 pub use preparation::{

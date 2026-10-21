@@ -2,6 +2,13 @@
 mod encoding;
 pub use encoding::VibeEncoding;
 
+mod document;
+pub use document::{
+    VibeBundle, VibeDocument, VibeDocumentError, VibeDocumentLimits, VibeDocumentResource,
+    VibeEncodingParams, VibeEncodingRecord, VibeFile, VibeFileKind, VibeImportInfo,
+};
+
+mod png;
 mod prepare;
 mod reference;
 mod request;

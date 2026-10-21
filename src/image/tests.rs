@@ -630,7 +630,7 @@ fn palette_png_is_expanded_and_non_png_formats_share_the_format_mapping() {
         assert_eq!(generated.mime_type(), expected.mime_type());
         assert!(matches!(
             generated.metadata(),
-            GeneratedImageMetadata::UnsupportedFormat
+            GeneratedImageMetadata::NotPresent
         ));
     }
 }

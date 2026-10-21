@@ -82,7 +82,11 @@ pub(in crate::generation) fn build_generate_request(
         use_new_shared_trial: true,
         parameters: ImageParameters {
             common,
-            conditioning: conditioning(normalized.resolved_prompts(), descriptor),
+            conditioning: conditioning(
+                normalized.resolved_prompts(),
+                descriptor,
+                params.core.legacy_uc,
+            ),
             operation: prepare_operation(normalized, resolved_seed, preprocessor)?,
             capabilities,
             references: prepare_references(params.references.as_ref(), preprocessor)?,
@@ -98,6 +102,7 @@ pub(in crate::generation) fn build_generate_request(
 fn conditioning(
     resolved: &ResolvedPrompts,
     descriptor: &ModelDescriptor,
+    legacy_uc: bool,
 ) -> ConditioningParameters {
     if descriptor.wire().uses_structured_prompt() {
         ConditioningParameters::Structured {
@@ -111,6 +116,7 @@ fn conditioning(
                 use_order: true,
             },
             v4_negative_prompt: NegativeCondition {
+                legacy_uc,
                 caption: V4Caption {
                     base_caption: resolved.negative_prompt.clone(),
                     char_captions: build_character_captions(&resolved.characters, true),

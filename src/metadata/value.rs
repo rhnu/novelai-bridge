@@ -117,10 +117,10 @@ pub(super) fn value_to_f32(value: &Value) -> Option<f32> {
 pub(super) fn numeric_diagnostic(
     value: &Value,
     field: super::MetadataField,
-    warnings: &mut Vec<super::PngMetadataWarning>,
+    warnings: &mut Vec<super::MetadataWarning>,
 ) {
     if !value.is_null() && value_to_f32(value).is_none() {
-        warnings.push(super::PngMetadataWarning::InvalidNumericValue {
+        warnings.push(super::MetadataWarning::InvalidNumericValue {
             field,
             message: "value is not a finite representable f32".to_owned(),
         });

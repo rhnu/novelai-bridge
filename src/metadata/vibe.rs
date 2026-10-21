@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
 
 use super::{
-    PngMetadata, VibeMetadataEntry, VibeMetadataSource,
+    ImageMetadata, VibeMetadataEntry, VibeMetadataSource,
     png::{chunk_values_ci, extract_png_text_chunks},
     value::{
         extract_non_empty_string, has_non_empty_value, numeric_diagnostic, parse_json_payload,
@@ -18,7 +18,7 @@ const KEY_LEGACY_VIBE: &str = "naiv4vibe";
 const OFFICIAL_VIBE_IDENTIFIER: &str = "novelai-vibe-transfer";
 const OFFICIAL_VIBE_BUNDLE_IDENTIFIER: &str = "novelai-vibe-transfer-bundle";
 
-pub(super) fn parse_vibe_chunks(parsed: &mut PngMetadata) {
+pub(super) fn parse_vibe_chunks(parsed: &mut ImageMetadata) {
     for raw in chunk_values_ci(&parsed.text_chunks, KEY_VIBE_ENCODING) {
         let Some(compact) = validated_encoding(raw) else {
             continue;
@@ -90,7 +90,7 @@ fn push_vibe_entries(
 pub(super) fn push_reference_vibe_entries(
     payload: &Map<String, Value>,
     output: &mut Vec<VibeMetadataEntry>,
-    warnings: &mut Vec<super::PngMetadataWarning>,
+    warnings: &mut Vec<super::MetadataWarning>,
 ) {
     for (key, field) in [
         (
@@ -142,7 +142,7 @@ pub(super) fn push_reference_vibe_entries(
     }
 }
 
-fn diagnose_vibe_numbers(value: &Value, warnings: &mut Vec<super::PngMetadataWarning>) {
+fn diagnose_vibe_numbers(value: &Value, warnings: &mut Vec<super::MetadataWarning>) {
     if let Some(object) = value.as_object() {
         for key in [
             "strength",
@@ -199,24 +199,31 @@ fn parse_vibe_map(
             .and_then(|value| validated_encoding(&value));
 
     if let Some(encodings) = object.get("encodings").and_then(Value::as_object) {
-        for (key, value) in encodings {
-            let candidate = value
-                .as_str()
-                .map(str::to_owned)
-                .or_else(|| {
-                    value
-                        .as_object()
-                        .and_then(|item| item.get("encoding"))
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                })
-                .and_then(|value| validated_encoding(&value));
-            if let Some(candidate) = candidate {
-                model_encodings.insert(key.to_owned(), candidate);
+        for (model_key, parameters) in encodings {
+            let Some(parameters) = parameters.as_object() else {
+                continue;
+            };
+            let mut records = BTreeMap::new();
+            for (parameter_key, record) in parameters {
+                if let Some(candidate) = record
+                    .as_object()
+                    .and_then(|record| record.get("encoding"))
+                    .and_then(Value::as_str)
+                    .and_then(validated_encoding)
+                {
+                    records.insert(parameter_key.to_owned(), candidate);
+                }
+            }
+            if !records.is_empty() {
+                model_encodings.insert(model_key.to_owned(), records);
             }
         }
+        // Keep the existing legacy primary-payload read separate from official cache rows.
         if encoding.is_none() {
-            encoding = model_encodings.get("vibe").cloned();
+            encoding = encodings
+                .get("vibe")
+                .and_then(Value::as_str)
+                .and_then(validated_encoding);
         }
     }
 
@@ -272,7 +279,7 @@ pub(super) fn extract_document(bytes: &[u8]) -> Result<Option<String>, BridgeErr
         false,
     )?;
     for raw in chunk_values_ci(&extracted.text_chunks, KEY_NAIDATA) {
-        let Some(payload) = parse_json_or_base64_json(raw) else {
+        let Some((text, payload)) = document_text(raw) else {
             continue;
         };
         let Some(identifier) = payload
@@ -285,8 +292,19 @@ pub(super) fn extract_document(bytes: &[u8]) -> Result<Option<String>, BridgeErr
         if identifier != OFFICIAL_VIBE_IDENTIFIER && identifier != OFFICIAL_VIBE_BUNDLE_IDENTIFIER {
             continue;
         }
-        let serialized = payload.to_string();
-        return Ok(Some(serialized));
+        return Ok(Some(text));
     }
     Ok(None)
+}
+
+fn document_text(raw: &str) -> Option<(String, Value)> {
+    if let Ok(payload) = serde_json::from_str::<Value>(raw)
+        && payload.is_object()
+    {
+        return Some((raw.to_owned(), payload));
+    }
+    let bytes = crate::payload::decode_base64(RequestField::MetadataVibe, raw).ok()?;
+    let text = String::from_utf8(bytes).ok()?;
+    let payload = serde_json::from_str::<Value>(&text).ok()?;
+    payload.is_object().then_some((text, payload))
 }

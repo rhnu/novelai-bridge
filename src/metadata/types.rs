@@ -3,6 +3,15 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// The selected metadata carrier. Generation settings never merge across carriers.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MetadataOrigin {
+    PngText,
+    ExifUserComment,
+    StealthPngComp,
+}
+
 /// Indicates where a vibe metadata entry was recovered from.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VibeMetadataSource {
@@ -25,8 +34,8 @@ pub struct VibeMetadataEntry {
     pub display_name: Option<String>,
     /// Primary base64-encoded vibe payload when available.
     pub encoding: Option<String>,
-    /// Additional model-specific encodings keyed by model identifier.
-    pub model_encodings: BTreeMap<String, String>,
+    /// Encodings keyed by model identifier, then by the encoding-parameter cache key.
+    pub model_encodings: BTreeMap<String, BTreeMap<String, String>>,
     /// Optional strength value associated with the vibe.
     pub strength: Option<f32>,
     /// Optional information-extracted value associated with the vibe.
@@ -46,10 +55,15 @@ impl std::fmt::Debug for VibeMetadataEntry {
     }
 }
 
-/// Recoverable issue encountered while interpreting PNG text metadata.
+/// Recoverable issue encountered while interpreting image metadata.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum PngMetadataWarning {
+pub enum MetadataWarning {
+    /// A recognized carrier could not be decoded within its metadata budget.
+    InvalidCarrier {
+        origin: MetadataOrigin,
+        message: String,
+    },
     /// A non-empty `Comment` text chunk was present but was not valid supported JSON.
     InvalidCommentJson {
         /// Complete parser diagnostic without retaining the comment payload.
@@ -87,9 +101,11 @@ pub struct CharacterMetadata {
     pub negative_prompt: Option<String>,
 }
 
-/// Parsed metadata recovered from a PNG image payload.
+/// Parsed metadata recovered from one image metadata carrier.
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct PngMetadata {
+pub struct ImageMetadata {
+    /// Carrier selected by PNG text, Exif, then stealth precedence.
+    pub origin: Option<MetadataOrigin>,
     /// Prompt text when present.
     pub prompt: Option<String>,
     /// Negative prompt text when present.
@@ -124,18 +140,19 @@ pub struct PngMetadata {
     pub characters: Vec<CharacterMetadata>,
     /// Recovered vibe metadata entries.
     pub vibe_entries: Vec<VibeMetadataEntry>,
-    /// All text chunks grouped by key.
+    /// Selected carrier entries grouped by key; Exif and stealth JSON use the same keys.
     pub text_chunks: BTreeMap<String, Vec<String>>,
     /// Parsed JSON payload from the `Comment` chunk when available.
     pub raw_comment_json: Option<Value>,
     /// Recoverable interpretation issues; successfully decoded text chunks remain available.
-    pub warnings: Vec<PngMetadataWarning>,
+    pub warnings: Vec<MetadataWarning>,
 }
 
-impl std::fmt::Debug for PngMetadata {
+impl std::fmt::Debug for ImageMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PngMetadata")
+        f.debug_struct("ImageMetadata")
             .field("has_generation_data", &self.has_generation_data())
+            .field("origin", &self.origin)
             .field("characters", &self.characters.len())
             .field("vibe_entries", &self.vibe_entries.len())
             .field("text_chunk_keys", &self.text_chunks.len())
@@ -144,10 +161,16 @@ impl std::fmt::Debug for PngMetadata {
     }
 }
 
-impl PngMetadata {
-    /// Returns whether the PNG contained no decoded text chunks or text diagnostics.
+impl ImageMetadata {
+    /// Returns whether no metadata carrier or interpretation diagnostics were recovered.
     #[must_use]
-    pub fn is_empty(&self) -> bool { self.text_chunks.is_empty() && self.warnings.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.origin.is_none()
+            && self.text_chunks.is_empty()
+            && self.warnings.is_empty()
+            && !self.has_generation_data()
+            && self.vibe_entries.is_empty()
+    }
 
     /// Returns whether at least one recognized generation setting was recovered.
     #[must_use]
@@ -173,13 +196,13 @@ impl PngMetadata {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "status", content = "value", rename_all = "snake_case")]
 pub enum GeneratedImageMetadata {
-    /// PNG metadata was parsed successfully.
-    Parsed(Box<PngMetadata>),
-    /// The payload is a valid PNG but contains no text metadata.
+    /// Image metadata was parsed successfully.
+    Parsed(Box<ImageMetadata>),
+    /// The image is valid but contains no supported metadata carrier.
     NotPresent,
-    /// The image format does not use the supported `NovelAI` PNG metadata representation.
+    /// The image format is not supported by the metadata reader.
     UnsupportedFormat,
-    /// The payload looked like PNG data but its metadata could not be decoded.
+    /// The payload looked like a supported image but failed media validation.
     Invalid {
         /// Human-readable parser diagnostic.
         message: String,
@@ -187,9 +210,9 @@ pub enum GeneratedImageMetadata {
 }
 
 impl GeneratedImageMetadata {
-    /// Returns parsed PNG metadata when available.
+    /// Returns parsed image metadata when available.
     #[must_use]
-    pub fn parsed(&self) -> Option<&PngMetadata> {
+    pub fn parsed(&self) -> Option<&ImageMetadata> {
         match self {
             Self::Parsed(metadata) => Some(metadata.as_ref()),
             Self::NotPresent | Self::UnsupportedFormat | Self::Invalid { .. } => None,

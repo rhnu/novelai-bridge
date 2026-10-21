@@ -1,7 +1,7 @@
 # novelai-bridge
 
 A Rust client for NovelAI image generation, including streaming, image-to-image, inpainting,
-Director Tools and Vibe Transfer. It also provides local tokenization, PNG metadata parsing and
+Director Tools and Vibe Transfer. It also provides local tokenization, image metadata parsing and
 Anlas cost estimates.
 
 Supports the Diffusion V3, V4, V4.5 and V5 families. The default model is V5 Full;
@@ -154,6 +154,24 @@ zero blur as defaults. It returns all images through `UpscaleImageResult::images
 support English and Japanese and return suggestions in provider order without generating images.
 `SuggestTagsResult` retains English tag/count/confidence records or Japanese/English translation
 pairs and their `power` ranking as separate variants.
+
+## Local files and metadata
+
+`VibeDocument::from_json` and `to_json` read and write official `.naiv4vibe` and
+`.naiv4vibebundle` files without network access. They preserve original payload strings and
+ordered model/parameter encoding caches, validate the file's SHA-256 identity and apply explicit
+`VibeDocumentLimits`. `VibeFile::encoding(model_key, parameter_key)` selects an existing encoding;
+missing data returns `None` and never starts a paid encoding operation.
+
+Use `VibeDocument::from_png` or `embed_in_png` for official `naidata` embedding. Generic
+`write_png_text_chunks` replaces selected text without changing pixel data or unrelated chunks.
+These operations validate the complete PNG and enforce text and output byte budgets.
+
+`parse_image_metadata_from_bytes` reads PNG, JPEG and WebP into `ImageMetadata`. It selects one
+carrier in order: PNG text, EXIF UserComment, then supported 8-bit alpha `stealth_pngcomp` metadata.
+`MetadataOrigin` identifies the selected carrier; generation fields are never mixed across carriers.
+Malformed metadata produces warnings while malformed image data is rejected. PNG-specific entry
+points remain available. `ImageMetadata` and `MetadataWarning` replace the former PNG-only names.
 
 ## Tokenization and cost estimates
 

@@ -46,6 +46,7 @@ pub(super) struct PositiveCondition {
 #[derive(Serialize)]
 pub(super) struct NegativeCondition {
     caption: V4Caption,
+    legacy_uc: bool,
 }
 
 #[derive(Serialize)]

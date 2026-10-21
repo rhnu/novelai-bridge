@@ -18,6 +18,64 @@ fn payload(
 }
 
 #[test]
+fn legacy_uc_is_a_v4_negative_condition_option_with_typed_model_gating() {
+    for model in Model::ALL {
+        let request = GenerateImageRequest::builder("cat", model)
+            .seed(42)
+            .legacy_uc(true)
+            .build();
+        let supported = matches!(
+            model,
+            Model::NaiDiffusion4Full | Model::NaiDiffusion4Curated
+        );
+        assert_eq!(model.descriptor().prompt().legacy_uc, supported);
+        let strict = request
+            .clone()
+            .normalize_with(crate::ValidationPolicy::Reject);
+        if supported {
+            for inpaint in [false, true] {
+                let mut request = request.clone();
+                if inpaint {
+                    request.operation =
+                        GenerationInput::Inpainting(InpaintingInput::new(image(), image()));
+                }
+                let prepared = request
+                    .normalize_with(crate::ValidationPolicy::Reject)
+                    .unwrap()
+                    .prepare()
+                    .unwrap();
+                let body = payload(&prepared, GenerationDelivery::Images);
+                assert_eq!(body["parameters"]["v4_negative_prompt"]["legacy_uc"], true);
+                assert!(body["parameters"].get("legacy_uc").is_none());
+            }
+            assert!(strict.is_ok());
+        } else {
+            assert!(
+                matches!(strict, Err(BridgeError::InvalidRequest(crate::InvalidRequest::UnsupportedModelFeature { feature, .. })) if feature == crate::GenerationField::LegacyUc.into())
+            );
+            let plan = request.normalize().unwrap();
+            assert!(!plan.request().core.legacy_uc);
+            assert!(
+                plan.diagnostics()
+                    .iter()
+                    .any(|item| item.field == crate::GenerationField::LegacyUc)
+            );
+        }
+    }
+    let prepared = GenerateImageRequest::builder("cat", Model::NaiDiffusion4Full)
+        .seed(42)
+        .build()
+        .normalize()
+        .unwrap()
+        .prepare()
+        .unwrap();
+    assert_eq!(
+        payload(&prepared, GenerationDelivery::Images)["parameters"]["v4_negative_prompt"]["legacy_uc"],
+        false
+    );
+}
+
+#[test]
 fn one_preparation_reuses_images_and_seed_for_both_deliveries() {
     #[derive(Default)]
     struct Counter(AtomicUsize);

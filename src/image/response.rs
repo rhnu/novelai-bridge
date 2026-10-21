@@ -153,18 +153,22 @@ pub fn validated_generated_image(
         ));
     }
     let metadata = if format == ImageMediaFormat::Png {
-        let report = crate::metadata::png::extract_png_text_chunks(&bytes, policy, false)
+        let parsed = crate::metadata::parse_png_metadata_from_bytes_with_policy(&bytes, policy)
             .map_err(response_error)?;
-        let parsed = crate::metadata::interpret_png_text(report);
         if parsed.is_empty() {
             GeneratedImageMetadata::NotPresent
         } else {
             GeneratedImageMetadata::Parsed(Box::new(parsed))
         }
     } else {
-        super::codec::decode(&bytes, policy)
+        let decoded = super::codec::decode(&bytes, policy)
             .map_err(|source| DecodeError::new(DecodeTarget::ImageResponse, source))?;
-        GeneratedImageMetadata::UnsupportedFormat
+        let parsed = crate::metadata::interpret_decoded_image(&bytes, &decoded, policy);
+        if parsed.is_empty() {
+            GeneratedImageMetadata::NotPresent
+        } else {
+            GeneratedImageMetadata::Parsed(Box::new(parsed))
+        }
     };
     Ok(GeneratedImage {
         bytes,

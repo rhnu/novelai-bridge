@@ -56,10 +56,13 @@ pub use image::{
 };
 pub use media_policy::{ImageDecodePolicy, ImageLimit, ImagePolicyError};
 pub use metadata::{
-    CharacterMetadata, GeneratedImageMetadata, MetadataField, PngMetadata, PngMetadataWarning,
-    VibeMetadataEntry, VibeMetadataSource, extract_embedded_vibe_document_from_png_bytes,
-    inspect_generated_image_metadata, parse_png_metadata_from_bytes,
-    parse_png_metadata_from_bytes_with_policy, parse_png_metadata_from_payload,
+    CharacterMetadata, GeneratedImageMetadata, ImageMetadata, MetadataField, MetadataOrigin,
+    MetadataWarning, VibeMetadataEntry, VibeMetadataSource,
+    extract_embedded_vibe_document_from_png_bytes, inspect_generated_image_metadata,
+    parse_image_metadata_from_bytes, parse_image_metadata_from_bytes_with_policy,
+    parse_png_metadata_from_bytes, parse_png_metadata_from_bytes_with_policy,
+    parse_png_metadata_from_payload,
+    png::{PngTextEntry, write_png_text_chunks, write_png_text_chunks_with_policy},
 };
 pub use model::{
     CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
@@ -109,6 +112,7 @@ pub use upscale::{
 };
 pub use validation::{ValidationAdjustment, ValidationPolicy};
 pub use vibe::{
-    EncodeVibeRequest, PreparedVibe, VibeEncoding, VibeReference, VibeReferenceInput,
-    VibeTransferConfig,
+    EncodeVibeRequest, PreparedVibe, VibeBundle, VibeDocument, VibeDocumentError,
+    VibeDocumentLimits, VibeDocumentResource, VibeEncoding, VibeEncodingParams, VibeEncodingRecord,
+    VibeFile, VibeFileKind, VibeImportInfo, VibeReference, VibeReferenceInput, VibeTransferConfig,
 };

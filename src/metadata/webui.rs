@@ -1,4 +1,4 @@
-use super::{PngMetadata, png::first_chunk_value_ci, value::non_empty_string};
+use super::{ImageMetadata, png::first_chunk_value_ci, value::non_empty_string};
 const KEY_PARAMETERS: &str = "parameters";
 
 #[derive(Default)]
@@ -14,7 +14,7 @@ struct ParameterFallback {
     model: Option<String>,
 }
 
-pub(super) fn parse_parameters_payload(parsed: &mut PngMetadata) {
+pub(super) fn parse_parameters_payload(parsed: &mut ImageMetadata) {
     let Some(parameters) = first_chunk_value_ci(&parsed.text_chunks, KEY_PARAMETERS) else {
         return;
     };
@@ -33,7 +33,7 @@ pub(super) fn parse_parameters_payload(parsed: &mut PngMetadata) {
 
 fn parse_webui_parameters(
     input: &str,
-    warnings: &mut Vec<super::PngMetadataWarning>,
+    warnings: &mut Vec<super::MetadataWarning>,
 ) -> ParameterFallback {
     let mut fallback = ParameterFallback::default();
     let input = input.trim();

@@ -257,3 +257,30 @@ fn response_format_is_an_editable_output_option_with_zip_default() {
     );
     assert!(serde_json::from_str::<ImageResponseFormat>("\"xml\"").is_err());
 }
+
+#[test]
+fn generated_images_recover_webp_exif_and_png_stealth_without_promoting_metadata_failures() {
+    use crate::metadata::{
+        MetadataOrigin,
+        test_support::{ascii_comment, png as carrier_png, tiff, webp},
+    };
+    let raw = tiff(&ascii_comment(r#"{"Comment":"{\"seed\":123}"}"#));
+    let hidden = r#"{"Comment":"{\"seed\":42}"}"#;
+    for (bytes, origin, seed) in [
+        (webp(&raw), MetadataOrigin::ExifUserComment, 123),
+        (
+            carrier_png(&[], None, Some(hidden)),
+            MetadataOrigin::StealthPngComp,
+            42,
+        ),
+    ] {
+        let images = decode_generated_images(bytes.clone()).unwrap();
+        assert_eq!(images[0].bytes(), bytes);
+        assert_eq!(images[0].seed(), Some(seed));
+        assert_eq!(images[0].metadata().parsed().unwrap().origin, Some(origin));
+    }
+    let images = decode_generated_images(webp(b"invalid TIFF")).unwrap();
+    let metadata = images[0].metadata().parsed().unwrap();
+    assert_eq!(metadata.origin, None);
+    assert_ne!(metadata.warnings, []);
+}

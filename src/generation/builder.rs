@@ -83,6 +83,13 @@ impl GenerateImageRequestBuilder {
         self
     }
 
+    /// Selects legacy negative conditioning on V4 models.
+    #[must_use]
+    pub const fn legacy_uc(mut self, enabled: bool) -> Self {
+        self.request.core.legacy_uc = enabled;
+        self
+    }
+
     /// Replaces the sampling parameters.
     #[must_use]
     pub const fn sampling(mut self, sampling: SamplingParams) -> Self {

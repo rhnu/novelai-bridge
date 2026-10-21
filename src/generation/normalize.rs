@@ -125,6 +125,16 @@ impl Normalizer {
         self.gate_characters(params, descriptor)?;
         self.normalize_references(params, descriptor)?;
         self.normalize_custom_negative_prompts(params, descriptor)?;
+        if params.core.legacy_uc
+            && !self.require_capability(
+                descriptor.prompt().legacy_uc,
+                Field::LegacyUc,
+                "a V4 model supporting legacy UC",
+                NormalizationChange::Unsupported,
+            )?
+        {
+            params.core.legacy_uc = false;
+        }
         if !self.require_capability(
             descriptor
                 .prompt()

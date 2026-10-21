@@ -12,6 +12,9 @@
 - Add encode-vibe masks, cropping and explicit focus/information seeds, V3 raw image vibe input, configurable encoded-strength normalization, character-reference information extraction and transparent-output alpha representation.
 - Add bounded MessagePack image streaming alongside SSE, JSON image response negotiation and protocol-specific raw event sources.
 - Add multipart image-service bodies and opt-in bounded image-cache registration with one recovery attempt for explicit invalid-cache-key rejections.
+- Add bounded official vibe-file and bundle import/export, ordered encoding caches, SHA-256 identity validation and compatible PNG embedding.
+- Read PNG text, EXIF UserComment and supported `stealth_pngcomp` metadata with explicit carrier provenance. Write PNG text without re-encoding pixels.
+- Add the current V4 legacy negative-conditioning option through `.legacy_uc(...)`.
 
 ### Changed
 
@@ -46,6 +49,8 @@
 - Add `OutputParams::alpha_mode` to output literals, or use defaults. Transparent output defaults to straight alpha.
 - Match `ImageStreamChunk::raw` as `StreamEventSource::{Sse, MessagePack}`. Previews now contain decoded bytes; intermediate/final `gen_id` is optional. Add `ResponseLimits::msgpack_frame_bytes` to explicit limit literals.
 - Add `OutputParams::response_format` and the new `ClientConfig` fields to explicit literals, or use defaults. JSON responses retain provider index/seed through `GeneratedImageSource::Json`; embedded seed access is unchanged. Add `ImageDecodePolicy::max_images` to explicit policy literals.
+- Rename `PngMetadata` / `PngMetadataWarning` to `ImageMetadata` / `MetadataWarning`, and use the generic image parser for WebP/JPEG metadata. `origin` identifies the carrier. `VibeMetadataEntry::model_encodings` now retains a second map keyed by parameter-cache identity.
+- Add `GenerationCore::legacy_uc` to explicit literals, or construct the core with defaults. The option is supported by V4 models.
 
 ## 0.6.0 - 2026-10-21
 
