@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 - 2026-10-23
+
+### Fixed
+
+- Accept NovelAI image responses with `binary/octet-stream` as binary images or ZIP archives, applying the same validation and resource limits as `application/octet-stream`.
+
 ## 0.7.0 - 2026-10-21
 
 ### Added

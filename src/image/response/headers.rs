@@ -25,7 +25,7 @@ pub(super) fn response_kind(headers: &[TransportHeader]) -> Result<ResponseKind,
     let value = std::str::from_utf8(&header.value).map_err(response_error)?;
     let media_type = value.split(';').next().unwrap_or_default().trim();
     match media_type.to_ascii_lowercase().as_str() {
-        "application/octet-stream" => Ok(ResponseKind::Binary),
+        "application/octet-stream" | "binary/octet-stream" => Ok(ResponseKind::Binary),
         "application/zip" => Ok(ResponseKind::Zip),
         "application/json" => Ok(ResponseKind::Json),
         "image/png" => Ok(ResponseKind::Image(ImageMediaFormat::Png)),
