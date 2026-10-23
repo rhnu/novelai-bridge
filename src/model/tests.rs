@@ -112,6 +112,10 @@ fn current_sample_limits_cover_small_batches_and_reject_empty_or_oversized_canva
 #[test]
 fn curated_identity_uses_the_verified_current_base_and_existing_inpainting_sibling() {
     assert_eq!(
+        Model::NaiDiffusion5Curated.inpainting_id(),
+        Some("nai-diffusion-4-5-curated-inpainting")
+    );
+    assert_eq!(
         Model::NaiDiffusion4Curated.as_str(),
         "nai-diffusion-4-curated-preview"
     );

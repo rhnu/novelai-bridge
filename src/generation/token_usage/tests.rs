@@ -22,6 +22,26 @@ impl TokenEncoder for RecordingEncoder {
 }
 
 #[test]
+fn curated_inpainting_counts_with_the_effective_t5_encoder_and_limit() {
+    let mut tokenizers = Tokenizers::new();
+    tokenizers.register(
+        ImageTokenizerKind::T5,
+        Arc::new(RecordingEncoder::default()),
+    );
+    let plan = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Curated)
+        .inpainting(crate::InpaintingInput::new(
+            crate::generation::test_support::image(),
+            crate::generation::test_support::image(),
+        ))
+        .build()
+        .normalize()
+        .unwrap();
+    let usage = plan.count_tokens(&tokenizers).unwrap();
+    assert_eq!(usage.tokenizer, ImageTokenizerKind::T5);
+    assert_eq!(usage.limit, 512);
+}
+
+#[test]
 fn counting_uses_effective_fields_and_preserves_character_indices() {
     let encoder = Arc::new(RecordingEncoder::default());
     let mut tokenizers = Tokenizers::new();

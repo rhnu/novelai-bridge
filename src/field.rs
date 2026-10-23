@@ -60,6 +60,7 @@ pub enum InpaintImageToImageField {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GenerationField {
+    Model,
     Prompt,
     NegativePrompt,
     Size,
@@ -100,6 +101,7 @@ pub enum GenerationField {
 impl fmt::Display for GenerationField {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let path = match self {
+            Self::Model => "core.model",
             Self::Prompt => "core.prompt",
             Self::NegativePrompt => "core.negative_prompt",
             Self::Size => "core.size",

@@ -16,11 +16,27 @@ pub(super) fn normalize(
     policy: ValidationPolicy,
 ) -> Result<NormalizedGeneration, BridgeError> {
     request.policy = policy;
+    let effective_model = request.descriptor().effective_model_for(request.mode());
+    let mut diagnostics = Vec::new();
+    if effective_model != request.core.model {
+        if policy.is_reject() {
+            return Err(InvalidRequest::UnsupportedModelFeature {
+                feature: Field::Model.into(),
+                required_model: effective_model.as_str().to_owned(),
+            }
+            .into());
+        }
+        request.core.model = effective_model;
+        diagnostics.push(NormalizationDiagnostic {
+            field: Field::Model,
+            change: NormalizationChange::Fallback,
+        });
+    }
     let descriptor = request.descriptor();
     let mut normalizer = Normalizer {
         constraints: *descriptor.constraints(),
         policy,
-        diagnostics: Vec::new(),
+        diagnostics,
     };
     validate_prompt(&request)?;
     normalizer.normalize_base_fields(&mut request)?;

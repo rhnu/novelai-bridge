@@ -198,7 +198,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     },
     support: ModelSupport {
         inpainting: Some(InpaintingProfile {
-            model_id: "nai-diffusion-5-curated-inpainting",
+            model_id: "nai-diffusion-4-5-curated-inpainting",
             image_to_image: true,
         }),
         streaming: true,

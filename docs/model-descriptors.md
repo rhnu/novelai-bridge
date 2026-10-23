@@ -29,6 +29,8 @@ Request factories read `model.descriptor().defaults()`; basic parameter values d
 
 Use the builder's `operation`, `image_to_image` or `inpainting` method to select the operation. `InpaintingInput::new(image, mask)` selects pure infill. Set `img2img` to `Some(InpaintImageToImage::new(strength, noise))` for source conditioning. The nested group owns color correction and the optional noise seed; omitted seeds reuse the resolved request seed. V3 supports pure infill; V4 and later also support the nested group.
 
+V5 Curated inpainting uses V4.5 Curated, matching the official frontend. Under Normalize, the effective request's model changes before prompts, capabilities, token counting and pricing are resolved; transparency is removed with a diagnostic. Reject reports the required model change at `core.model`. Use `effective_model_for(mode)` on the descriptor to inspect the operation's model family before preparing a request.
+
 `request.mode()` delegates to the selected input. `descriptor.model_id_for(mode)` queries the supported API identity; normalization resolves it once, exposed as `NormalizedGeneration::model_id()`. Unsupported operations are rejected rather than converted to another operation.
 
 Editable generation requests and operation envelopes reject unknown serialized fields. The operation uses a `mode` tag and an `input` object for image-to-image or inpainting. Unknown keys are rejected rather than ignored. See the [release notes](../CHANGELOG.md) for migration details.

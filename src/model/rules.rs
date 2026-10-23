@@ -1,4 +1,4 @@
-use super::{GenerationMode, ModelDescriptor, VibeInputPath};
+use super::{GenerationMode, Model, ModelDescriptor, VibeInputPath};
 
 /// Which reference groups the caller intends to use; does not include payload data.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -42,6 +42,20 @@ pub struct ReferenceResolution {
 }
 
 impl ModelDescriptor {
+    /// Resolves the model family actually used by this operation.
+    ///
+    /// `NovelAI` routes V5 Curated inpainting through V4.5 Curated. Its prompt, capability and
+    /// pricing rules must change with the API identity, before request normalization.
+    #[must_use]
+    pub const fn effective_model_for(&self, mode: GenerationMode) -> Model {
+        match (self.identity.model, mode) {
+            (Model::NaiDiffusion5Curated, GenerationMode::Inpainting) => {
+                Model::NaiDiffusion45Curated
+            },
+            (model, _) => model,
+        }
+    }
+
     /// Maximum simultaneous samples for the effective pricing canvas.
     #[must_use]
     pub const fn sample_limit(&self, size: crate::ImageSize) -> u32 {

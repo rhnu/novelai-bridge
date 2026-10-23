@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 - 2026-10-23
+
+### Fixed
+
+- Route V5 Curated inpainting through V4.5 Curated, matching the official frontend. Resolve the effective model before prompts, token limits, capabilities and pricing; Normalize reports the model fallback and removes unsupported transparency, while Reject reports the required change at `core.model`.
+
 ## 0.7.1 - 2026-10-23
 
 ### Fixed

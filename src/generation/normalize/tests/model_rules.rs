@@ -19,6 +19,97 @@ fn wire(request: GenerateImageRequest) -> serde_json::Value {
 }
 
 #[test]
+fn curated_inpainting_resolves_the_entire_v45_request_before_preparing_a_stream() {
+    let plan = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Curated)
+        .negative_prompt("custom-negative")
+        .transparent_background(true)
+        .image_format(crate::ImageFormat::Webp)
+        .size(ImageSize {
+            width: 64,
+            height: 64,
+        })
+        .inpainting(InpaintingInput::new(image(), image()))
+        .seed(42)
+        .build()
+        .normalize()
+        .unwrap();
+    assert_eq!(plan.request().core.model, Model::NaiDiffusion45Curated);
+    assert_eq!(plan.model_id(), "nai-diffusion-4-5-curated-inpainting");
+    assert!(!plan.request().core.transparent_background);
+    assert!(plan.resolved_prompts().prompt.contains("rating:general"));
+    assert!(
+        !plan
+            .resolved_prompts()
+            .prompt
+            .contains("transparent background")
+    );
+    assert!(
+        plan.resolved_prompts()
+            .negative_prompt
+            .starts_with("blurry, lowres, upscaled")
+    );
+    assert!(
+        plan.resolved_prompts()
+            .negative_prompt
+            .ends_with("custom-negative")
+    );
+    assert_eq!(
+        plan.anlas_estimate_input(crate::AnlasPricingContext::default())
+            .model,
+        Model::NaiDiffusion45Curated
+    );
+    assert!(
+        plan.diagnostics()
+            .iter()
+            .any(|entry| entry.field == GenerationField::Model
+                && matches!(entry.change, crate::NormalizationChange::Fallback))
+    );
+    assert!(plan.diagnostics().iter().any(|entry| entry.field
+        == GenerationField::TransparentBackground
+        && matches!(entry.change, crate::NormalizationChange::Unsupported)));
+    let body: serde_json::Value = serde_json::from_slice(
+        &plan
+            .prepare()
+            .unwrap()
+            .encode(GenerationDelivery::Stream(crate::StreamMode::Sse))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["model"], "nai-diffusion-4-5-curated-inpainting");
+    assert_eq!(body["parameters"]["image_format"], "webp");
+    assert_eq!(body["parameters"]["stream"], "sse");
+    assert!(body["parameters"].get("straight_alpha").is_none());
+    assert!(
+        body["parameters"]
+            .get("tag_hint_transparent_background")
+            .is_none()
+    );
+    assert!(body["parameters"].get("legacy_uc").is_none());
+}
+
+#[test]
+fn curated_inpainting_rejects_an_implicit_model_change_under_strict_policy() {
+    let request = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Curated)
+        .inpainting(InpaintingInput::new(image(), image()))
+        .build();
+    assert!(matches!(request.normalize_with(ValidationPolicy::Reject),
+        Err(BridgeError::InvalidRequest(InvalidRequest::UnsupportedModelFeature { feature, .. }))
+        if feature == GenerationField::Model.into()));
+    assert_eq!(GenerationField::Model.to_string(), "core.model");
+    for model in [
+        Model::NaiDiffusion5Curated,
+        Model::NaiDiffusion5Full,
+        Model::NaiDiffusion5FullMedium,
+    ] {
+        let plan = GenerateImageRequest::builder("cat", model)
+            .build()
+            .normalize()
+            .unwrap();
+        assert_eq!(plan.request().core.model, model);
+    }
+}
+
+#[test]
 fn medium_fixed_values_and_negative_prompts_are_normalized_before_encoding() {
     let input = GenerateImageRequest::builder("cat", Model::NaiDiffusion5FullMedium)
         .steps(25)

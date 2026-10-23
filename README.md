@@ -13,7 +13,7 @@ Add the SDK and an async runtime:
 
 ```toml
 [dependencies]
-novelai-bridge = "0.7.1"
+novelai-bridge = "0.7.2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -143,7 +143,7 @@ assets; without an attached registry, client-side token checks are skipped.
 For a custom transport without tokenization:
 
 ```toml
-novelai-bridge = { version = "0.7.1", default-features = false }
+novelai-bridge = { version = "0.7.2", default-features = false }
 ```
 
 Implement `Transport::execute` to return status, headers and a raw byte stream.
