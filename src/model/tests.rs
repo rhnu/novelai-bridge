@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn model_prompt_syntax_selects_provider_generation_semantics() {
+    use crate::{PromptDiagnosticCode, PromptTokenKind, PromptWeight, analyze_prompt};
+
+    let legacy = analyze_prompt(
+        "cat:0.2|frog",
+        Model::NaiDiffusion3.descriptor().prompt().syntax,
+    );
+    assert!(
+        legacy
+            .tokens
+            .iter()
+            .any(|token| token.kind == PromptTokenKind::MixWeight)
+    );
+    let v4 = analyze_prompt(
+        "-2::rain",
+        Model::NaiDiffusion4Full.descriptor().prompt().syntax,
+    );
+    assert_eq!(
+        v4.diagnostics[0].code,
+        PromptDiagnosticCode::UnsupportedNegativeWeight
+    );
+    let v45 = analyze_prompt(
+        "-2::rain",
+        Model::NaiDiffusion45Full.descriptor().prompt().syntax,
+    );
+    assert_eq!(v45.spans[0].weight, PromptWeight::Exact { value: -2.0 });
+    let v5 = analyze_prompt(
+        "Text: {hello}",
+        Model::NaiDiffusion5Full.descriptor().prompt().syntax,
+    );
+    assert_eq!(
+        v5.tokens.last().unwrap().kind,
+        PromptTokenKind::RenderedText
+    );
+}
+
+#[test]
 fn registry_identity_is_unique_and_serialization_uses_it() {
     let identifiers: std::collections::BTreeSet<_> = Model::ALL.iter().map(Model::as_str).collect();
     assert_eq!(identifiers.len(), Model::ALL.len());

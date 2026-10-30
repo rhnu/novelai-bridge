@@ -73,6 +73,12 @@ pub use model::{
     SamplingProfile, UcPresetDefinition, VarietyBoostProfile, VibeInputPath, VibeProfile,
     WireProfile,
 };
+pub use novelai_bridge_prompt::{
+    PromptAnalysis, PromptDiagnostic, PromptDiagnosticCode, PromptDiagnosticSeverity,
+    PromptLexicalState, PromptSemanticKind, PromptSemanticSpan, PromptSyntaxProfile, PromptToken,
+    PromptTokenKind, PromptWeight, analyze_prompt, is_character_separator, is_randomizer_delimiter,
+    is_text_rendering_marker,
+};
 pub use observation::{
     CreditEvent, CreditObserver, GenerationSummary, ObservedDirectorTool, ObservedOperation,
     RequestCostEstimate, RequestFailure, RequestFingerprint, RequestOutcome,

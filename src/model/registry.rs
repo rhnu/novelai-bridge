@@ -8,6 +8,31 @@ use super::{
 };
 use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
 
+const SYNTAX_V3: crate::PromptSyntaxProfile = crate::PromptSyntaxProfile {
+    bracket_weights: true,
+    numeric_weights: false,
+    negative_weights: false,
+    legacy_mixing: true,
+    character_separators: false,
+    randomizer: true,
+    text_rendering: false,
+    interaction_tags: false,
+};
+const SYNTAX_V4: crate::PromptSyntaxProfile = crate::PromptSyntaxProfile {
+    bracket_weights: true,
+    numeric_weights: true,
+    negative_weights: false,
+    legacy_mixing: false,
+    character_separators: true,
+    randomizer: true,
+    text_rendering: true,
+    interaction_tags: true,
+};
+const SYNTAX_MODERN: crate::PromptSyntaxProfile = crate::PromptSyntaxProfile {
+    negative_weights: true,
+    ..SYNTAX_V4
+};
+
 const CONSTRAINTS: GenerationConstraints = GenerationConstraints {
     canvas: CanvasConstraints {
         dimension: ParameterRange {
@@ -114,6 +139,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(7.0),
     prompt: PromptProfile {
+        syntax: SYNTAX_MODERN,
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 1471,
         characters: Some(CharacterPromptProfile {
@@ -165,6 +191,7 @@ const V5_MEDIUM: ModelDescriptor = ModelDescriptor {
         ..defaults(7.0)
     },
     prompt: PromptProfile {
+        syntax: SYNTAX_MODERN,
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 1471,
         characters: Some(CharacterPromptProfile {
@@ -209,6 +236,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(7.0),
     prompt: PromptProfile {
+        syntax: SYNTAX_MODERN,
         tokenizer: ImageTokenizerKind::Qwen,
         token_limit: 703,
         characters: Some(CharacterPromptProfile {
@@ -256,6 +284,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(5.0),
     prompt: PromptProfile {
+        syntax: SYNTAX_MODERN,
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
         characters: Some(CharacterPromptProfile {
@@ -303,6 +332,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(5.0),
     prompt: PromptProfile {
+        syntax: SYNTAX_MODERN,
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
         characters: Some(CharacterPromptProfile {
@@ -348,6 +378,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(5.5),
     prompt: PromptProfile {
+        syntax: SYNTAX_V4,
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
         characters: Some(CharacterPromptProfile {
@@ -393,6 +424,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(5.5),
     prompt: PromptProfile {
+        syntax: SYNTAX_V4,
         tokenizer: ImageTokenizerKind::T5,
         token_limit: 512,
         characters: Some(CharacterPromptProfile {
@@ -438,6 +470,7 @@ const V3: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(5.0),
     prompt: PromptProfile {
+        syntax: SYNTAX_V3,
         tokenizer: ImageTokenizerKind::Clip,
         token_limit: 225,
         characters: None,
@@ -480,6 +513,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
     constraints: CONSTRAINTS,
     defaults: defaults(6.2),
     prompt: PromptProfile {
+        syntax: SYNTAX_V3,
         tokenizer: ImageTokenizerKind::Clip,
         token_limit: 225,
         characters: None,

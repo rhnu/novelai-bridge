@@ -60,9 +60,15 @@ snapshot and image-cache state.
 | Local files | `VibeDocument` reads and writes official vibe files, bundles and PNG embeddings with bounded parsing and identity validation. |
 | Metadata | `parse_image_metadata_from_bytes` reads PNG, JPEG and WebP metadata; `write_png_text_chunks` updates PNG text without re-encoding pixels. |
 | Tokens and costs | Local CLIP, T5 and Qwen tokenization, Anlas estimates, subscription snapshots and runtime credit observation. |
+| Prompt syntax | Lossless `analyze_prompt` with UTF-16 ranges, numerical emphasis, random-branch weight ranges and model-selected syntax profiles. |
 
 Operation availability depends on the selected model. See [model descriptors](docs/model-descriptors.md)
 for model-specific behavior and the [API reference](https://docs.rs/novelai-bridge) for request types.
+
+For prompt editors, call `analyze_prompt(text, model.descriptor().prompt().syntax)`.
+The independent [novelai-bridge-prompt crate](crates/prompt/README.md) provides the same
+pure Rust parser for native/WebAssembly use without the SDK's media or network dependencies.
+Its optional `typegen` feature derives TypeScript declarations for the Serde contract.
 
 ## Validate and prepare locally
 

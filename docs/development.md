@@ -58,6 +58,15 @@ The tool installs a tracing subscriber on stderr with an `info` default; `RUST_L
 
 The asset package owns embedded bytes and integrity checks. Runtime parsing and encoder caches belong to the main library.
 
+## Prompt syntax
+
+`crates/prompt` owns pure syntax scanning and semantic emphasis analysis; the main SDK's
+model registry owns syntax capability selection. It intentionally has no dependency on
+the main SDK, media processing, transports or tokenizers. Compile it independently with
+`cargo check -p novelai-bridge-prompt --target wasm32-unknown-unknown --all-features --locked`
+when changing its portable contract. Its pure unit tests live below `src/analysis/tests.rs`.
+The optional `typegen` feature only derives `ts_rs::TS`; it does not generate files during builds.
+
 ## Backend boundaries
 
 Editable requests, normalized plans and prepared payloads represent different guarantees. Normalize once to decide model identity, applicable mode fields, conditioning and pricing inputs; wire serialization projects that immutable state. Operation-specific input variants prevent image-to-image options from silently disappearing when a mask is added.

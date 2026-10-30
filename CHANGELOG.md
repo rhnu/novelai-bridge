@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - 2026-10-30
+
+### Added
+
+- Add standalone `novelai-bridge-prompt` for native/WebAssembly prompt analysis with lossless tokens, UTF-16 ranges, typed warnings, emphasis weights and random-branch uncertainty. Re-export its API and expose model-specific syntax capabilities through `PromptProfile::syntax`; optional `typegen` derives TypeScript declarations.
+
 ## 0.7.2 - 2026-10-23
 
 ### Fixed

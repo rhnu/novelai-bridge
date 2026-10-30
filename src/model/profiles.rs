@@ -263,6 +263,8 @@ pub struct UcPresetDefinition {
     reason = "Independent provider prompt capabilities are inspected separately"
 )]
 pub struct PromptProfile {
+    /// Native `NovelAI` prompt syntax capabilities for this model.
+    pub syntax: crate::PromptSyntaxProfile,
     /// Encoder and compatible asset format.
     pub tokenizer: ImageTokenizerKind,
     /// Context limit per conditioning field, not vocabulary size.

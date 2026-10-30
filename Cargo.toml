@@ -1,6 +1,6 @@
 [package]
 name = "novelai-bridge"
-version = "0.7.2"
+version = "0.8.0"
 edition = "2024"
 autotests = false
 license = "Apache-2.0"
@@ -21,7 +21,7 @@ exclude = [
 ]
 
 [workspace]
-members = ["crates/tokenizer-assets", "xtask"]
+members = ["crates/prompt", "crates/tokenizer-assets", "xtask"]
 resolver = "3"
 
 [workspace.dependencies]
@@ -48,7 +48,8 @@ indexmap = { version = "2.14.2", features = ["serde"] }
 kamadak-exif = "0.6.1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-novelai-bridge = { path = ".", version = "0.7.2" }
+novelai-bridge = { path = ".", version = "0.8.0" }
+novelai-bridge-prompt = { path = "crates/prompt", version = "0.1.0" }
 novelai-bridge-tokenizer-assets = { path = "crates/tokenizer-assets", version = "=0.1.0" }
 png = "0.18.1"
 reqwest = { version = "0.13.5", default-features = false, features = [
@@ -62,6 +63,7 @@ serde_json = "1.0.154"
 serde_with = { version = "3.24.0", features = ["macros"] }
 sha2 = "0.11.1"
 thiserror = "2.0.21"
+ts-rs = "12.0.1"
 tokio = { version = "1.54.0", features = ["macros", "rt", "rt-multi-thread"] }
 toml = "1.1.8"
 unicode-normalization = "0.1.26"
@@ -84,6 +86,7 @@ image.workspace = true
 indexmap.workspace = true
 kamadak-exif.workspace = true
 tracing.workspace = true
+novelai-bridge-prompt.workspace = true
 novelai-bridge-tokenizer-assets = { workspace = true, optional = true }
 png.workspace = true
 reqwest = { workspace = true, optional = true }

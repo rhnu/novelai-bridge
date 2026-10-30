@@ -10,12 +10,20 @@
 | `support()` | Streaming and optional inpainting/reference profiles |
 | `constraints()` | Canvas and numeric bounds |
 | `defaults()` | Core and sampling defaults used by request builders |
-| `prompt()` | Encoder kind, per-field limit, model-specific presets and conditioning support |
+| `prompt()` | Syntax capabilities, encoder kind, per-field limit, model-specific presets and conditioning support |
 | `sampling()` | Noise schedules, fallback and sampling capabilities |
 | `wire()` | Conditioning representation and protocol extensions |
 | `pricing()` | Model multiplier and Opus allowance policy |
 
 Registry entries compose small profiles. Inpainting support carries its sibling identifier, character-reference support carries its allowed modes, and variety boost carries its coefficient. A missing profile means the capability is unavailable.
+
+`descriptor.prompt().syntax` supplies `PromptSyntaxProfile` to `analyze_prompt`. All supported
+families use continuous bracket emphasis and randomizers. V3 uses pipe mixing and trailing
+mix weights; V4 and later use numeric emphasis, character-field pipes, action-tag prefixes
+and terminal text-rendering regions. Negative numerical emphasis starts with V4.5. The SDK
+owns this mapping; consumers should serialize the supplied profile instead of inferring
+rules from model identifiers. See the [prompt crate contract](../crates/prompt/README.md)
+for UTF-16 ranges, branch uncertainty, literal rendering regions and extension-scanner helpers.
 
 Request factories read `model.descriptor().defaults()`; basic parameter values do not consult the registry. When composing sampling manually, use `model.descriptor().defaults().sampling`.
 

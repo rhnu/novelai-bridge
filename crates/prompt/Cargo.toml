@@ -1,0 +1,22 @@
+[package]
+name = "novelai-bridge-prompt"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Lossless, model-profiled NovelAI image prompt analysis for native and WebAssembly."
+documentation = "https://docs.rs/novelai-bridge-prompt"
+homepage = "https://github.com/rhnu/novelai-bridge"
+repository = "https://github.com/rhnu/novelai-bridge"
+readme = "README.md"
+keywords = ["novelai", "prompt", "parser", "wasm"]
+categories = ["parsing", "text-processing"]
+
+[dependencies]
+serde.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+typegen = ["dep:ts-rs"]
