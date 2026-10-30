@@ -6,6 +6,10 @@
 
 - Add standalone `novelai-bridge-prompt` for native/WebAssembly prompt analysis with lossless tokens, UTF-16 ranges, typed warnings, emphasis weights and random-branch uncertainty. Re-export its API and expose model-specific syntax capabilities through `PromptProfile::syntax`; optional `typegen` derives TypeScript declarations.
 
+### Fixed
+
+- Update Tokio to 1.54.1, replacing the withdrawn 1.54.0 release with the upstream timer race fix.
+
 ## 0.7.2 - 2026-10-23
 
 ### Fixed
