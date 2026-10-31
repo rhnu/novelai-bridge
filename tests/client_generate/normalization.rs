@@ -1,20 +1,6 @@
 use super::*;
 
 #[tokio::test]
-async fn generate_rejects_empty_prompt_locally() {
-    let transport = MockTransport::default();
-    let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
-
-    let error = client.generate(request("   ")).await.unwrap_err();
-    assert!(matches!(
-        error,
-        BridgeError::InvalidRequest(InvalidRequest::EmptyField { ref field })
-            if *field == RequestField::Generation(GenerationField::Prompt)
-    ));
-    assert!(transport.last_path().is_none());
-}
-
-#[tokio::test]
 async fn generate_rejects_invalid_scale_locally() {
     let transport = MockTransport::default();
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());

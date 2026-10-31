@@ -13,7 +13,7 @@ Add the SDK and an async runtime:
 
 ```toml
 [dependencies]
-novelai-bridge = "0.7.2"
+novelai-bridge = "0.8.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -75,6 +75,10 @@ Its optional `typegen` feature derives TypeScript declarations for the Serde con
 Requests default to `ValidationPolicy::Normalize`: supported adjustments produce diagnostics,
 while invalid request shapes fail. Use `.policy(ValidationPolicy::Reject)` to reject settings
 that would require adjustment. Unknown serialized request fields are rejected under either policy.
+
+Base and character image prompts, both positive and negative, may be empty or whitespace-only.
+Selected quality and UC presets still apply to empty base prompts; model-specific feature restrictions still apply.
+The [official image API schema](https://image.novelai.net/docs/doc.json) declares no minimum prompt length.
 
 The generation path separates three steps:
 
@@ -149,7 +153,7 @@ assets; without an attached registry, client-side token checks are skipped.
 For a custom transport without tokenization:
 
 ```toml
-novelai-bridge = { version = "0.7.2", default-features = false }
+novelai-bridge = { version = "0.8.1", default-features = false }
 ```
 
 Implement `Transport::execute` to return status, headers and a raw byte stream.

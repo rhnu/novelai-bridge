@@ -38,7 +38,6 @@ pub(super) fn normalize(
         policy,
         diagnostics,
     };
-    validate_prompt(&request)?;
     normalizer.normalize_base_fields(&mut request)?;
     normalizer.apply_capability_gates(&mut request, descriptor)?;
     let model_id = descriptor.model_id_for(request.mode()).ok_or_else(|| {
@@ -47,11 +46,10 @@ pub(super) fn normalize(
             required_model: "models with an inpainting variant".to_owned(),
         }
     })?;
-    if let Some(characters) = request.characters.as_mut() {
-        Normalizer::validate_character_inputs(&characters.characters)?;
-        if let Some(profile) = descriptor.prompt().characters {
-            normalizer.normalize_character_positions(characters, profile.positioning)?;
-        }
+    if let Some(characters) = request.characters.as_mut()
+        && let Some(profile) = descriptor.prompt().characters
+    {
+        normalizer.normalize_character_positions(characters, profile.positioning)?;
     }
     if let Some(references) = request.references.as_mut() {
         normalizer.normalize_character_references(references)?;
@@ -263,16 +261,6 @@ impl Normalizer {
         self.record(feature, change);
         Ok(false)
     }
-}
-
-fn validate_prompt(params: &GenerateImageRequest) -> Result<(), BridgeError> {
-    if params.core.prompt.trim().is_empty() {
-        return Err(InvalidRequest::EmptyField {
-            field: Field::Prompt.into(),
-        }
-        .into());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

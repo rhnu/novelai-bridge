@@ -17,9 +17,9 @@ impl Default for CharacterPosition {
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Character {
-    /// Positive prompt for the character.
+    /// Positive prompt for the character. Empty and whitespace-only text is allowed.
     pub prompt: String,
-    /// Optional negative prompt for the character.
+    /// Optional negative prompt for the character. Empty and whitespace-only text is allowed.
     pub negative_prompt: Option<String>,
     /// Desired character position.
     pub position: CharacterPosition,

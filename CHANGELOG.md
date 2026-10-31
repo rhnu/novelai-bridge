@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 - 2026-10-31
+
+### Fixed
+
+- Allow empty and whitespace-only base and character image prompts under both validation policies. Positive and negative fields accept blank text, and enabled characters with only negative text are retained.
+
 ## 0.8.0 - 2026-10-30
 
 ### Added

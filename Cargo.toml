@@ -1,6 +1,6 @@
 [package]
 name = "novelai-bridge"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 autotests = false
 license = "Apache-2.0"
@@ -48,7 +48,7 @@ indexmap = { version = "2.14.2", features = ["serde"] }
 kamadak-exif = "0.6.1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-novelai-bridge = { path = ".", version = "0.8.0" }
+novelai-bridge = { path = ".", version = "0.8.1" }
 novelai-bridge-prompt = { path = "crates/prompt", version = "0.1.0" }
 novelai-bridge-tokenizer-assets = { path = "crates/tokenizer-assets", version = "=0.1.0" }
 png = "0.18.1"

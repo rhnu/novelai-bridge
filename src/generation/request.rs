@@ -10,9 +10,9 @@ use crate::{
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GenerationCore {
-    /// Positive prompt text.
+    /// Positive prompt text. Empty and whitespace-only text is allowed.
     pub prompt: String,
-    /// Optional negative prompt text.
+    /// Optional negative prompt text. Empty and whitespace-only text is allowed.
     pub negative_prompt: Option<String>,
     /// Target image model.
     pub model: Model,

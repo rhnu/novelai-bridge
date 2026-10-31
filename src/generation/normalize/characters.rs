@@ -1,7 +1,7 @@
 use super::{Field, Normalizer};
 use crate::{
-    BridgeError, Character, CharacterField, CharacterPositionProfile, CharacterSet,
-    GenerateImageRequest, InvalidRequest, ModelDescriptor,
+    BridgeError, CharacterField, CharacterPositionProfile, CharacterSet, GenerateImageRequest,
+    InvalidRequest, ModelDescriptor,
     generation::{NormalizationChange, characters::is_center_position},
 };
 
@@ -59,26 +59,6 @@ impl Normalizer {
                         limit: descriptor.prompt().max_characters(),
                     },
                 );
-            }
-        }
-        Ok(())
-    }
-
-    pub(super) fn validate_character_inputs(characters: &[Character]) -> Result<(), BridgeError> {
-        for (index, character) in characters
-            .iter()
-            .enumerate()
-            .filter(|(_, character)| character.enabled)
-        {
-            if character.prompt.trim().is_empty() {
-                return Err(InvalidRequest::EmptyField {
-                    field: Field::Character {
-                        index,
-                        field: CharacterField::Prompt,
-                    }
-                    .into(),
-                }
-                .into());
             }
         }
         Ok(())
