@@ -1,6 +1,6 @@
 [package]
 name = "novelai-bridge"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2024"
 autotests = false
 license = "Apache-2.0"
@@ -29,10 +29,10 @@ anyhow = "1.0.104"
 async-stream = "0.3.6"
 async-trait = "0.1.92"
 base64 = "0.23.1"
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.8", features = ["derive"] }
 eventsource-stream = "0.2.3"
-fancy-regex = "0.19.2"
-flate2 = "1.1.10"
+fancy-regex = "0.20.2"
+flate2 = "1.1.11"
 futures-core = "0.3.34"
 futures-util = "0.3.34"
 form_urlencoded = "1.2.2"
@@ -45,10 +45,10 @@ image = { version = "0.25.10", default-features = false, features = [
     "webp",
 ] }
 indexmap = { version = "2.14.2", features = ["serde"] }
-kamadak-exif = "0.6.1"
+kamadak-exif = "0.6.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-novelai-bridge = { path = ".", version = "0.8.1" }
+novelai-bridge = { path = ".", version = "0.8.2" }
 novelai-bridge-prompt = { path = "crates/prompt", version = "0.1.0" }
 novelai-bridge-tokenizer-assets = { path = "crates/tokenizer-assets", version = "=0.1.0" }
 png = "0.18.1"
@@ -65,9 +65,9 @@ sha2 = "0.11.1"
 thiserror = "2.0.21"
 ts-rs = "12.0.1"
 tokio = { version = "1.54.1", features = ["macros", "rt", "rt-multi-thread"] }
-toml = "1.1.8"
+toml = "1.2.1"
 unicode-normalization = "0.1.26"
-zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
+zip = { version = "9.7.3", default-features = false, features = ["deflate"] }
 
 [dependencies]
 async-stream.workspace = true

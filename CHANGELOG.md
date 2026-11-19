@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2 - 2026-11-19
+
+### Changed
+
+- Pin the development toolchain to Rust 1.100.0 and update workspace dependencies, including `fancy-regex` 0.20 and ZIP 9.7.
+
 ## 0.8.1 - 2026-10-31
 
 ### Fixed
