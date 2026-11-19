@@ -2,7 +2,8 @@
 
 ## Tools
 
-Install Rust with rustfmt and Clippy. Formatting and lint use [Rusteward](https://github.com/rhnu/rusteward):
+Install Rustup to use the toolchain, rustfmt, and Clippy pinned by [rust-toolchain.toml](../rust-toolchain.toml).
+Formatting and lint use [Rusteward](https://github.com/rhnu/rusteward):
 
 ```sh
 cargo install --git https://github.com/rhnu/rusteward.git --locked rusteward

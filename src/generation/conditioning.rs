@@ -128,23 +128,19 @@ mod tests;
 impl GenerateImageRequest {
     /// Assembles already-normalized input; callers must use the generation boundary.
     pub(crate) fn assemble_prompts(&self) -> ResolvedPrompts {
-        let characters = self
-            .characters
-            .as_ref()
-            .map(|set| {
-                set.characters
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, character)| character.enabled)
-                    .map(|(index, character)| ResolvedCharacterPrompt {
-                        index,
-                        position: character.position,
-                        prompt: character.prompt.clone(),
-                        negative_prompt: character.negative_prompt.clone().unwrap_or_default(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let characters = self.characters.as_ref().map_or_default(|set| {
+            set.characters
+                .iter()
+                .enumerate()
+                .filter(|(_, character)| character.enabled)
+                .map(|(index, character)| ResolvedCharacterPrompt {
+                    index,
+                    position: character.position,
+                    prompt: character.prompt.clone(),
+                    negative_prompt: character.negative_prompt.clone().unwrap_or_default(),
+                })
+                .collect()
+        });
 
         let prompt = self.core.assemble_prompt();
         let negative_prompt = self.core.assemble_negative_prompt(&prompt);

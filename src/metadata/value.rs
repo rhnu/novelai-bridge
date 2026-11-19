@@ -25,7 +25,7 @@ pub(super) fn extract_v4_character_prompts(
         .and_then(Value::as_object)
         .and_then(|item| item.get("char_captions"))
         .and_then(Value::as_array)
-        .map(|values| {
+        .map_or_default(|values| {
             values
                 .iter()
                 .map(|value| {
@@ -39,7 +39,6 @@ pub(super) fn extract_v4_character_prompts(
                 })
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 pub(super) fn extract_first_f32(object: &Map<String, Value>, keys: &[&str]) -> Option<f32> {
