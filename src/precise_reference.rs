@@ -1,4 +1,4 @@
-//! Bounded local exchange of NovelAI's precise reference image ZIP.
+//! Bounded local exchange of `NovelAI`'s precise reference image ZIP.
 use std::{
     collections::HashSet,
     io::{self, Cursor, Read, Write},
@@ -14,7 +14,7 @@ use crate::{
 
 const MANIFEST: &str = "metadata.json";
 
-/// A local NovelAI `reference_images.zip`, in manifest order.
+/// A local `NovelAI` `reference_images.zip`, in manifest order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PreciseReferenceDocument {
     pub entries: Vec<PreciseReferenceEntry>,
@@ -83,7 +83,7 @@ impl ManifestEntry {
 }
 
 impl PreciseReferenceDocument {
-    /// Reads images and parameters from an official archive without contacting NovelAI.
+    /// Reads images and parameters from an official archive without contacting `NovelAI`.
     ///
     /// # Errors
     /// Returns malformed ZIP, manifest or image errors, or exceeded media budgets.
@@ -253,7 +253,7 @@ impl PreciseReferenceDocument {
 
 fn valid_filename(name: &str) -> bool {
     !matches!(name, "" | "." | "..")
-        && name.len() <= usize::from(u16::MAX)
+        && u16::try_from(name.len()).is_ok()
         && !name.eq_ignore_ascii_case(MANIFEST)
         && !name.contains(['/', '\\', '\0'])
 }
@@ -272,7 +272,7 @@ fn unique_filename(
         name.to_owned()
     } else {
         let format = image::guess_format(entry.reference.image.as_bytes())
-            .map_err(|_| PreciseReferenceDocumentError::InvalidFilename { index })?;
+            .expect("a validated encoded image has a recognized format");
         let extension = format.extensions_str()[0];
         format!("reference_{}.{extension}", index + 1)
     };
