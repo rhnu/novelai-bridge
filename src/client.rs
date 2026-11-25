@@ -25,6 +25,24 @@ pub use stream::{GenerateImageStream, ImageStreamItem, ImageStreamResult};
 /// Default base URL for image-service endpoints.
 pub const DEFAULT_IMAGE_BASE: &str = "https://image.novelai.net";
 
+/// Environment variable read by [`ClientConfig::from_env`].
+pub const API_BASE_ENV: &str = "NOVELAI_API_BASE";
+
+/// Failure to resolve or validate the NovelAI service URL.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ApiBaseError {
+    /// The configured environment value is not Unicode.
+    #[error("NOVELAI_API_BASE must be valid Unicode")]
+    InvalidEnvironment,
+    /// The supplied value is not a URL.
+    #[error("invalid NovelAI API base URL")]
+    InvalidUrl(#[source] url::ParseError),
+    /// The URL cannot be used as an HTTP service base.
+    #[error("NovelAI API base must be an HTTP(S) URL without credentials, query, or fragment")]
+    UnsupportedUrl,
+}
+
 /// Service routing shared by all transport implementations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientConfig {
@@ -45,6 +63,39 @@ impl Default for ClientConfig {
             image_request_encoding: ImageRequestEncoding::default(),
             image_cache: None,
         }
+    }
+}
+
+impl ClientConfig {
+    /// Loads the service base from `NOVELAI_API_BASE`, falling back to the official API.
+    ///
+    /// # Errors
+    /// Returns an error if the variable is set to an unusable URL.
+    pub fn from_env() -> Result<Self, ApiBaseError> {
+        match std::env::var(API_BASE_ENV) {
+            Ok(value) => Self::default().with_api_base(&value),
+            Err(std::env::VarError::NotPresent) => Ok(Self::default()),
+            Err(std::env::VarError::NotUnicode(_)) => Err(ApiBaseError::InvalidEnvironment),
+        }
+    }
+
+    /// Sets an explicit HTTP(S) service base, optionally including a path prefix.
+    ///
+    /// # Errors
+    /// Returns an error if the URL is malformed or contains credentials, a query or a fragment.
+    pub fn with_api_base(mut self, api_base: &str) -> Result<Self, ApiBaseError> {
+        let url = url::Url::parse(api_base.trim()).map_err(ApiBaseError::InvalidUrl)?;
+        if !matches!(url.scheme(), "http" | "https")
+            || !url.has_host()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(ApiBaseError::UnsupportedUrl);
+        }
+        self.image_base_url = url.as_str().trim_end_matches('/').to_owned();
+        Ok(self)
     }
 }
 

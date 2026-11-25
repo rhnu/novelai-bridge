@@ -24,6 +24,7 @@ from typing import Any
 DEFAULT_BASE_URL = "https://image.novelai.net"
 DEFAULT_ENDPOINTS = ["/user/subscription", "/user/data"]
 DEFAULT_TOKEN_VAR = "NOVELAI_API_KEY"
+API_BASE_VAR = "NOVELAI_API_BASE"
 
 SENSITIVE_KEY_RE = re.compile(
     r"(token|secret|password|email|username|user_name|customer|payment|"
@@ -41,9 +42,9 @@ def parse_args() -> argparse.Namespace:
         description="Probe NovelAI user API endpoints and print redacted JSON summaries."
     )
     parser.add_argument(
+        "--api-base",
         "--base-url",
-        default=DEFAULT_BASE_URL,
-        help=f"API base URL. Default: {DEFAULT_BASE_URL}",
+        help=f"API base URL. Overrides {API_BASE_VAR}; default: {DEFAULT_BASE_URL}",
     )
     parser.add_argument(
         "--endpoint",
@@ -63,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--env-file",
         default=".env",
-        help="Repository-local env file to read if the token is not in the process env.",
+        help="Environment file relative to the repository unless an absolute path is given.",
     )
     parser.add_argument(
         "--token-var",
@@ -90,48 +91,64 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def read_dotenv(path: Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
-
-    values: dict[str, str] = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].lstrip()
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        values[key] = value
-    return values
+def dotenv_value(path: Path, name: str) -> str | None:
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for raw_line in stream:
+                key, separator, value = raw_line.strip().removeprefix("export ").partition("=")
+                if not separator or key.strip() != name:
+                    continue
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                    value = value[1:-1]
+                return value
+    except FileNotFoundError:
+        return None
+    return None
 
 
 def resolve_token(token_var: str, env_file: Path) -> str:
-    env_value = os.environ.get(token_var)
-    if env_value and env_value.strip():
-        return env_value.strip()
+    value = os.environ.get(token_var)
+    if value is None:
+        value = dotenv_value(env_file, token_var)
+    if value is None:
+        raise SystemExit(
+            f"Missing token. Set {token_var} in the process environment or in {env_file}."
+        )
+    if not value.strip():
+        raise SystemExit(f"{token_var} cannot be blank.")
+    return value.strip()
 
-    dotenv_value = read_dotenv(env_file).get(token_var)
-    if dotenv_value and dotenv_value.strip():
-        return dotenv_value.strip()
 
-    raise SystemExit(
-        f"Missing token. Set {token_var} in the process environment or in {env_file}."
-    )
+def resolve_api_base(explicit: str | None, env_file: Path) -> str:
+    value = explicit if explicit is not None else os.environ.get(API_BASE_VAR)
+    if value is None:
+        value = dotenv_value(env_file, API_BASE_VAR)
+    if value is None:
+        return DEFAULT_BASE_URL
+    value = value.strip()
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        _ = parsed.port
+    except ValueError:
+        raise SystemExit("Invalid NovelAI API base URL.") from None
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or any(char in value for char in "?#\\\t\r\n")
+    ):
+        raise SystemExit(
+            "NovelAI API base must be an HTTP(S) URL without credentials, query, or fragment."
+        )
+    return value.rstrip("/")
 
 
 def endpoint_url(base_url: str, endpoint: str) -> str:
-    if not endpoint.startswith("/"):
-        raise SystemExit(f"Endpoint must be a path starting with '/': {endpoint}")
-    return urllib.parse.urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
+    if not endpoint.startswith("/") or endpoint.startswith("//") or "\\" in endpoint:
+        raise SystemExit("Endpoint must be a service path starting with a single '/'.")
+    return base_url.rstrip("/") + endpoint
 
 
 def is_sensitive_key(key: str) -> bool:
@@ -214,7 +231,6 @@ def request_endpoint(
     timeout: float,
 ) -> tuple[int, str | None, bytes]:
     headers = {
-        "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "User-Agent": "novelai-bridge-user-api-probe/0.1",
     }
@@ -224,6 +240,7 @@ def request_endpoint(
         headers["Content-Type"] = "application/json"
 
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    request.add_unredirected_header("Authorization", f"Bearer {token}")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, response.headers.get("Content-Type"), response.read()
@@ -267,13 +284,14 @@ def main() -> int:
     if not env_file.is_absolute():
         env_file = root / env_file
 
+    base_url = resolve_api_base(args.api_base, env_file)
     token = resolve_token(args.token_var, env_file)
     endpoints = args.endpoint or DEFAULT_ENDPOINTS
     body = parse_json_body(args.json_body)
     out_dir = root / "scripts" / "out"
 
     for endpoint in endpoints:
-        url = endpoint_url(args.base_url, endpoint)
+        url = endpoint_url(base_url, endpoint)
         status, content_type, raw_body = request_endpoint(
             url=url,
             token=token,

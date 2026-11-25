@@ -1,10 +1,10 @@
 use futures_util::StreamExt;
 use novelai_bridge::{
-    ApiEndpoint, CharacterReference, CharacterReferenceType, Client, DEFAULT_IMAGE_BASE,
-    EncodeVibeRequest, GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery,
-    GenerationInput, ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model,
-    ReferenceSet, StreamMode, SuggestTagsRequest, TagLanguage, Transport, UpscaleImageRequest,
-    VibeInputPath, VibeReference, VibeTransferConfig,
+    ApiEndpoint, CharacterReference, CharacterReferenceType, Client, EncodeVibeRequest,
+    GenerateImageRequest, GenerateImageStreamRequest, GenerationDelivery, GenerationInput,
+    ImageSize, ImageToImageInput, InpaintImageToImage, InpaintingInput, Model, ReferenceSet,
+    StreamMode, SuggestTagsRequest, TagLanguage, Transport, UpscaleImageRequest, VibeInputPath,
+    VibeReference, VibeTransferConfig,
 };
 
 use crate::{Preset, RunArgs, TaskResult, capture::RequestEdits, inputs, render, report};
@@ -54,10 +54,11 @@ pub fn shape(
     model: Model,
     size: ImageSize,
     edits: &RequestEdits,
+    api_base: &str,
 ) -> TaskResult<()> {
     if args.preset == Preset::Tags {
         let query = tag_query(args, model);
-        let mut request = ApiEndpoint::SuggestTags.request(DEFAULT_IMAGE_BASE, None);
+        let mut request = ApiEndpoint::SuggestTags.request(api_base, None);
         request.endpoint.push('?');
         request.endpoint.push_str(&query.query_string());
         edits.apply(request)?;
@@ -107,7 +108,7 @@ pub fn shape(
             )
         },
     };
-    let mut request = endpoint.request(DEFAULT_IMAGE_BASE, body);
+    let mut request = endpoint.request(api_base, body);
     if endpoint == ApiEndpoint::GenerateImageStream && stream_mode(args) == StreamMode::MessagePack
     {
         request.accept = None;

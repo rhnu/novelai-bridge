@@ -24,8 +24,8 @@ mod validation;
 mod vibe;
 
 pub use client::{
-    Client, ClientConfig, DEFAULT_IMAGE_BASE, GenerateImageStream, ImageCacheConfig,
-    ImageRequestEncoding, ImageStreamItem, ImageStreamResult,
+    API_BASE_ENV, ApiBaseError, Client, ClientConfig, DEFAULT_IMAGE_BASE, GenerateImageStream,
+    ImageCacheConfig, ImageRequestEncoding, ImageStreamItem, ImageStreamResult,
 };
 pub use director::{
     DirectorCommand, PreparedDirector, RunDirectorToolRequest, RunDirectorToolResult,

@@ -5,8 +5,44 @@ use std::{
 
 use async_trait::async_trait;
 
-use super::{Client, ClientConfig};
+use super::{ApiBaseError, Client, ClientConfig};
 use crate::{BridgeError, Transport, TransportError, TransportRequest, TransportResponse};
+
+#[test]
+fn config_retains_the_service_prefix_for_image_and_account_endpoints() {
+    let config = ClientConfig::default()
+        .with_api_base(" https://proxy.example/novelai/v1/ ")
+        .unwrap();
+    for endpoint in [
+        crate::ApiEndpoint::GenerateImage,
+        crate::ApiEndpoint::Subscription,
+    ] {
+        let request = endpoint.request(&config.image_base_url, None);
+        assert_eq!(
+            request.endpoint,
+            format!("https://proxy.example/novelai/v1{}", endpoint.path())
+        );
+    }
+}
+
+#[test]
+fn config_rejects_credentials_and_non_base_url_components() {
+    for invalid in [
+        "file:///novelai",
+        "https://mock-user:mock-password@example.test/novelai",
+        "https://example.test/novelai?query",
+        "https://example.test/novelai#fragment",
+    ] {
+        assert!(matches!(
+            ClientConfig::default().with_api_base(invalid),
+            Err(ApiBaseError::UnsupportedUrl)
+        ));
+    }
+    assert!(matches!(
+        ClientConfig::default().with_api_base(""),
+        Err(ApiBaseError::InvalidUrl(_))
+    ));
+}
 
 struct Ordinary {
     responses: Mutex<VecDeque<Vec<u8>>>,

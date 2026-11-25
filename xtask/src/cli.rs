@@ -93,6 +93,10 @@ pub struct RunArgs {
     #[arg(value_enum)]
     pub preset: Preset,
 
+    /// API base URL, optionally with a path prefix. Overrides `NOVELAI_API_BASE`.
+    #[arg(long, alias = "base-url")]
+    pub api_base: Option<String>,
+
     /// Model identifier, for example `nai-diffusion-5-full`.
     #[arg(long, value_parser = parse_model)]
     pub model: Option<Model>,

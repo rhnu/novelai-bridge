@@ -14,7 +14,7 @@ use anyhow::Context as _;
 use capture::{CaptureTransport, RequestEdits};
 use clap::Parser;
 use cli::{Cli, Command, Preset, RunArgs};
-use novelai_bridge::{Client, ClientConfig, ImageSize, ReqwestTransport};
+use novelai_bridge::{Client, ImageSize, ReqwestTransport};
 
 type TaskResult<T> = anyhow::Result<T>;
 
@@ -56,21 +56,19 @@ async fn run(args: &RunArgs, live: bool) -> TaskResult<()> {
     });
     let size = parse_size(&args.size)?;
     let edits = RequestEdits::new(&args.overrides, args.removals.clone())?;
+    let mut config = credentials::client_config(args.api_base.as_deref())?;
     if !live {
-        return presets::shape(args, model, size, &edits);
+        return presets::shape(args, model, size, &edits, &config.image_base_url);
     }
     let transport = CaptureTransport::new(ReqwestTransport::new(credentials::options()?)?, edits);
-    let config = ClientConfig {
-        image_request_encoding: if args.request_encoding == "multipart" {
-            novelai_bridge::ImageRequestEncoding::Multipart
-        } else {
-            novelai_bridge::ImageRequestEncoding::Json
-        },
-        image_cache: args
-            .cache_images
-            .then(novelai_bridge::ImageCacheConfig::default),
-        ..ClientConfig::default()
+    config.image_request_encoding = if args.request_encoding == "multipart" {
+        novelai_bridge::ImageRequestEncoding::Multipart
+    } else {
+        novelai_bridge::ImageRequestEncoding::Json
     };
+    config.image_cache = args
+        .cache_images
+        .then(novelai_bridge::ImageCacheConfig::default);
     let client = Client::new(Arc::new(transport), config);
     for run in 1..=args.repeat {
         if args.repeat > 1 {
