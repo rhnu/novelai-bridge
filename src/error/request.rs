@@ -70,6 +70,9 @@ pub enum InvalidRequest {
         left: RequestField,
         right: RequestField,
     },
+    /// An effective precise reference was beyond the model's limit.
+    #[error("{field} exceeds the limit of {limit} precise references")]
+    TooManyCharacterReferences { field: RequestField, limit: usize },
     /// A required non-empty prompt was missing for a selected tool or mode.
     #[error("{context} requires non-empty {field}")]
     RequiredFieldForContext {

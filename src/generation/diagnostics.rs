@@ -14,6 +14,8 @@ pub enum NormalizationChange {
     Conflict { retained_field: GenerationField },
     /// Enabled character exceeded the model limit.
     CharacterLimit { index: usize, limit: u32 },
+    /// An effective precise reference exceeded the model's limit.
+    ReferenceLimit { limit: usize },
 }
 
 /// A deterministic normalization decision without prompt text or image data.

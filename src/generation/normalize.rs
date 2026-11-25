@@ -7,8 +7,8 @@ mod values;
 use super::{NormalizationChange, NormalizationDiagnostic, NormalizedGeneration};
 use crate::{
     BridgeError, GenerateImageRequest, GenerationConstraints, GenerationField as Field,
-    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, ModelDescriptor,
-    ValidationPolicy,
+    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, Model, ModelDescriptor,
+    ReferenceIntent, ValidationPolicy,
 };
 
 pub(super) fn normalize(
@@ -16,7 +16,25 @@ pub(super) fn normalize(
     policy: ValidationPolicy,
 ) -> Result<NormalizedGeneration, BridgeError> {
     request.policy = policy;
-    let effective_model = request.descriptor().effective_model_for(request.mode());
+    let selected_descriptor = request.descriptor();
+    let active_precise_references = selected_descriptor
+        .support()
+        .character_reference
+        .is_some_and(|profile| {
+            request.references.as_ref().is_some_and(|references| {
+                references
+                    .character_references
+                    .iter()
+                    .any(|reference| profile.resolve_type(reference.reference_type).is_some())
+            })
+        });
+    let effective_model = selected_descriptor.effective_model_for_references(
+        request.mode(),
+        ReferenceIntent {
+            character: active_precise_references,
+            ..Default::default()
+        },
+    );
     let mut diagnostics = Vec::new();
     if effective_model != request.core.model {
         if policy.is_reject() {
@@ -31,6 +49,21 @@ pub(super) fn normalize(
             field: Field::Model,
             change: NormalizationChange::Fallback,
         });
+        if matches!(
+            selected_descriptor.identity().model,
+            Model::NaiDiffusion5FullMedium
+        ) && request.sampling.steps == selected_descriptor.defaults().sampling.steps
+        {
+            let default_steps = effective_model.descriptor().defaults().sampling.steps;
+            diagnostics.push(NormalizationDiagnostic {
+                field: Field::Steps,
+                change: NormalizationChange::Adjusted {
+                    from: f64::from(request.sampling.steps),
+                    to: f64::from(default_steps),
+                },
+            });
+            request.sampling.steps = default_steps;
+        }
     }
     let descriptor = request.descriptor();
     let mut normalizer = Normalizer {
@@ -39,6 +72,7 @@ pub(super) fn normalize(
         diagnostics,
     };
     normalizer.normalize_base_fields(&mut request)?;
+    let reference_indices = normalizer.normalize_references(&mut request, descriptor)?;
     normalizer.apply_capability_gates(&mut request, descriptor)?;
     let model_id = descriptor.model_id_for(request.mode()).ok_or_else(|| {
         InvalidRequest::UnsupportedModelFeature {
@@ -50,9 +84,6 @@ pub(super) fn normalize(
         && let Some(profile) = descriptor.prompt().characters
     {
         normalizer.normalize_character_positions(characters, profile.positioning)?;
-    }
-    if let Some(references) = request.references.as_mut() {
-        normalizer.normalize_character_references(references)?;
     }
     normalizer.normalize_operation(&mut request.operation, descriptor)?;
     normalizer.normalize_sampling(&mut request, descriptor)?;
@@ -78,6 +109,8 @@ pub(super) fn normalize(
         request,
         prompts,
         diagnostics: normalizer.diagnostics,
+        character_reference_indices: reference_indices.character,
+        vibe_reference_indices: reference_indices.vibe,
     })
 }
 
@@ -137,7 +170,6 @@ impl Normalizer {
         descriptor: &ModelDescriptor,
     ) -> Result<(), BridgeError> {
         self.gate_characters(params, descriptor)?;
-        self.normalize_references(params, descriptor)?;
         self.normalize_custom_negative_prompts(params, descriptor)?;
         if params.core.legacy_uc
             && !self.require_capability(

@@ -11,10 +11,12 @@ pub enum CharacterField {
     Y,
 }
 
-/// Numeric properties of a character reference.
+/// Editable locations in one character reference.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CharacterReferenceField {
+    Entry,
     Image,
+    ReferenceType,
     InformationExtracted,
     Fidelity,
     Strength,
@@ -150,14 +152,16 @@ impl fmt::Display for GenerationField {
             },
             Self::CharacterReference { index, field } => {
                 let suffix = match field {
-                    CharacterReferenceField::Image => "image",
-                    CharacterReferenceField::InformationExtracted => "information_extracted",
-                    CharacterReferenceField::Fidelity => "fidelity",
-                    CharacterReferenceField::Strength => "strength",
+                    CharacterReferenceField::Entry => "",
+                    CharacterReferenceField::Image => ".image",
+                    CharacterReferenceField::ReferenceType => ".reference_type",
+                    CharacterReferenceField::InformationExtracted => ".information_extracted",
+                    CharacterReferenceField::Fidelity => ".fidelity",
+                    CharacterReferenceField::Strength => ".strength",
                 };
                 return write!(
                     formatter,
-                    "references.character_references[{index}].{suffix}"
+                    "references.character_references[{index}]{suffix}"
                 );
             },
             Self::VibeReference { index, field } => {

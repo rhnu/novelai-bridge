@@ -15,7 +15,7 @@
 | `wire()` | Conditioning representation and protocol extensions |
 | `pricing()` | Model multiplier and Opus allowance policy |
 
-Registry entries compose small profiles. Inpainting support carries its sibling identifier, character-reference support carries its allowed modes, and variety boost carries its coefficient. A missing profile means the capability is unavailable.
+Registry entries compose small profiles. Inpainting support carries its sibling identifier, precise-reference support carries its controls and allowed modes, and variety boost carries its coefficient. A missing profile means the capability is unavailable.
 
 `descriptor.prompt().syntax` supplies `PromptSyntaxProfile` to `analyze_prompt`. All supported
 families use continuous bracket emphasis and randomizers. V3 uses pipe mixing and trailing
@@ -37,19 +37,25 @@ Request factories read `model.descriptor().defaults()`; basic parameter values d
 
 Use the builder's `operation`, `image_to_image` or `inpainting` method to select the operation. `InpaintingInput::new(image, mask)` selects pure infill. Set `img2img` to `Some(InpaintImageToImage::new(strength, noise))` for source conditioning. The nested group owns color correction and the optional noise seed; omitted seeds reuse the resolved request seed. V3 supports pure infill; V4 and later also support the nested group.
 
-V5 Curated inpainting uses V4.5 Curated, matching the official frontend. Under Normalize, the effective request's model changes before prompts, capabilities, token counting and pricing are resolved; transparency is removed with a diagnostic. Reject reports the required model change at `core.model`. Use `effective_model_for(mode)` on the descriptor to inspect the operation's model family before preparing a request.
+V5 Curated inpainting uses V4.5 Curated, matching the official frontend. Under Normalize, the effective request's model changes before prompts, capabilities, token counting and pricing are resolved. V4.5 reference controls apply, including keeping its supported types, converting V5 outfit preferences to the corresponding V4.5 type and removing outfit-only references. Transparency is removed with a diagnostic. Reject reports the required model change at `core.model`. Use `effective_model_for(mode)` to inspect operation-only model routing or `effective_model_for_references(mode, intent)` to include active references.
 
 `request.mode()` delegates to the selected input. `descriptor.model_id_for(mode)` queries the supported API identity; normalization resolves it once, exposed as `NormalizedGeneration::model_id()`. Unsupported operations are rejected rather than converted to another operation.
 
 Editable generation requests and operation envelopes reject unknown serialized fields. The operation uses a `mode` tag and an `input` object for image-to-image or inpainting. Unknown keys are rejected rather than ignored. See the [release notes](../CHANGELOG.md) for migration details.
 
-`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unsupported mode and conflict with character references.
+`descriptor.resolve_references(mode, ReferenceIntent { vibe, character })` is a pure query. Its results distinguish available, not requested, unsupported, unsupported mode and conflict with character references. The result includes operation routing. For Medium effort, a supported precise reference is available through the Full model, identified by the reference profile's `required_model`.
 
-Character support is resolved first. Unsupported character input cannot suppress valid vibe input. Empty reference subgroups are treated consistently before availability and retained-value validation. `request.policy` uses the shared `ValidationPolicy`: `Reject` turns unavailable reference input into an error; `Normalize` removes it and records diagnostics. `normalize_with(policy)` overrides the editable request policy for the resulting plan.
+Character references take precedence when a supported reference is retained. When all character inputs are removed, valid vibe inputs are retained. Normalize removes unsupported reference rows, applies compatible type conversions and retains the first 16 valid precise references in input order. Reject fails when these changes are necessary and identifies the affected input. `normalize_with(policy)` overrides the editable request policy for the resulting plan.
 
-V3 accepts raw image vibe references in all generation modes. It prepares each image on a centered black 448×448 canvas with proportional Lanczos resizing. It does not encode new vibe data. Use `can_encode_vibe()` for encoding capability: V4/V4.5 support encoded input; V5 has neither vibe nor character-reference profiles.
+V3 accepts raw image vibe references in all generation modes. It prepares each image on a centered black 448×448 canvas with proportional Lanczos resizing. V4/V4.5 support encoded inputs and encoding via `can_encode_vibe()`. V5 has no vibe profile.
 
-`VibeReferenceInput` distinguishes raw images from precomputed encodings. Normalize removes inputs that do not match the selected profile and reports their original reference index; Reject returns that field as an error. Encoded strength normalization is an explicit `VibeTransferConfig::normalize_strength` setting. Reference strengths and character-reference fidelity accept finite signed values; information extraction uses the 0-1 range. Character information extraction is independent of its other values.
+V4.5 precise references support character, style and combined reference types, with proportional resizing and a padded landscape, square or portrait canvas. They work in all generation modes and preserve signed fidelity. V5 Full and Curated support these types plus outfit references and outfit preferences for character and combined references. Full Medium switches to Full under Normalize for supported unmasked requests with precise references. Full and Full Medium inpainting omit precise references under Normalize, including when source refinement is present. Reject reports the model or reference incompatibility. V5 uses the closest aspect-ratio canvas and prepares an evenly cropped image. Its reference fidelity is fixed at one, which sends zero secondary strength.
+
+The reference profile exposes allowed types, the default type for a new reference, the strength slider maximum and whether to show fidelity. V4.5 and V5 default to character and style. Combined V5 references default to preferring the same outfit, and their strength slider has a maximum of five. Typed requests accept finite signed strengths.
+
+`VibeReferenceInput` distinguishes raw images from precomputed encodings. Normalize removes mismatched inputs and reports their original reference index. Reject returns that field as an error. Encoded strength normalization is an explicit `VibeTransferConfig::normalize_strength` setting. Information extraction uses the 0–1 range. Precise reference information extraction is independent of strength and fidelity.
+
+`NormalizedGeneration::character_reference_source_indices()` and `vibe_reference_source_indices()` give the original row for each retained reference. Image preprocessing and request diagnostics use these original positions. The wire arrays use the effective row order.
 
 The registry covers the current public V3-V5 families. Retired V1/V2 models and historical
 ControlNet tooling are not enabled by the presence of old schema fields. Nonproduction custom

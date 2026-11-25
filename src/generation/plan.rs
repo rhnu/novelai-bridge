@@ -30,6 +30,8 @@ pub struct NormalizedGeneration {
     pub(super) prompts: ResolvedPrompts,
     pub(super) diagnostics: Vec<NormalizationDiagnostic>,
     pub(super) geometry: GenerationGeometry,
+    pub(super) character_reference_indices: Vec<usize>,
+    pub(super) vibe_reference_indices: Vec<usize>,
 }
 
 impl GenerateImageRequest {
@@ -88,6 +90,16 @@ impl NormalizedGeneration {
     /// Decisions made while constructing this plan, in normalization order.
     #[must_use]
     pub fn diagnostics(&self) -> &[NormalizationDiagnostic] { &self.diagnostics }
+
+    /// Original input index for each retained character reference, in effective order.
+    #[must_use]
+    pub fn character_reference_source_indices(&self) -> &[usize] {
+        &self.character_reference_indices
+    }
+
+    /// Original input index for each retained vibe reference, in effective order.
+    #[must_use]
+    pub fn vibe_reference_source_indices(&self) -> &[usize] { &self.vibe_reference_indices }
 
     /// Policy used to construct this plan.
     #[must_use]

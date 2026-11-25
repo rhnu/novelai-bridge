@@ -1,5 +1,14 @@
 use super::*;
-use crate::{VibeReference, VibeTransferConfig, generation::test_support::image};
+use crate::{
+    CharacterReference, CharacterReferenceType, GenerateImageRequest, Model, ReferenceSet,
+    VibeReference, VibeTransferConfig, generation::test_support::image,
+};
+
+fn normalize(model: Model, references: ReferenceSet) -> NormalizedGeneration {
+    let mut request = GenerateImageRequest::builder("cat", model).build();
+    request.references = Some(references);
+    request.normalize().unwrap()
+}
 
 #[test]
 fn character_rows_share_preparation_and_keep_their_own_conditioning() {
@@ -14,7 +23,8 @@ fn character_rows_share_preparation_and_keep_their_own_conditioning() {
         character_references: vec![style, character],
         ..Default::default()
     };
-    let prepared = prepare_references(Some(&references), None).unwrap();
+    let plan = normalize(Model::NaiDiffusion45Full, references);
+    let prepared = prepare_references(&plan, None).unwrap();
     let ReferenceParameters::Character(rows) = &prepared else {
         panic!("character references")
     };
@@ -47,6 +57,55 @@ fn character_rows_share_preparation_and_keep_their_own_conditioning() {
 }
 
 #[test]
+fn v5_projects_the_reference_types_in_order_and_zeros_secondary_strength() {
+    let reference_types = [
+        (CharacterReferenceType::Character, "character"),
+        (
+            CharacterReferenceType::CharacterMainOutfit,
+            "character_mainoutfit",
+        ),
+        (CharacterReferenceType::Style, "style"),
+        (CharacterReferenceType::Costume, "costume"),
+        (
+            CharacterReferenceType::CharacterAndStyleAnyOutfit,
+            "character&style_anyoutfit",
+        ),
+        (CharacterReferenceType::CharacterAndStyle, "character&style"),
+    ];
+    let image = image();
+    let references = ReferenceSet {
+        character_references: reference_types
+            .iter()
+            .map(|&(kind, wire)| {
+                assert_eq!(
+                    serde_json::from_value::<CharacterReferenceType>(wire.into()).unwrap(),
+                    kind
+                );
+                assert_eq!(serde_json::to_value(kind).unwrap(), wire);
+                let mut reference = CharacterReference::new(image.clone(), kind);
+                reference.fidelity = 0.25;
+                reference.strength = 3.5;
+                reference
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let plan = normalize(Model::NaiDiffusion5Curated, references);
+    let body = serde_json::to_value(prepare_references(&plan, None).unwrap()).unwrap();
+    for (index, (_, wire)) in reference_types.into_iter().enumerate() {
+        assert_eq!(
+            body["director_reference_descriptions"][index]["caption"]["base_caption"],
+            wire,
+        );
+        assert_eq!(
+            body["director_reference_secondary_strength_values"][index],
+            0.0
+        );
+        assert_eq!(body["director_reference_strength_values"][index], 3.5);
+    }
+}
+
+#[test]
 fn repeated_default_references_share_prepared_bytes_without_merging_rows() {
     let image = image();
     let references = ReferenceSet {
@@ -56,7 +115,8 @@ fn repeated_default_references_share_prepared_bytes_without_merging_rows() {
         ])),
         ..Default::default()
     };
-    let prepared = prepare_references(Some(&references), None).unwrap();
+    let plan = normalize(Model::NaiDiffusion3, references);
+    let prepared = prepare_references(&plan, None).unwrap();
     let ReferenceParameters::Vibe { references, .. } = &prepared else {
         panic!("raw vibes")
     };
@@ -104,12 +164,14 @@ fn custom_preprocessors_keep_each_rows_field_and_output() {
     let references = ReferenceSet {
         vibe_transfer: Some(VibeTransferConfig::new(vec![
             VibeReference::image(image.clone(), 0.5, 1.0),
+            VibeReference::encoded(crate::VibeEncoding::from_bytes(vec![1]).unwrap(), 1.0),
             VibeReference::image(image, 0.5, 1.0),
         ])),
         ..Default::default()
     };
     let preprocessor = ByIndex(std::sync::Mutex::new(Vec::new()));
-    let prepared = prepare_references(Some(&references), Some(&preprocessor)).unwrap();
+    let plan = normalize(Model::NaiDiffusion3, references);
+    let prepared = prepare_references(&plan, Some(&preprocessor)).unwrap();
     let calls = preprocessor.0.lock().unwrap();
     assert_eq!(
         calls.as_slice(),
@@ -120,7 +182,7 @@ fn custom_preprocessors_keep_each_rows_field_and_output() {
             }
             .into(),
             GenerationField::VibeReference {
-                index: 1,
+                index: 2,
                 field: VibeReferenceField::Image
             }
             .into(),

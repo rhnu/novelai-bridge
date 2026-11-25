@@ -7,13 +7,17 @@ use crate::VibeTransferConfig;
 pub enum CharacterReferenceType {
     /// Character-only reference.
     Character,
+    /// Character-only reference emphasizing the source outfit.
+    CharacterMainOutfit,
     /// Style-only reference.
     Style,
     /// Combined character and style reference.
     CharacterAndStyle,
+    /// Combined character and style reference without emphasizing the source outfit.
+    CharacterAndStyleAnyOutfit,
     /// Costume reference.
     Costume,
-    /// Delta reference.
+    /// Historical delta reference value retained for deserializing existing requests.
     Delta,
 }
 
@@ -23,8 +27,10 @@ impl CharacterReferenceType {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Character => "character",
+            Self::CharacterMainOutfit => "character_mainoutfit",
             Self::Style => "style",
             Self::CharacterAndStyle => "character&style",
+            Self::CharacterAndStyleAnyOutfit => "character&style_anyoutfit",
             Self::Costume => "costume",
             Self::Delta => "delta",
         }
@@ -35,8 +41,10 @@ crate::parameters::serde_string_enum!(
     CharacterReferenceType,
     [
         Self::Character,
+        Self::CharacterMainOutfit,
         Self::Style,
         Self::CharacterAndStyle,
+        Self::CharacterAndStyleAnyOutfit,
         Self::Costume,
         Self::Delta
     ]
@@ -53,7 +61,8 @@ pub struct CharacterReference {
     /// Amount of information extracted, normalized to 0–1; defaults to one.
     #[serde(default = "default_information_extracted")]
     pub information_extracted: f32,
-    /// Finite, signed fidelity used to derive `1 - fidelity` secondary strength.
+    /// Finite, signed V4.5 fidelity used to derive `1 - fidelity` secondary strength.
+    /// V5 references use one.
     pub fidelity: f32,
     /// Finite, signed reference strength.
     pub strength: f32,

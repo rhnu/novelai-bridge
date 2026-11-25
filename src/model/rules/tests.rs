@@ -122,21 +122,37 @@ fn raw_vibe_is_available_for_all_v3_generation_modes() {
 }
 
 #[test]
-fn generation_modes_cannot_create_an_absent_character_reference_capability() {
-    for model in [Model::NaiDiffusion5Full, Model::NaiDiffusion5Curated] {
-        for mode in [
-            GenerationMode::TextToImage,
-            GenerationMode::ImageToImage,
-            GenerationMode::Inpainting,
-        ] {
-            let availability = model.descriptor().resolve_references(
-                mode,
-                ReferenceIntent {
-                    vibe: false,
-                    character: true,
-                },
-            );
-            assert_eq!(availability.character, ReferenceAvailability::Unsupported);
-        }
+fn v5_reference_availability_follows_the_effective_operation() {
+    let intent = ReferenceIntent {
+        character: true,
+        ..Default::default()
+    };
+    for (model, inpainting) in [
+        (
+            Model::NaiDiffusion5Full,
+            ReferenceAvailability::UnsupportedMode,
+        ),
+        (
+            Model::NaiDiffusion5FullMedium,
+            ReferenceAvailability::UnsupportedMode,
+        ),
+        (
+            Model::NaiDiffusion5Curated,
+            ReferenceAvailability::Available,
+        ),
+    ] {
+        let descriptor = model.descriptor();
+        assert_eq!(
+            descriptor
+                .resolve_references(GenerationMode::ImageToImage, intent)
+                .character,
+            ReferenceAvailability::Available,
+        );
+        assert_eq!(
+            descriptor
+                .resolve_references(GenerationMode::Inpainting, intent)
+                .character,
+            inpainting,
+        );
     }
 }

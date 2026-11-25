@@ -56,6 +56,27 @@ impl ModelDescriptor {
         }
     }
 
+    /// Resolves the operation's model with active reference groups.
+    ///
+    /// Medium effort uses Full while supported precise references are applied. V5 Curated
+    /// inpainting retains its operation-specific routing through V4.5 Curated.
+    #[must_use]
+    pub const fn effective_model_for_references(
+        &self,
+        mode: GenerationMode,
+        intent: ReferenceIntent,
+    ) -> Model {
+        if intent.character
+            && self.character_reference_availability(mode).is_available()
+            && let Some(profile) = self.support.character_reference
+            && let Some(required_model) = profile.required_model
+        {
+            required_model
+        } else {
+            self.effective_model_for(mode)
+        }
+    }
+
     /// Maximum simultaneous samples for the effective pricing canvas.
     #[must_use]
     pub const fn sample_limit(&self, size: crate::ImageSize) -> u32 {
@@ -113,6 +134,15 @@ impl ModelDescriptor {
         mode: GenerationMode,
         intent: ReferenceIntent,
     ) -> ReferenceResolution {
+        if matches!(
+            (self.identity.model, mode),
+            (Model::NaiDiffusion5Curated, GenerationMode::Inpainting)
+        ) {
+            return self
+                .effective_model_for(mode)
+                .descriptor()
+                .resolve_references(mode, intent);
+        }
         let character = if intent.character {
             self.character_reference_availability(mode)
         } else {

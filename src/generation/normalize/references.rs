@@ -1,19 +1,28 @@
 use super::{Field, Normalizer};
 use crate::{
     BridgeError, CharacterReferenceField, GenerateImageRequest, ImageInputField, InvalidRequest,
-    ModelDescriptor, ReferenceAvailability, ReferenceIntent, ReferenceSet, VibeInputPath,
-    VibeReferenceField, VibeReferenceInput, VibeTransferConfig, generation::NormalizationChange,
+    ModelDescriptor, ReferenceAvailability, ReferenceIntent, ReferenceProfile, ReferenceSet,
+    VibeInputPath, VibeReferenceField, VibeReferenceInput, VibeTransferConfig,
+    generation::NormalizationChange,
 };
+
+/// Original positions of the effective reference groups.
+#[derive(Default)]
+pub(super) struct ReferenceSourceIndices {
+    pub(super) character: Vec<usize>,
+    pub(super) vibe: Vec<usize>,
+}
 
 impl Normalizer {
     pub(super) fn normalize_references(
         &mut self,
         params: &mut GenerateImageRequest,
         descriptor: &ModelDescriptor,
-    ) -> Result<(), BridgeError> {
+    ) -> Result<ReferenceSourceIndices, BridgeError> {
+        let mut indices = ReferenceSourceIndices::default();
         let mode = params.mode();
         let Some(references) = params.references.as_mut() else {
-            return Ok(());
+            return Ok(indices);
         };
         if references
             .vibe_transfer
@@ -29,17 +38,34 @@ impl Normalizer {
                 .as_ref()
                 .is_some_and(|vibe| !vibe.references.is_empty()),
         };
-        let resolution = descriptor.resolve_references(mode, intent);
-        if intent.character
-            && !self.reference_allowed(Field::CharacterReferences, resolution.character)?
-        {
-            references.character_references.clear();
+        let mut resolution = descriptor.resolve_references(mode, intent);
+        if intent.character {
+            if self.reference_allowed(Field::CharacterReferences, resolution.character)? {
+                let profile = descriptor
+                    .support()
+                    .character_reference
+                    .expect("normalization uses the effective reference model");
+                indices.character = self.normalize_character_references(references, profile)?;
+            } else {
+                references.character_references.clear();
+            }
+            if indices.character.is_empty()
+                && resolution.vibe == ReferenceAvailability::ConflictWithCharacterReference
+            {
+                resolution = descriptor.resolve_references(
+                    mode,
+                    ReferenceIntent {
+                        character: false,
+                        ..intent
+                    },
+                );
+            }
         }
         if intent.vibe && !self.reference_allowed(Field::VibeTransfer, resolution.vibe)? {
             references.vibe_transfer = None;
         }
         if let Some(vibe) = references.vibe_transfer.as_mut() {
-            self.normalize_vibe_transfer(vibe, descriptor)?;
+            indices.vibe = self.normalize_vibe_transfer(vibe, descriptor)?;
             if vibe.references.is_empty() {
                 references.vibe_transfer = None;
             }
@@ -47,7 +73,7 @@ impl Normalizer {
         if references.is_empty() {
             params.references = None;
         }
-        Ok(())
+        Ok(indices)
     }
 
     pub(super) fn reference_allowed(
@@ -95,51 +121,84 @@ impl Normalizer {
         Ok(false)
     }
 
-    pub(super) fn normalize_character_references(
+    fn normalize_character_references(
         &mut self,
         references: &mut ReferenceSet,
-    ) -> Result<(), BridgeError> {
-        for (idx, item) in references.character_references.iter_mut().enumerate() {
-            Self::validate_reference_number(
-                Field::CharacterReference {
-                    index: idx,
-                    field: CharacterReferenceField::Fidelity,
-                },
-                item.fidelity,
+        profile: ReferenceProfile,
+    ) -> Result<Vec<usize>, BridgeError> {
+        let capacity = references
+            .character_references
+            .len()
+            .min(profile.max_references);
+        let mut retained = Vec::with_capacity(capacity);
+        let mut indices = Vec::with_capacity(capacity);
+        for (index, mut item) in std::mem::take(&mut references.character_references)
+            .into_iter()
+            .enumerate()
+        {
+            let field = |field| Field::CharacterReference { index, field };
+            let type_field = field(CharacterReferenceField::ReferenceType);
+            let Some(effective_type) = profile.resolve_type(item.reference_type) else {
+                self.require_capability(
+                    false,
+                    type_field,
+                    "a model supporting this reference type",
+                    NormalizationChange::Unsupported,
+                )?;
+                continue;
+            };
+            self.require_capability(
+                effective_type == item.reference_type,
+                type_field,
+                "a model supporting this outfit preference",
+                NormalizationChange::Fallback,
             )?;
+            item.reference_type = effective_type;
+
+            if retained.len() == profile.max_references {
+                let field = field(CharacterReferenceField::Entry);
+                let limit = profile.max_references;
+                if self.policy.is_reject() {
+                    return Err(InvalidRequest::TooManyCharacterReferences {
+                        field: field.into(),
+                        limit,
+                    }
+                    .into());
+                }
+                self.record(field, NormalizationChange::ReferenceLimit { limit });
+                continue;
+            }
+
+            let fidelity_field = field(CharacterReferenceField::Fidelity);
+            if profile.fidelity {
+                Self::validate_reference_number(fidelity_field, item.fidelity)?;
+                Self::validate_reference_number(fidelity_field, 1.0 - item.fidelity)?;
+            } else {
+                item.fidelity =
+                    self.normalize_f32_range(fidelity_field, item.fidelity, 1.0, 1.0)?;
+            }
             Self::validate_reference_number(
-                Field::CharacterReference {
-                    index: idx,
-                    field: CharacterReferenceField::Fidelity,
-                },
-                1.0 - item.fidelity,
-            )?;
-            Self::validate_reference_number(
-                Field::CharacterReference {
-                    index: idx,
-                    field: CharacterReferenceField::Strength,
-                },
+                field(CharacterReferenceField::Strength),
                 item.strength,
             )?;
             item.information_extracted = self.normalize_f32_range(
-                Field::CharacterReference {
-                    index: idx,
-                    field: CharacterReferenceField::InformationExtracted,
-                },
+                field(CharacterReferenceField::InformationExtracted),
                 item.information_extracted,
                 0.0,
                 1.0,
             )?;
+            retained.push(item);
+            indices.push(index);
         }
-
-        Ok(())
+        references.character_references = retained;
+        Ok(indices)
     }
 
-    pub(super) fn normalize_vibe_transfer(
+    fn normalize_vibe_transfer(
         &mut self,
         vibe: &mut VibeTransferConfig,
         descriptor: &ModelDescriptor,
-    ) -> Result<(), BridgeError> {
+    ) -> Result<Vec<usize>, BridgeError> {
         let path = descriptor
             .support()
             .vibe
@@ -200,7 +259,7 @@ impl Normalizer {
                 .map(|reference| f64::from(reference.strength).abs())
                 .sum();
             if absolute_sum > 1.0 {
-                for (reference, index) in retained.iter_mut().zip(indices) {
+                for (reference, &index) in retained.iter_mut().zip(&indices) {
                     let original = reference.strength;
                     #[expect(
                         clippy::cast_possible_truncation,
@@ -220,7 +279,7 @@ impl Normalizer {
             }
         }
         vibe.references = retained;
-        Ok(())
+        Ok(indices)
     }
 
     fn validate_reference_number(field: Field, value: f32) -> Result<(), BridgeError> {

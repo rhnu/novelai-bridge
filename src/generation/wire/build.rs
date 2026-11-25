@@ -89,7 +89,7 @@ pub(in crate::generation) fn build_generate_request(
             ),
             operation: prepare_operation(normalized, resolved_seed, preprocessor)?,
             capabilities,
-            references: prepare_references(params.references.as_ref(), preprocessor)?,
+            references: prepare_references(normalized, preprocessor)?,
             extensions: if descriptor.wire().uses_v5_extensions() {
                 ProtocolExtensions::V5 { legacy_uc: false }
             } else {

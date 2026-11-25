@@ -5,7 +5,7 @@ use serde::{Serialize, Serializer, ser::SerializeStruct};
 use super::{ReferenceCaption, ReferenceConditionInput};
 use crate::{
     BridgeError, CharacterReferenceField, GenerationField, ImagePreparation, ImagePreprocessor,
-    ReferenceSet, VibeReferenceField, VibeReferenceInput,
+    NormalizedGeneration, ReferenceImageFit, VibeReferenceField, VibeReferenceInput,
     image::request_body::{Media, MediaSlot},
 };
 
@@ -35,10 +35,11 @@ pub(super) enum ReferenceParameters {
 }
 
 pub(super) fn prepare_references(
-    references: Option<&ReferenceSet>,
+    generation: &NormalizedGeneration,
     preprocessor: Option<&dyn ImagePreprocessor>,
 ) -> Result<ReferenceParameters, BridgeError> {
-    let Some(references) = references else {
+    let request = generation.request();
+    let Some(references) = request.references.as_ref() else {
         return Ok(ReferenceParameters::None);
     };
     let mut images = ReferenceImages {
@@ -46,11 +47,24 @@ pub(super) fn prepare_references(
         prepared: HashMap::new(),
     };
     if !references.character_references.is_empty() {
+        let profile = request
+            .descriptor()
+            .support()
+            .character_reference
+            .expect("only references supported by the effective model reach preparation");
         let records = references
             .character_references
             .iter()
-            .enumerate()
-            .map(|(index, item)| {
+            .zip(generation.character_reference_source_indices())
+            .map(|(item, &index)| {
+                let operation = match profile.image_fit {
+                    ReferenceImageFit::Letterbox => {
+                        ImagePreparation::character_reference(item.image.size())
+                    },
+                    ReferenceImageFit::Bucket => {
+                        ImagePreparation::bucket_character_reference(item.image.size())
+                    },
+                };
                 let image = Media::Prepared(
                     images.prepare(
                         GenerationField::CharacterReference {
@@ -59,7 +73,7 @@ pub(super) fn prepare_references(
                         }
                         .into(),
                         &item.image,
-                        ImagePreparation::character_reference(item.image.size()),
+                        operation,
                     )?,
                 );
                 Ok(CharacterReferenceRecord {
@@ -85,8 +99,8 @@ pub(super) fn prepare_references(
     let records = vibe
         .references
         .iter()
-        .enumerate()
-        .map(|(index, reference)| {
+        .zip(generation.vibe_reference_source_indices())
+        .map(|(reference, &index)| {
             let (image, information_extracted) = match &reference.input {
                 VibeReferenceInput::Encoded { encoding } => (Media::Vibe(encoding.clone()), None),
                 VibeReferenceInput::Image {

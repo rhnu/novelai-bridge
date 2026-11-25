@@ -3,10 +3,13 @@ use super::{
     CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile, GenerationConstraints,
     ImageTokenizerKind, InpaintingProfile, Model, ModelDefaults, ModelDescriptor, ModelIdentity,
     ModelSupport, NoiseScheduleSupport, OpusAllowance, ParameterRange, PricingProfile,
-    PromptProfile, ReferenceModes, ReferenceProfile, SamplerCompatibility, SamplingProfile,
-    VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
+    PromptProfile, ReferenceImageFit, ReferenceModes, ReferenceProfile, SamplerCompatibility,
+    SamplingProfile, VarietyBoostProfile, VibeInputPath, VibeProfile, WireProfile,
 };
-use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
+use crate::{
+    CharacterReferenceType, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams,
+    UcPreset,
+};
 
 const SYNTAX_V3: crate::PromptSyntaxProfile = crate::PromptSyntaxProfile {
     bracket_weights: true,
@@ -121,6 +124,37 @@ const SAMPLING_V5: SamplingProfile = SamplingProfile {
     variety: None,
 };
 
+const V45_REFERENCE: ReferenceProfile = ReferenceProfile {
+    modes: ReferenceModes::All,
+    types: &[
+        CharacterReferenceType::Character,
+        CharacterReferenceType::Style,
+        CharacterReferenceType::CharacterAndStyle,
+    ],
+    default_type: CharacterReferenceType::CharacterAndStyle,
+    max_references: 16,
+    strength_slider_max: 1,
+    fidelity: true,
+    required_model: None,
+    image_fit: ReferenceImageFit::Letterbox,
+};
+
+const V5_REFERENCE: ReferenceProfile = ReferenceProfile {
+    modes: ReferenceModes::Unmasked,
+    types: &[
+        CharacterReferenceType::Character,
+        CharacterReferenceType::CharacterMainOutfit,
+        CharacterReferenceType::Style,
+        CharacterReferenceType::CharacterAndStyleAnyOutfit,
+        CharacterReferenceType::CharacterAndStyle,
+        CharacterReferenceType::Costume,
+    ],
+    strength_slider_max: 5,
+    fidelity: false,
+    image_fit: ReferenceImageFit::Bucket,
+    ..V45_REFERENCE
+};
+
 const V5_FULL: ModelDescriptor = ModelDescriptor {
     identity: ModelIdentity {
         model: Model::NaiDiffusion5Full,
@@ -134,7 +168,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
         streaming: true,
         max_enhance: true,
         vibe: None,
-        character_reference: None,
+        character_reference: Some(V5_REFERENCE),
     },
     constraints: CONSTRAINTS,
     defaults: defaults(7.0),
@@ -176,7 +210,10 @@ const V5_MEDIUM: ModelDescriptor = ModelDescriptor {
         streaming: true,
         max_enhance: true,
         vibe: None,
-        character_reference: None,
+        character_reference: Some(ReferenceProfile {
+            required_model: Some(Model::NaiDiffusion5Full),
+            ..V5_REFERENCE
+        }),
     },
     constraints: GenerationConstraints {
         steps: ParameterRange { min: 14, max: 14 },
@@ -231,7 +268,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
         streaming: true,
         max_enhance: true,
         vibe: None,
-        character_reference: None,
+        character_reference: Some(V5_REFERENCE),
     },
     constraints: CONSTRAINTS,
     defaults: defaults(7.0),
@@ -277,9 +314,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
             input: VibeInputPath::Encoded,
             modes: ReferenceModes::Unmasked,
         }),
-        character_reference: Some(ReferenceProfile {
-            modes: ReferenceModes::All,
-        }),
+        character_reference: Some(V45_REFERENCE),
     },
     constraints: CONSTRAINTS,
     defaults: defaults(5.0),
@@ -325,9 +360,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
             input: VibeInputPath::Encoded,
             modes: ReferenceModes::Unmasked,
         }),
-        character_reference: Some(ReferenceProfile {
-            modes: ReferenceModes::All,
-        }),
+        character_reference: Some(V45_REFERENCE),
     },
     constraints: CONSTRAINTS,
     defaults: defaults(5.0),

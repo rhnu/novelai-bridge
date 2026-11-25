@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::Model;
-use crate::{ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams, UcPreset};
+use crate::{
+    CharacterReferenceType, ImageSize, NoiseSchedule, QualityPreset, Sampler, SamplingParams,
+    UcPreset,
+};
 
 /// Prompt tokenizer used by a model family.
 ///
@@ -97,12 +100,57 @@ pub struct VibeProfile {
     pub modes: ReferenceModes,
 }
 
-/// Character-reference availability exists only together with its mode constraint.
+/// Media preparation selected by the reference model.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReferenceImageFit {
+    /// Fits a reference inside a padded V4.5 canvas.
+    Letterbox,
+    /// Covers the closest V5 aspect-ratio canvas and crops it at the center.
+    Bucket,
+}
+
+/// Supported modes and controls for precise references.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ReferenceProfile {
     /// Modes that accept character references.
     pub modes: ReferenceModes,
+    /// Reference types accepted by the effective model.
+    pub types: &'static [CharacterReferenceType],
+    /// Type selected for a newly added reference.
+    pub default_type: CharacterReferenceType,
+    /// Maximum number of retained reference rows.
+    pub max_references: usize,
+    /// Upper end of the strength slider. Direct inputs accept finite signed values.
+    pub strength_slider_max: u8,
+    /// Whether the model uses the caller's fidelity.
+    pub fidelity: bool,
+    /// Model to select while references are active.
+    pub required_model: Option<Model>,
+    /// How the reference image is prepared for transport.
+    pub image_fit: ReferenceImageFit,
+}
+
+impl ReferenceProfile {
+    /// Returns the effective type, including compatible V5-to-V4.5 conversions.
+    #[must_use]
+    pub fn resolve_type(
+        self,
+        reference_type: CharacterReferenceType,
+    ) -> Option<CharacterReferenceType> {
+        if self.types.contains(&reference_type) {
+            return Some(reference_type);
+        }
+        let effective = match reference_type {
+            CharacterReferenceType::CharacterMainOutfit => CharacterReferenceType::Character,
+            CharacterReferenceType::CharacterAndStyleAnyOutfit => {
+                CharacterReferenceType::CharacterAndStyle
+            },
+            _ => return None,
+        };
+        self.types.contains(&effective).then_some(effective)
+    }
 }
 
 /// Presence of this profile is the inpainting capability.

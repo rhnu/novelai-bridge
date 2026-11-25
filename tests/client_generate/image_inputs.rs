@@ -238,7 +238,7 @@ async fn generate_drops_character_references_on_v4_under_normalize_policy() {
 }
 
 #[tokio::test]
-async fn generate_drops_references_on_v5_under_normalize_policy() {
+async fn generate_uses_v5_references_with_fixed_fidelity() {
     let transport = MockTransport::with_bytes_response(create_zip_with_single_png());
     let client = Client::new(Arc::new(transport.clone()), ClientConfig::default());
 
@@ -254,7 +254,17 @@ async fn generate_drops_references_on_v5_under_normalize_policy() {
 
     let _ = client.generate(params).await.unwrap();
     let body = transport.last_body().expect("generate body");
-    assert!(body["parameters"]["director_reference_images"].is_null());
+    assert_eq!(
+        body["parameters"]["director_reference_images"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        body["parameters"]["director_reference_secondary_strength_values"][0],
+        0.0
+    );
 }
 
 #[tokio::test]
