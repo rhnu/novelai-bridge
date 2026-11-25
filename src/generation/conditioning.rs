@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{CharacterPosition, GenerateImageRequest, GenerationCore};
 
+mod text;
+
 const TRANSPARENT_BACKGROUND_TAG: &str = "transparent background";
 const FURRY_DATASET_TAG: &str = "fur dataset";
 
@@ -66,24 +68,54 @@ impl std::fmt::Debug for ResolvedCharacterPrompt {
 
 impl GenerationCore {
     /// Assembles the positive prompt from every contributing source.
-    fn assemble_prompt(&self) -> String {
-        let mut prompt = if self.furry_mode {
-            if self.prompt.is_empty() {
-                FURRY_DATASET_TAG.to_owned()
-            } else {
-                format!("{FURRY_DATASET_TAG}, {}", self.prompt)
-            }
+    fn assemble_prompt(&self, characters: &[ResolvedCharacterPrompt], use_coords: bool) -> String {
+        let descriptor = self.model.descriptor();
+        let profile = descriptor.prompt();
+        let block = descriptor
+            .wire()
+            .uses_v5_extensions()
+            .then(|| text::rendering_block(&self.prompt, characters, use_coords, profile.syntax))
+            .flatten();
+        let base_end = if profile.syntax.character_separators {
+            text::base_end(&self.prompt)
         } else {
-            self.prompt.clone()
+            self.prompt.len()
         };
-        let profile = self.model.descriptor().prompt();
+        let base = &self.prompt[..base_end];
         let preset = profile
             .quality_preset(self.quality)
             .expect("normalization selects a supported quality preset");
+        let text_start = if self.transparent_background || !preset.suffix.is_empty() {
+            text::marker(base, profile.syntax).unwrap_or(base_end)
+        } else {
+            base_end
+        };
+        let description = &base[..text_start];
+        let mut prompt = if self.furry_mode {
+            if description.is_empty() {
+                FURRY_DATASET_TAG.to_owned()
+            } else {
+                format!("{FURRY_DATASET_TAG}, {description}")
+            }
+        } else {
+            description.to_owned()
+        };
+        if text_start < base_end || block.is_some() {
+            prompt.truncate(
+                prompt
+                    .trim_end_matches(|ch: char| ch.is_whitespace() || ch == ',')
+                    .len(),
+            );
+        }
         if self.transparent_background {
             append_prompt(&mut prompt, TRANSPARENT_BACKGROUND_TAG);
         }
         append_prompt(&mut prompt, preset.suffix);
+        append_prompt(&mut prompt, &base[text_start..]);
+        if let Some(block) = block {
+            append_prompt(&mut prompt, &block);
+        }
+        prompt.push_str(&self.prompt[base_end..]);
         prompt
     }
 
@@ -128,7 +160,7 @@ mod tests;
 impl GenerateImageRequest {
     /// Assembles already-normalized input; callers must use the generation boundary.
     pub(crate) fn assemble_prompts(&self) -> ResolvedPrompts {
-        let characters = self.characters.as_ref().map_or_default(|set| {
+        let characters: Vec<_> = self.characters.as_ref().map_or_default(|set| {
             set.characters
                 .iter()
                 .enumerate()
@@ -142,17 +174,18 @@ impl GenerateImageRequest {
                 .collect()
         });
 
-        let prompt = self.core.assemble_prompt();
+        let use_coords = self
+            .characters
+            .as_ref()
+            .and_then(|set| set.use_coords)
+            .unwrap_or(false);
+        let prompt = self.core.assemble_prompt(&characters, use_coords);
         let negative_prompt = self.core.assemble_negative_prompt(&prompt);
         ResolvedPrompts {
             prompt,
             negative_prompt,
             characters,
-            use_coords: self
-                .characters
-                .as_ref()
-                .and_then(|set| set.use_coords)
-                .unwrap_or(false),
+            use_coords,
         }
     }
 }

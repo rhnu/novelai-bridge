@@ -1,6 +1,62 @@
 use crate::{Model, QualityPreset, UcPreset, generation::GenerateImageRequest};
 
 #[test]
+fn automatic_text_is_assembled_once_in_the_base_caption() {
+    let quoted = r#"cat says "hello" and 'don't go'|kitten"#;
+    let request = GenerateImageRequest::builder(quoted, Model::NaiDiffusion5Full)
+        .quality(QualityPreset::None)
+        .build();
+    assert_eq!(
+        request.resolve_prompts().unwrap().prompt,
+        "cat says \"hello\" and 'don't go', teXt: hello\n\ndon't go|kitten"
+    );
+    assert_eq!(request.core.prompt, quoted);
+    let legacy = GenerateImageRequest::builder(quoted, Model::NaiDiffusion45Full)
+        .quality(QualityPreset::None)
+        .build();
+    assert_eq!(legacy.resolve_prompts().unwrap().prompt, quoted);
+}
+
+#[test]
+fn explicit_rendering_survives_quality_tags_and_suppresses_automatic_quotes() {
+    let request =
+        GenerateImageRequest::builder("“ignored”, Text: keep this", Model::NaiDiffusion5Full)
+            .build();
+    let prompt = request.resolve_prompts().unwrap().prompt;
+    assert!(prompt.ends_with("no text, Text: keep this"));
+    assert!(!prompt.contains("teXt:"));
+    let manual = "a sign   teXt:  keep this";
+    let request = GenerateImageRequest::builder(manual, Model::NaiDiffusion5Full)
+        .quality(QualityPreset::None)
+        .build();
+    assert_eq!(request.resolve_prompts().unwrap().prompt, manual);
+}
+
+#[test]
+fn positioned_dialogue_reads_across_rows_and_reverses_cjk_quotes_within_each_caption() {
+    use crate::{Character, CharacterPosition};
+
+    let character = |prompt: &str, x, y| Character {
+        prompt: prompt.to_owned(),
+        position: CharacterPosition { x, y },
+        negative_prompt: None,
+        enabled: true,
+    };
+    let input = GenerateImageRequest::builder("comic", Model::NaiDiffusion5Curated)
+        .quality(QualityPreset::None)
+        .characters(vec![
+            character("「下」", 0.1, 0.8),
+            character("「右」", 0.9, 0.17),
+            character("「二」「一」", 0.1, 0.2),
+        ])
+        .build();
+    assert_eq!(
+        input.resolve_prompts().unwrap().prompt,
+        "comic, teXt: 一\n\n二\n\n右\n\n下"
+    );
+}
+
+#[test]
 fn conditioning_assembles_every_selected_source_in_order() {
     let plan = GenerateImageRequest::builder("cat", Model::NaiDiffusion5Full)
         .negative_prompt("avoid")
