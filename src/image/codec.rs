@@ -54,9 +54,7 @@ impl std::io::Write for BoundedWriter {
         std::io::Write::write(&mut self.inner, bytes)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 impl std::io::Seek for BoundedWriter {

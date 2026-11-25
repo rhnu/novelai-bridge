@@ -32,7 +32,7 @@ fn encode_with_boundary(
                 binaries.push((name.clone(), &media.data));
                 entry.insert(name.clone());
                 name
-            }
+            },
         };
         *value
             .pointer_mut(&media.pointer)
@@ -92,7 +92,7 @@ fn part_name(pointer: &str) -> Option<String> {
                 }
             }
             None
-        }
+        },
     }
 }
 

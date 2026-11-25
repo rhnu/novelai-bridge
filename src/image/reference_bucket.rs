@@ -123,9 +123,7 @@ pub(super) fn target(source: ImageSize) -> ImageSize {
         .map_or(source, |(width, height)| ImageSize { width, height })
 }
 
-fn log_aspect_ratio(width: u32, height: u32) -> f64 {
-    (f64::from(width) / f64::from(height)).ln()
-}
+fn log_aspect_ratio(width: u32, height: u32) -> f64 { (f64::from(width) / f64::from(height)).ln() }
 
 pub(super) fn crop_to_fill(
     field: RequestField,

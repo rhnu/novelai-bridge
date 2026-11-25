@@ -185,27 +185,19 @@ impl PreparedImage {
 
     /// Validated image bytes.
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
+    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
 
     /// Canonical base64 representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String {
-        STANDARD.encode(self.as_bytes())
-    }
+    pub fn to_base64(&self) -> String { STANDARD.encode(self.as_bytes()) }
 
     /// Media format of the returned bytes.
     #[must_use]
-    pub const fn format(&self) -> ImageMediaFormat {
-        self.format
-    }
+    pub const fn format(&self) -> ImageMediaFormat { self.format }
 
     /// Prepared image dimensions.
     #[must_use]
-    pub const fn size(&self) -> ImageSize {
-        self.size
-    }
+    pub const fn size(&self) -> ImageSize { self.size }
 }
 
 /// Replaceable pixel transformation boundary. Inputs have already been validated and decoded.

@@ -113,7 +113,7 @@ impl Serialize for JsonValue<'_> {
                     )?;
                 }
                 map.end()
-            }
+            },
             Value::Array(array) => {
                 let mut sequence = serializer.serialize_seq(Some(array.len()))?;
                 for (index, value) in array.iter().enumerate() {
@@ -124,7 +124,7 @@ impl Serialize for JsonValue<'_> {
                     })?;
                 }
                 sequence.end()
-            }
+            },
             value => value.serialize(serializer),
         }
     }

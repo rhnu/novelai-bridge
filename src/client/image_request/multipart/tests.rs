@@ -5,6 +5,34 @@ use super::*;
 use crate::image::request_body::{Media, MediaBody as RequestBody, MediaSlot};
 
 #[test]
+fn prepared_reference_parts_keep_their_actual_media_type() {
+    let mut jpeg = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgb8(2, 1)
+        .write_to(&mut jpeg, image::ImageFormat::Jpeg)
+        .unwrap();
+    let source = crate::EncodedImage::from_bytes(jpeg.into_inner()).unwrap();
+    let reference = crate::image::prepare_image(
+        None,
+        crate::RequestField::Image,
+        &source,
+        crate::ImagePreparation::BucketCharacterReference(source.size()),
+    )
+    .unwrap();
+    let body = RequestBody::new(
+        &json!({"parameters":{"director_reference_images_cached":[{"data":""}]}}),
+        vec![MediaSlot {
+            pointer: "/parameters/director_reference_images_cached/0/data".to_owned(),
+            data: Media::Prepared(reference),
+            omitted: false,
+        }],
+    )
+    .unwrap();
+    let (bytes, _) = encode_with_boundary(&body, "boundary").unwrap();
+    let expected = b"name=\"director_ref_0\"; filename=\"blob\"\r\nContent-Type: image/jpeg\r\n";
+    assert!(bytes.windows(expected.len()).any(|chunk| chunk == expected));
+}
+
+#[test]
 fn multipart_moves_official_binary_fields_and_deduplicates_identical_data() {
     let original = json!({ "parameters": {
         "image": "AQID", "mask": "BAUG",
