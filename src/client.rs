@@ -28,7 +28,7 @@ pub const DEFAULT_IMAGE_BASE: &str = "https://image.novelai.net";
 /// Environment variable read by [`ClientConfig::from_env`].
 pub const API_BASE_ENV: &str = "NOVELAI_API_BASE";
 
-/// Failure to resolve or validate the NovelAI service URL.
+/// Failure to resolve or validate the `NovelAI` service URL.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ApiBaseError {
@@ -94,7 +94,9 @@ impl ClientConfig {
         {
             return Err(ApiBaseError::UnsupportedUrl);
         }
-        self.image_base_url = url.as_str().trim_end_matches('/').to_owned();
+        url.as_str()
+            .trim_end_matches('/')
+            .clone_into(&mut self.image_base_url);
         Ok(self)
     }
 }
