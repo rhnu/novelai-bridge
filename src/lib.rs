@@ -10,6 +10,7 @@ mod model;
 mod observation;
 mod parameters;
 mod payload;
+mod precise_reference;
 mod pricing;
 mod protocol;
 mod stream;
@@ -86,6 +87,9 @@ pub use observation::{
 pub use parameters::{
     AlphaMode, ImageFormat, ImageResponseFormat, ImageSize, NoiseSchedule, QualityPreset, Sampler,
     SamplingParams, StreamMode, UcPreset,
+};
+pub use precise_reference::{
+    PreciseReferenceDocument, PreciseReferenceDocumentError, PreciseReferenceEntry,
 };
 pub use pricing::{
     AnlasEstimate, AnlasEstimateInput, AnlasEstimateStatus, AnlasPricingContext, PricingMode,
