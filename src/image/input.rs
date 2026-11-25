@@ -4,6 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use image::DynamicImage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
+use super::ImageMediaFormat;
 use crate::{
     BridgeError, ImageSize, InvalidRequest, RequestField, media_policy::ImageDecodePolicy,
 };
@@ -11,9 +12,10 @@ use crate::{
 /// Validated image input with raw bytes and decoded pixels cached together.
 #[derive(Clone)]
 pub struct EncodedImage {
-    bytes: Arc<[u8]>,
+    pub(super) bytes: Arc<[u8]>,
     decoded: Arc<DynamicImage>,
-    usage: crate::media_policy::ImageResourceUsage,
+    pub(super) format: ImageMediaFormat,
+    pub(super) usage: crate::media_policy::ImageResourceUsage,
 }
 
 impl EncodedImage {
@@ -35,15 +37,17 @@ impl EncodedImage {
         policy: ImageDecodePolicy,
     ) -> Result<Self, BridgeError> {
         let bytes = bytes.into();
-        let decoded = super::codec::decode(&bytes, policy).map_err(|source| {
-            InvalidRequest::UndecodableImage {
-                field: RequestField::Image,
-                source,
-            }
-        })?;
+        let (decoded, format) =
+            super::codec::decode_with_format(&bytes, policy).map_err(|source| {
+                InvalidRequest::UndecodableImage {
+                    field: RequestField::Image,
+                    source,
+                }
+            })?;
         Ok(Self {
             bytes: bytes.into(),
             decoded: Arc::new(decoded.pixels),
+            format,
             usage: decoded.usage,
         })
     }
@@ -73,13 +77,19 @@ impl EncodedImage {
 
     /// Original validated bytes.
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
 
-    pub(crate) fn into_shared_bytes(self) -> Arc<[u8]> { self.bytes }
+    pub(crate) fn into_shared_bytes(self) -> Arc<[u8]> {
+        self.bytes
+    }
 
     /// Canonical base64 representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String { STANDARD.encode(&self.bytes) }
+    pub fn to_base64(&self) -> String {
+        STANDARD.encode(&self.bytes)
+    }
 
     /// Decoded dimensions.
     #[must_use]
@@ -92,7 +102,9 @@ impl EncodedImage {
 
     /// Cached decoded pixels, borrowed without re-decoding or allowing mutation.
     #[must_use]
-    pub fn pixels(&self) -> &DynamicImage { &self.decoded }
+    pub fn pixels(&self) -> &DynamicImage {
+        &self.decoded
+    }
 
     pub(crate) fn validate_policy(
         &self,
@@ -119,7 +131,9 @@ impl fmt::Debug for EncodedImage {
 }
 
 impl PartialEq for EncodedImage {
-    fn eq(&self, other: &Self) -> bool { self.bytes == other.bytes }
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
 }
 
 impl Eq for EncodedImage {}

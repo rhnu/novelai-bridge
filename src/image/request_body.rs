@@ -27,6 +27,13 @@ impl Media {
         }
     }
 
+    pub(crate) const fn multipart_mime_type(&self) -> &'static str {
+        match self {
+            Self::Prepared(image) => image.format().mime_type(),
+            _ => "image/png",
+        }
+    }
+
     pub(crate) fn extract(&mut self, pointer: impl Into<String>, media: &mut Vec<MediaSlot>) {
         media.push(MediaSlot {
             pointer: pointer.into(),
@@ -106,7 +113,7 @@ impl Serialize for JsonValue<'_> {
                     )?;
                 }
                 map.end()
-            },
+            }
             Value::Array(array) => {
                 let mut sequence = serializer.serialize_seq(Some(array.len()))?;
                 for (index, value) in array.iter().enumerate() {
@@ -117,7 +124,7 @@ impl Serialize for JsonValue<'_> {
                     })?;
                 }
                 sequence.end()
-            },
+            }
             value => value.serialize(serializer),
         }
     }

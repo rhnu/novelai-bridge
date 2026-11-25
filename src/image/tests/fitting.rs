@@ -5,6 +5,80 @@ use crate::{
     PreparedImage, RequestField,
 };
 
+#[test]
+fn v5_precise_reference_selects_a_bucket_by_aspect_ratio() {
+    for (source, expected) in [
+        ((120, 120), (1024, 1024)),
+        ((400, 600), (832, 1216)),
+        ((600, 400), (1216, 832)),
+        ((5000, 100), (4096, 256)),
+    ] {
+        let operation = ImagePreparation::bucket_character_reference(ImageSize {
+            width: source.0,
+            height: source.1,
+        });
+        let size = operation.target_size();
+        assert_eq!((size.width, size.height), expected);
+    }
+}
+
+#[test]
+fn v5_precise_reference_in_an_existing_bucket_retains_original_media() {
+    let mut jpeg = std::io::Cursor::new(Vec::new());
+    DynamicImage::new_rgb8(1024, 1024)
+        .write_to(&mut jpeg, image::ImageFormat::Jpeg)
+        .unwrap();
+    let source = EncodedImage::from_bytes(jpeg.into_inner()).unwrap();
+    let prepared = DefaultImagePreprocessor
+        .prepare(
+            RequestField::Image,
+            &source,
+            ImagePreparation::bucket_character_reference(source.size()),
+        )
+        .unwrap();
+    assert_eq!(prepared.format(), crate::ImageMediaFormat::Jpeg);
+    assert_eq!(prepared.as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn v5_precise_reference_crops_the_center_without_black_padding() {
+    let pixels = DynamicImage::ImageRgba8(RgbaImage::from_fn(4, 2, |x, _| {
+        let red = if x == 0 || x == 3 { 0 } else { 200 };
+        Rgba([red, 0, 0, 128])
+    }));
+    let result = prepare(
+        &pixels,
+        ImagePreparation::BucketCharacterReference(ImageSize {
+            width: 2,
+            height: 2,
+        }),
+    );
+    assert_eq!(result.dimensions(), (2, 2));
+    assert!(result.pixels().all(|pixel| pixel.0 == [200, 0, 0, 128]));
+}
+
+#[test]
+fn v5_precise_reference_upscale_checks_intermediate_media_budget() {
+    let source = super::image(1, 4096);
+    let error = DefaultImagePreprocessor
+        .prepare(
+            RequestField::Image,
+            &source,
+            ImagePreparation::bucket_character_reference(source.size()),
+        )
+        .unwrap_err();
+    let crate::BridgeError::InvalidRequest(crate::InvalidRequest::UndecodableImage {
+        source, ..
+    }) = error
+    else {
+        panic!("the oversized cover intermediate must be rejected as media");
+    };
+    let policy = source
+        .downcast_ref::<crate::media_policy::ImagePolicyError>()
+        .unwrap();
+    assert_eq!(policy.limit, crate::media_policy::ImageLimit::DecodedBytes);
+}
+
 fn prepare(pixels: &DynamicImage, operation: ImagePreparation) -> RgbaImage {
     let source =
         EncodedImage::from_bytes(PreparedImage::from_pixels(pixels).unwrap().as_bytes()).unwrap();

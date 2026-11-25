@@ -29,10 +29,10 @@ fn encode_with_boundary(
         let name = match parts.entry(media.data.bytes()) {
             Entry::Occupied(existing) => existing.get().clone(),
             Entry::Vacant(entry) => {
-                binaries.push((name.clone(), media.data.bytes()));
+                binaries.push((name.clone(), &media.data));
                 entry.insert(name.clone());
                 name
-            },
+            }
         };
         *value
             .pointer_mut(&media.pointer)
@@ -46,13 +46,22 @@ fn encode_with_boundary(
             .filter(|media| part_name(&media.pointer).is_none()),
     )?;
     let capacity = json.len()
-        + binaries.iter().map(|(_, bytes)| bytes.len()).sum::<usize>()
+        + binaries
+            .iter()
+            .map(|(_, media)| media.bytes().len())
+            .sum::<usize>()
         + (binaries.len() + 1) * (boundary.len() + 192)
         + boundary.len()
         + 6;
     let mut body = Vec::with_capacity(capacity);
-    for (name, bytes) in binaries {
-        append_part(&mut body, boundary, &name, "image/png", bytes);
+    for (name, media) in binaries {
+        append_part(
+            &mut body,
+            boundary,
+            &name,
+            media.multipart_mime_type(),
+            media.bytes(),
+        );
     }
     append_part(&mut body, boundary, "request", "application/json", &json);
     body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
@@ -83,7 +92,7 @@ fn part_name(pointer: &str) -> Option<String> {
                 }
             }
             None
-        },
+        }
     }
 }
 

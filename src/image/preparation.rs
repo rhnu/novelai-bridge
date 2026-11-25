@@ -3,7 +3,7 @@ use std::sync::Arc;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::imageops::FilterType;
 
-use super::EncodedImage;
+use super::{EncodedImage, ImageMediaFormat};
 use crate::{
     BridgeError, ImageSize, InvalidRequest, RequestField,
     media_policy::{ImageDecodePolicy, ImageLimit, ImageResourceUsage},
@@ -18,6 +18,8 @@ pub enum ImagePreparation {
     Mask(ImageSize),
     /// Fit a director reference to the closest supported reference canvas.
     CharacterReference(ImageSize),
+    /// Cover and center-crop a V5 precise reference to its aspect-ratio bucket.
+    BucketCharacterReference(ImageSize),
     /// Resize a Director Tools source to its effective processing dimensions.
     Director(ImageSize),
     /// Contain a V3 vibe image in an opaque black 448×448 PNG using Lanczos3.
@@ -53,6 +55,12 @@ impl ImagePreparation {
         }
     }
 
+    /// Selects the closest V5 precise-reference aspect ratio.
+    #[must_use]
+    pub fn bucket_character_reference(source_size: ImageSize) -> Self {
+        Self::BucketCharacterReference(super::reference_bucket::target(source_size))
+    }
+
     /// Exact canvas the prepared payload must have.
     #[must_use]
     pub const fn target_size(self) -> ImageSize {
@@ -64,6 +72,7 @@ impl ImagePreparation {
             Self::Source(size)
             | Self::Mask(size)
             | Self::CharacterReference(size)
+            | Self::BucketCharacterReference(size)
             | Self::Director(size) => size,
         }
     }
@@ -83,10 +92,11 @@ fn resize_to_pixels(source: ImageSize, pixels: u64) -> ImageSize {
     }
 }
 
-/// Prepared PNG payload returned by an [`ImagePreprocessor`].
+/// Validated media returned by an [`ImagePreprocessor`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct PreparedImage {
-    bytes: Arc<Vec<u8>>,
+    bytes: Arc<[u8]>,
+    format: ImageMediaFormat,
     size: ImageSize,
     usage: ImageResourceUsage,
 }
@@ -117,7 +127,8 @@ impl PreparedImage {
             },
         )?;
         Ok(Self {
-            bytes: Arc::new(bytes),
+            bytes: bytes.into(),
+            format: ImageMediaFormat::Png,
             size: ImageSize {
                 width: report.usage.width,
                 height: report.usage.height,
@@ -165,28 +176,41 @@ impl PreparedImage {
             total_text_bytes: 0,
         };
         Ok(Self {
-            bytes: Arc::new(bytes),
+            bytes: bytes.into(),
+            format: ImageMediaFormat::Png,
             size,
             usage,
         })
     }
 
-    /// Validated PNG bytes.
+    /// Validated image bytes.
     #[must_use]
-    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
 
-    /// Canonical base64 PNG representation used by wire payloads.
+    /// Canonical base64 representation used by wire payloads.
     #[must_use]
-    pub fn to_base64(&self) -> String { STANDARD.encode(self.as_bytes()) }
+    pub fn to_base64(&self) -> String {
+        STANDARD.encode(self.as_bytes())
+    }
+
+    /// Media format of the returned bytes.
+    #[must_use]
+    pub const fn format(&self) -> ImageMediaFormat {
+        self.format
+    }
 
     /// Prepared image dimensions.
     #[must_use]
-    pub const fn size(&self) -> ImageSize { self.size }
+    pub const fn size(&self) -> ImageSize {
+        self.size
+    }
 }
 
 /// Replaceable pixel transformation boundary. Inputs have already been validated and decoded.
 pub trait ImagePreprocessor: Send + Sync {
-    /// Produces the PNG payload required by one request role.
+    /// Produces the media payload required by one request role.
     ///
     /// # Errors
     ///
@@ -262,15 +286,28 @@ fn prepare_builtin(
     operation: ImagePreparation,
 ) -> Result<PreparedImage, BridgeError> {
     let size = operation.target_size();
+    if matches!(operation, ImagePreparation::BucketCharacterReference(_)) && image.size() == size {
+        return Ok(PreparedImage {
+            bytes: Arc::clone(&image.bytes),
+            format: image.format,
+            size,
+            usage: image.usage,
+        });
+    }
     let filter = match operation {
         ImagePreparation::RawVibe => FilterType::Lanczos3,
         ImagePreparation::Mask(_) => FilterType::Nearest,
         ImagePreparation::Source(_)
         | ImagePreparation::CharacterReference(_)
+        | ImagePreparation::BucketCharacterReference(_)
         | ImagePreparation::Director(_) => FilterType::CatmullRom,
     };
     let bytes = if matches!(operation, ImagePreparation::RawVibe) {
         super::fit::fit_raw_vibe(field, image.pixels(), size)?
+    } else if matches!(operation, ImagePreparation::BucketCharacterReference(_)) {
+        let policy = ImageDecodePolicy::default();
+        let pixels = super::reference_bucket::crop_to_fill(field, image.pixels(), size, policy)?;
+        super::codec::encode_png(&pixels, field, policy)?
     } else if matches!(operation, ImagePreparation::Director(_)) {
         // Independent dimension flooring slightly changes the aspect ratio. A second fit
         // would shrink a side again and add an unintended border.
@@ -312,7 +349,8 @@ fn prepare_builtin(
         total_text_bytes: 0,
     };
     Ok(PreparedImage {
-        bytes: Arc::new(bytes),
+        bytes: bytes.into(),
+        format: ImageMediaFormat::Png,
         size,
         usage,
     })
@@ -325,7 +363,7 @@ fn validate_size(field: RequestField, size: ImageSize) -> Result<(), BridgeError
     Ok(())
 }
 
-fn invalid_policy(
+pub(super) fn invalid_policy(
     field: RequestField,
     source: crate::media_policy::ImagePolicyError,
 ) -> InvalidRequest {
@@ -339,6 +377,7 @@ impl std::fmt::Debug for PreparedImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PreparedImage")
             .field("size", &self.size)
+            .field("format", &self.format)
             .field("bytes", &self.bytes.len())
             .finish_non_exhaustive()
     }

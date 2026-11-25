@@ -54,7 +54,9 @@ impl std::io::Write for BoundedWriter {
         std::io::Write::write(&mut self.inner, bytes)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 impl std::io::Seek for BoundedWriter {
@@ -72,6 +74,13 @@ impl std::io::Seek for BoundedWriter {
 
 /// The common input/prepared-image decoder applies budgets before allocating full pixels.
 pub fn decode(bytes: &[u8], policy: ImageDecodePolicy) -> Result<DecodedImage, CodecError> {
+    decode_with_format(bytes, policy).map(|(decoded, _)| decoded)
+}
+
+pub(super) fn decode_with_format(
+    bytes: &[u8],
+    policy: ImageDecodePolicy,
+) -> Result<(DecodedImage, ImageMediaFormat), CodecError> {
     policy.check(ImageLimit::EncodedBytes, bytes.len() as u64)?;
     let raw_format = image::guess_format(bytes)?;
     let format = ImageMediaFormat::from_image_format(raw_format)
@@ -82,10 +91,13 @@ pub fn decode(bytes: &[u8], policy: ImageDecodePolicy) -> Result<DecodedImage, C
         let raw = report
             .pixels
             .ok_or_else(|| invalid("PNG pixels were not retained"))?;
-        return Ok(DecodedImage {
-            pixels: png_pixels(raw, usage.width, usage.height)?,
-            usage,
-        });
+        return Ok((
+            DecodedImage {
+                pixels: png_pixels(raw, usage.width, usage.height)?,
+                usage,
+            },
+            format,
+        ));
     }
     let mut reader = ImageReader::with_format(Cursor::new(bytes), raw_format);
     let mut limits = image::Limits::default();
@@ -115,7 +127,7 @@ pub fn decode(bytes: &[u8], policy: ImageDecodePolicy) -> Result<DecodedImage, C
         total_text_bytes: 0,
     };
     let pixels = DynamicImage::from_decoder(decoder)?;
-    Ok(DecodedImage { pixels, usage })
+    Ok((DecodedImage { pixels, usage }, format))
 }
 
 fn png_pixels(
