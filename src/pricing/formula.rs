@@ -99,8 +99,7 @@ pub fn estimate_anlas_cost(mut input: AnlasEstimateInput) -> AnlasEstimate {
     } else {
         0
     };
-    let free_first_image_applied =
-        is_free_first_image_eligible(&input, pixels, character_reference_count, priced_samples);
+    let free_first_image_applied = is_free_first_image_eligible(&input, pixels, priced_samples);
     let billable_samples = priced_samples.saturating_sub(u32::from(free_first_image_applied));
     let generation = per_image.saturating_mul(billable_samples);
     let total = generation
@@ -153,14 +152,12 @@ fn chargeable_character_reference_count(input: &AnlasEstimateInput) -> u32 {
 const fn is_free_first_image_eligible(
     input: &AnlasEstimateInput,
     pixels: u64,
-    character_reference_count: u32,
     capped_samples: u32,
 ) -> bool {
     let descriptor = input.model.descriptor();
     input.context.tier >= 3
         && input.context.subscription_active
         && !input.context.free_first_image_used
-        && character_reference_count == 0
         && pixels <= OPUS_FREE_PIXELS
         && input.steps <= OPUS_FREE_STEPS
         && !(matches!(

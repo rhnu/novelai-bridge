@@ -120,6 +120,22 @@ fn applies_reference_and_vibe_surcharges() {
 }
 
 #[test]
+fn opus_discounts_only_the_base_of_the_first_referenced_sample() {
+    for model in [Model::NaiDiffusion45Full, Model::NaiDiffusion5Full] {
+        let mut request = input(model, ImageSize::portrait(), 23);
+        request.context.subscription_active = true;
+        request.context.tier = 3;
+        request.character_reference_count = 2;
+        assert_eq!(estimate_anlas_cost(request).total, 10);
+        request.n_samples = 2;
+        let quote = estimate_anlas_cost(request);
+        assert_eq!(quote.billable_samples, 1);
+        assert_eq!(quote.character_reference, 20);
+        assert_eq!(quote.total, quote.per_image + 20);
+    }
+}
+
+#[test]
 fn raw_vibe_references_never_charge_encoding_or_encoded_reference_overage() {
     let mut raw = input(Model::NaiDiffusion3, ImageSize::square(), 28);
     raw.vibe_reference_count = 9;

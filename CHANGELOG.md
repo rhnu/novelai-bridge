@@ -12,7 +12,7 @@
 
 - **Breaking:** Consumers of model descriptors should query `ReferenceProfile` for allowed types, type fallbacks, image fit, fidelity and strength controls. Price descriptors now expose `PricingProfile::base` and `BasePrice` in place of `step_factor`.
 - Resolve model, sampling steps, compatible reference types and original input indices together. Under Normalize, Full Medium selects High for supported precise references, while Curated inpainting uses V4.5 Curated reference capabilities. Reject reports the incompatible selection.
-- Update V5 Full Medium estimates and charge the Vibe overage per priced sample.
+- Update V5 Full Medium estimates. Apply the eligible Opus discount to the first sample's base and charge precise references and the Vibe overage on every priced sample.
 
 ## 0.8.2 - 2026-11-19
 

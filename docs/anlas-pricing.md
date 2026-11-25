@@ -127,7 +127,6 @@ One priced image is free when all of the following conditions hold:
 
 - the account has `tier >= 3` and an active subscription;
 - the allowance has not already been used for the request context;
-- there are no chargeable character references;
 - `P <= 1,048,576`;
 - `steps <= 28`;
 - `priced_samples > 0`;
@@ -140,8 +139,8 @@ $$
 = \max(\text{priced\_samples} - \text{free\_first\_image}, 0)
 $$
 
-The allowance reduces only the generation-image count. Character-reference and vibe-related
-surcharges are calculated separately.
+The allowance discounts the first sample's generation base. Precise references and Vibe overage
+are priced on every sample, including the first. See the [official pricing update](https://journal.novelai.net/precise-reference-v5/).
 
 ## V5 Opus generation allowance
 
