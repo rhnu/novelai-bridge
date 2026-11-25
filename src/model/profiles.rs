@@ -118,6 +118,8 @@ pub struct ReferenceProfile {
     pub modes: ReferenceModes,
     /// Reference types accepted by the effective model.
     pub types: &'static [CharacterReferenceType],
+    /// Earlier equivalents for compatible reference types that this model cannot use directly.
+    pub type_fallbacks: &'static [(CharacterReferenceType, CharacterReferenceType)],
     /// Type selected for a newly added reference.
     pub default_type: CharacterReferenceType,
     /// Maximum number of retained reference rows.
@@ -142,14 +144,9 @@ impl ReferenceProfile {
         if self.types.contains(&reference_type) {
             return Some(reference_type);
         }
-        let effective = match reference_type {
-            CharacterReferenceType::CharacterMainOutfit => CharacterReferenceType::Character,
-            CharacterReferenceType::CharacterAndStyleAnyOutfit => {
-                CharacterReferenceType::CharacterAndStyle
-            },
-            _ => return None,
-        };
-        self.types.contains(&effective).then_some(effective)
+        self.type_fallbacks
+            .iter()
+            .find_map(|&(source, effective)| (source == reference_type).then_some(effective))
     }
 }
 

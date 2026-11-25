@@ -131,6 +131,16 @@ const V45_REFERENCE: ReferenceProfile = ReferenceProfile {
         CharacterReferenceType::Style,
         CharacterReferenceType::CharacterAndStyle,
     ],
+    type_fallbacks: &[
+        (
+            CharacterReferenceType::CharacterMainOutfit,
+            CharacterReferenceType::Character,
+        ),
+        (
+            CharacterReferenceType::CharacterAndStyleAnyOutfit,
+            CharacterReferenceType::CharacterAndStyle,
+        ),
+    ],
     default_type: CharacterReferenceType::CharacterAndStyle,
     max_references: 16,
     strength_slider_max: 1,
@@ -150,6 +160,7 @@ const V5_REFERENCE: ReferenceProfile = ReferenceProfile {
         CharacterReferenceType::Costume,
     ],
     strength_slider_max: 5,
+    type_fallbacks: &[],
     fidelity: false,
     image_fit: ReferenceImageFit::Bucket,
     ..V45_REFERENCE
