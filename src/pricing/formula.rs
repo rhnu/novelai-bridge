@@ -22,7 +22,16 @@ const COST_AREA_STEP_TERM: f64 = 5.753_298_233_447_344e-7;
 /// models. The returned breakdown still contains the mathematical cost when the per-image price
 /// exceeds 140; check [`AnlasEstimate::is_too_expensive`] to handle the web client's `-3` state.
 #[must_use]
-pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
+pub fn estimate_anlas_cost(mut input: AnlasEstimateInput) -> AnlasEstimate {
+    let selected = input.model.descriptor();
+    input.model = selected.effective_model_for_references(
+        input.mode.generation_mode(),
+        crate::ReferenceIntent {
+            vibe: input.vibe_reference_count > 0,
+            character: input.character_reference_count > 0,
+        },
+    );
+    input.steps = selected.steps_for_effective_model(input.model, input.steps);
     let pixels = input.size.pixels();
     #[expect(
         clippy::cast_precision_loss,
@@ -35,12 +44,11 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
         clippy::suboptimal_flops,
         reason = "Changing operation order can cross an integer price rounding boundary"
     )]
-    let base = (COST_AREA_TERM * pixels_f
-        + COST_AREA_STEP_TERM
-            * pixels_f
-            * f64::from(input.steps)
-            * descriptor.pricing().step_factor)
-        .ceil();
+    let continuous = |steps| COST_AREA_TERM * pixels_f + COST_AREA_STEP_TERM * pixels_f * steps;
+    let base = match descriptor.pricing().base {
+        crate::BasePrice::Sampled => continuous(f64::from(input.steps)).ceil(),
+        crate::BasePrice::MediumEffort => continuous(23.0) / 1.75,
+    };
     let smea_multiplier = if input.smea && input.smea_dyn {
         1.4
     } else if input.smea {
@@ -87,6 +95,7 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
             .vibe_reference_count
             .saturating_sub(FREE_VIBE_REFERENCE_COUNT)
             .saturating_mul(VIBE_ENCODE_COST)
+            .saturating_mul(priced_samples)
     } else {
         0
     };
@@ -115,7 +124,7 @@ pub fn estimate_anlas_cost(input: AnlasEstimateInput) -> AnlasEstimate {
     }
 }
 
-const fn chargeable_character_reference_count(input: &AnlasEstimateInput) -> u32 {
+fn chargeable_character_reference_count(input: &AnlasEstimateInput) -> u32 {
     let descriptor = input.model.descriptor();
     let mode = input.mode.generation_mode();
     let references_allowed = descriptor
@@ -129,7 +138,13 @@ const fn chargeable_character_reference_count(input: &AnlasEstimateInput) -> u32
         .character
         .is_available();
     if references_allowed {
-        input.character_reference_count
+        let limit = descriptor
+            .support()
+            .character_reference
+            .map_or(0, |profile| profile.max_references);
+        input
+            .character_reference_count
+            .min(u32::try_from(limit).unwrap_or(u32::MAX))
     } else {
         0
     }

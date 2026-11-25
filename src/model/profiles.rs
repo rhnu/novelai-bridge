@@ -587,14 +587,24 @@ pub enum OpusAllowance {
     Metered,
 }
 
+/// Selects the base generation price before model and strength multipliers.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BasePrice {
+    /// Round the area and sampling-step terms before applying multipliers.
+    Sampled,
+    /// Discount the continuous 23-step High price for distilled V5 Full Medium.
+    MediumEffort,
+}
+
 /// Model-specific parameters for the shared pricing formula.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct PricingProfile {
     /// Model price multiplier.
     pub multiplier: f64,
-    /// Factor applied to the area-times-steps term before its first rounding.
-    pub step_factor: f64,
+    /// Base price calculation.
+    pub base: BasePrice,
     /// Opus usage policy.
     pub opus_allowance: OpusAllowance,
 }

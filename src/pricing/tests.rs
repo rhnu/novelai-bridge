@@ -114,7 +114,7 @@ fn applies_reference_and_vibe_surcharges() {
     let mut v5 = references;
     v5.model = Model::NaiDiffusion5Curated;
     let ignored = estimate_anlas_cost(v5);
-    assert_eq!(ignored.character_reference, 0);
+    assert_eq!(ignored.character_reference, 20);
     assert_eq!(ignored.vibe_encoding, 0);
     assert_eq!(ignored.vibe_reference_overage, 0);
 }
@@ -250,15 +250,16 @@ fn director_background_removal_prices_three_outputs_and_a_surcharge_without_free
 fn vibe_overage_obeys_reference_availability_for_the_selected_mode() {
     let mut basis = input(Model::NaiDiffusion45Full, ImageSize::square(), 28);
     basis.vibe_reference_count = 6;
-    assert_eq!(estimate_anlas_cost(basis).vibe_reference_overage, 4);
+    basis.n_samples = 3;
+    assert_eq!(estimate_anlas_cost(basis).vibe_reference_overage, 12);
     basis.mode = PricingMode::Inpainting { strength: 0.5 };
     assert_eq!(estimate_anlas_cost(basis).vibe_reference_overage, 0);
 }
 
 #[test]
-fn medium_prices_its_adjusted_step_term_before_rounding_and_uses_the_v5_allowance() {
+fn medium_discounts_the_continuous_high_price_and_uses_the_v5_allowance() {
     let medium = input(Model::NaiDiffusion5FullMedium, ImageSize::portrait(), 14);
-    assert_eq!(estimate_anlas_cost(medium).per_image, 17);
+    assert_eq!(estimate_anlas_cost(medium).per_image, 15);
     let full = input(Model::NaiDiffusion5Full, ImageSize::portrait(), 14);
     assert_eq!(estimate_anlas_cost(full).per_image, 18);
     let mut eligible = medium;
@@ -269,5 +270,5 @@ fn medium_prices_its_adjusted_step_term_before_rounding_and_uses_the_v5_allowanc
     };
     assert!(estimate_anlas_cost(eligible).is_free());
     eligible.context.v5_usage_is_negative = true;
-    assert_eq!(estimate_anlas_cost(eligible).total, 17);
+    assert_eq!(estimate_anlas_cost(eligible).total, 15);
 }

@@ -42,6 +42,19 @@ pub struct ReferenceResolution {
 }
 
 impl ModelDescriptor {
+    /// Resolves the sampled step count when a reference changes Full Medium to High effort.
+    #[must_use]
+    pub const fn steps_for_effective_model(&self, effective: Model, steps: u32) -> u32 {
+        if matches!(self.identity.model, Model::NaiDiffusion5FullMedium)
+            && matches!(effective, Model::NaiDiffusion5Full)
+            && steps == self.defaults.sampling.steps
+        {
+            effective.descriptor().defaults().sampling.steps
+        } else {
+            steps
+        }
+    }
+
     /// Resolves the model family actually used by this operation.
     ///
     /// `NovelAI` routes V5 Curated inpainting through V4.5 Curated. Its prompt, capability and

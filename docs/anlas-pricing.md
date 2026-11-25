@@ -1,7 +1,7 @@
 # NovelAI Anlas estimation formula
 
 > Source note: The coefficients and pricing rules below were obtained from NovelAI's official
-> [image-generation website](https://novelai.net/image), checked on 2026-10-21. NovelAI may change its
+> [image-generation website](https://novelai.net/image), checked on 2026-11-25. NovelAI may change its
 > pricing, so this document is an estimate for that retrieval date rather than a billing guarantee.
 
 This document describes the generation-cost estimate used by `novelai-bridge` for the current NAI
@@ -24,7 +24,6 @@ Let:
 
 - `P = width × height`, the pricing canvas pixel count;
 - `steps`, the requested sampling step count;
-- `step_factor`, `1 / 1.06521739` for V5 Medium and `1` for other supported models;
 - `strength`, the image-to-image or inpainting strength, defaulting to `1.0`.
 
 The base cost is:
@@ -32,7 +31,7 @@ The base cost is:
 $$
 \text{base} = \left\lceil
 2.951823174884865 \times 10^{-6} \times P
-+ 5.753298233447344 \times 10^{-7} \times P \times \text{steps} \times \text{step\_factor}
++ 5.753298233447344 \times 10^{-7} \times P \times \text{steps}
 \right\rceil
 $$
 
@@ -52,8 +51,7 @@ $$
 \right\rceil, 2\right)
 $$
 
-The rounding order is significant: round `base` first, apply the multipliers and strength, then
-round the final per-image value.
+For ordinary sampling, round the base first, apply the multipliers and strength, then round the final per-image value.
 
 ### SMEA multiplier
 
@@ -73,8 +71,7 @@ round the final per-image value.
 
 The sampler does not change this formula for these model families. It belongs to the generation request and is absent from the independent pricing input.
 
-V5 Medium fixes the effective step count at 14. Its step factor applies inside the first ceiling,
-before the usual V5 multiplier. Setting 14 steps on ordinary V5 does not reproduce this pricing rule.
+V5 Full Medium samples at 14 steps. For pricing, evaluate the continuous area formula with 23 steps, divide by 1.75, then apply the V5 multiplier and strength before the final ceiling. At 832×1216 a single text-to-image generation costs 15 Anlas before the Opus allowance.
 
 ### Strength selection
 
@@ -226,7 +223,7 @@ $$
 
 $$
 \text{vibe\_reference\_overage}
-= 2 \times \max(\text{vibe\_reference\_count} - 4, 0)
+= 2 \times \max(\text{vibe\_reference\_count} - 4, 0) \times \text{priced\_samples}
 $$
 
 Pending encoding calls are priced when the model implements encode-vibe. The active-reference

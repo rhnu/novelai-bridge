@@ -7,7 +7,7 @@ mod values;
 use super::{NormalizationChange, NormalizationDiagnostic, NormalizedGeneration};
 use crate::{
     BridgeError, GenerateImageRequest, GenerationConstraints, GenerationField as Field,
-    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, Model, ModelDescriptor,
+    GuidanceField, GuidanceParams, ImageInputField, InvalidRequest, ModelDescriptor,
     ReferenceIntent, ValidationPolicy,
 };
 
@@ -49,12 +49,9 @@ pub(super) fn normalize(
             field: Field::Model,
             change: NormalizationChange::Fallback,
         });
-        if matches!(
-            selected_descriptor.identity().model,
-            Model::NaiDiffusion5FullMedium
-        ) && request.sampling.steps == selected_descriptor.defaults().sampling.steps
-        {
-            let default_steps = effective_model.descriptor().defaults().sampling.steps;
+        let default_steps =
+            selected_descriptor.steps_for_effective_model(effective_model, request.sampling.steps);
+        if default_steps != request.sampling.steps {
             diagnostics.push(NormalizationDiagnostic {
                 field: Field::Steps,
                 change: NormalizationChange::Adjusted {

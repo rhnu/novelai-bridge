@@ -203,7 +203,7 @@ const V5_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV5,
     pricing: PricingProfile {
         multiplier: 1.5,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Metered,
     },
 };
@@ -261,7 +261,7 @@ const V5_MEDIUM: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV5,
     pricing: PricingProfile {
         multiplier: 1.5,
-        step_factor: 1.0 / 1.065_217_39,
+        base: super::BasePrice::MediumEffort,
         opus_allowance: OpusAllowance::Metered,
     },
 };
@@ -303,7 +303,7 @@ const V5_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV5,
     pricing: PricingProfile {
         multiplier: 1.5,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Metered,
     },
 };
@@ -349,7 +349,7 @@ const V45_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -395,7 +395,7 @@ const V45_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -441,7 +441,7 @@ const V4_FULL: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -487,7 +487,7 @@ const V4_CURATED: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::StructuredV4,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -530,7 +530,7 @@ const V3: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::LegacyV3,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };
@@ -573,7 +573,7 @@ const V3_FURRY: ModelDescriptor = ModelDescriptor {
     wire: WireProfile::LegacyV3,
     pricing: PricingProfile {
         multiplier: 1.0,
-        step_factor: 1.0,
+        base: super::BasePrice::Sampled,
         opus_allowance: OpusAllowance::Standard,
     },
 };

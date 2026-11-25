@@ -66,7 +66,7 @@ pub use metadata::{
     png::{PngTextEntry, write_png_text_chunks, write_png_text_chunks_with_policy},
 };
 pub use model::{
-    CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile,
+    BasePrice, CanvasConstraints, CharacterPositionProfile, CharacterPromptProfile,
     GenerationConstraints, GenerationMode, ImageTokenizerKind, InpaintingProfile, Model,
     ModelDefaults, ModelDescriptor, ModelIdentity, ModelSupport, NoiseScheduleSupport,
     OpusAllowance, ParameterRange, PricingProfile, PromptProfile, PromptStructure,
