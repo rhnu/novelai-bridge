@@ -13,11 +13,12 @@ Add the SDK and an async runtime:
 
 ```toml
 [dependencies]
-novelai-bridge = "0.8.2"
+novelai-bridge = "0.9.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-Set `NOVELAI_API_KEY` to your NovelAI persistent API token. This example sends a generation request
+Set `NOVELAI_API_KEY` to your NovelAI persistent API token. Set `NOVELAI_API_BASE` to override the
+image service URL for generation, image tools, tag suggestions and account queries. This example sends a generation request
 and saves every returned image:
 
 ```rust,no_run
@@ -30,7 +31,7 @@ use novelai_bridge::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport = ReqwestTransport::new(ReqwestOptions::default())?;
-    let client = Client::new(Arc::new(transport), ClientConfig::default());
+    let client = Client::new(Arc::new(transport), ClientConfig::from_env()?);
     let request = GenerateImageRequest::builder("a cat sitting by a window", Model::NaiDiffusion5Full)
         .negative_prompt("blurry, low quality")
         .build();
@@ -48,6 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 response budgets and image request encoding. Cloned clients share the transport, subscription
 snapshot and image-cache state.
 
+For an explicit endpoint, use `ClientConfig::default().with_api_base(url)?`. It accepts HTTP(S)
+service roots including path prefixes. The SDK reads process variables through its environment
+configuration entry points. The repository's development tools also read its local `.env`.
+
 ## Capabilities
 
 | Area | Entry points and behavior |
@@ -56,6 +61,7 @@ snapshot and image-cache state.
 | Streaming | `Client::generate_stream` for SSE or length-prefixed MessagePack previews and final images. |
 | Image tools | `Client::run_director_tool` for Director operations, including dialogue-preserving declutter; `Client::upscale` for standalone upscaling. Both return every output image. |
 | Vibe Transfer | Raw image references for V3, encoded references for V4/V4.5, and `Client::encode_vibe` with optional masks, cropping and explicit seeds. |
+| Precise Reference | Model-specific modes, outfit preference, reference strengths and image preparation for V4.5 and V5. Exchange original pictures and reference settings using `PreciseReferenceDocument`. |
 | Tag suggestions | `Client::suggest_tags` for English and Japanese queries, preserving provider order and language-specific ranking fields. |
 | Local files | `VibeDocument` reads and writes official vibe files, bundles and PNG embeddings with bounded parsing and identity validation. |
 | Metadata | `parse_image_metadata_from_bytes` reads PNG, JPEG and WebP metadata; `write_png_text_chunks` updates PNG text without re-encoding pixels. |
@@ -153,7 +159,7 @@ assets; without an attached registry, client-side token checks are skipped.
 For a custom transport without tokenization:
 
 ```toml
-novelai-bridge = { version = "0.8.2", default-features = false }
+novelai-bridge = { version = "0.9.0", default-features = false }
 ```
 
 Implement `Transport::execute` to return status, headers and a raw byte stream.

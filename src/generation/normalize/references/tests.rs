@@ -256,7 +256,7 @@ fn v5_medium_uses_high_only_when_a_supported_reference_is_applied() {
     assert_eq!(high.character_reference_source_indices(), [0]);
     let medium = build(CharacterReferenceType::Delta).normalize().unwrap();
     assert_eq!(medium.model_id(), "nai-diffusion-5-full-medium");
-    assert!(medium.character_reference_source_indices().is_empty());
+    assert_eq!(medium.character_reference_source_indices(), &[] as &[usize]);
 }
 
 #[test]
@@ -378,5 +378,5 @@ fn unsupported_types_do_not_count_towards_limit_or_suppress_vibes() {
         .normalize()
         .unwrap();
     assert_eq!(plan.vibe_reference_source_indices(), [0]);
-    assert!(plan.character_reference_source_indices().is_empty());
+    assert_eq!(plan.character_reference_source_indices(), &[] as &[usize]);
 }

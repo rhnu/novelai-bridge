@@ -67,6 +67,8 @@ effective combinations; arbitrary historical sampler replay is outside the suppo
 
 Normalization assembles effective positive/negative text and enabled character conditioning once. Each resolved character retains its original index and effective coordinate. V4/V4.5 use the five-by-five grid; V5 keeps normalized freeform coordinates. Wire adaptation uses these values without projecting coordinates again.
 
+On V5, quoted dialogue in the base and enabled character captions supplies an automatic text-rendering block. Explicit rendering text takes precedence. Quality and transparency tags precede the rendering block and inline character separators. The resolved prompt includes the block for token counting and submission, while the editable prompt keeps its original spelling.
+
 The selected prompt profile supplies the enabled-character limit. Normalize disables enabled overflow while preserving original indices; Reject reports it. Disabled characters do not participate in validation, token counting or wire conditioning.
 
 Quality and UC preset definitions belong to each model's prompt profile. They determine supported selections, effective text and the wire hints. Use `quality_preset` and `uc_preset` to inspect a supported selection; preset enums alone do not supply universal text. Full and curated models can use different presets and defaults. V3's default UC selection is Heavy.

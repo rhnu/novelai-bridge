@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0 - 2026-11-25
+
+### Added
+
+- Support V5 Precise Reference, including outfit and outfit preferences, model-specific image preparation, up to 16 references, and import/export of the official `reference_images.zip` format through `PreciseReferenceDocument`.
+- Prepare V5 text rendering from quoted base and character captions, respecting explicit rendering text, character positions and inline character separators.
+- Configure the service URL using `ClientConfig::from_env()` with `NOVELAI_API_BASE` or `ClientConfig::default().with_api_base(url)?`. The Rust and Python probes accept the same variable and an explicit override.
+
+### Changed
+
+- **Breaking:** Consumers of model descriptors should query `ReferenceProfile` for allowed types, type fallbacks, image fit, fidelity and strength controls. Price descriptors now expose `PricingProfile::base` and `BasePrice` in place of `step_factor`.
+- Resolve model, sampling steps, compatible reference types and original input indices together. Under Normalize, Full Medium selects High for supported precise references, while Curated inpainting uses V4.5 Curated reference capabilities. Reject reports the incompatible selection.
+- Update V5 Full Medium estimates and charge the Vibe overage per priced sample.
+
 ## 0.8.2 - 2026-11-19
 
 ### Changed
